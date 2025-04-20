@@ -35,6 +35,9 @@ function load_and_clean(path::String)
     # Convert week and year to total weeks from start of monitoring
     df = convert_to_total_weeks(df)
 
+    # Discretize sea lice levels
+    df = discretize_sea_lice_levels(df)
+
     return df
 end
 
@@ -47,6 +50,11 @@ function convert_to_total_weeks(df::DataFrame)
     df.total_week = (df.year .- first_year) .* 52 .+ df.week
 
     return df
+end
+
+function discretize_sea_lice_levels(df)
+	df.adult_sealice = round.(df.adult_sealice, digits=1)
+	return df
 end
 
 end

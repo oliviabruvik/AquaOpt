@@ -15,4 +15,5 @@ sealice_levels_over_time_plot = PlotViews.plot_sealice_levels_over_time(df)
 Plots.savefig(sealice_levels_over_time_plot, "results/figures/sealice_levels_over_time.png")
 
 # Run optimizations
-sarsop_policy = Optimize.sarsop_optimize(df)
+#sarsop_policy = Optimize.sarsop_optimize(df)
+mdp_policy = Optimize.mdp_optimize(df)
