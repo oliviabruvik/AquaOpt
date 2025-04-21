@@ -24,11 +24,13 @@ mdp_policy = OptimizeMDP.mdp_optimize(df)
 
 # Evaluate policies
 lambda_values = 0.0:0.05:1.0
-mdp_results = OptimizeMDP.evaluate_mdp_policy(lambda_values, heuristic_policy=false)
-heuristic_results = OptimizeMDP.evaluate_mdp_policy(lambda_values, heuristic_policy=true)
+num_episodes = 1000
+steps_per_episode = 500
+mdp_results = OptimizeMDP.evaluate_mdp_policy(lambda_values, episodes=num_episodes, steps_per_episode=steps_per_episode, heuristic_policy=false)
+heuristic_results = OptimizeMDP.evaluate_mdp_policy(lambda_values, episodes=num_episodes, steps_per_episode=steps_per_episode, heuristic_policy=true)
 
 # Plot results
-mdp_results_plot = PlotViews.plot_mdp_results(mdp_results)
-heuristic_results_plot = PlotViews.plot_mdp_results(heuristic_results)
-Plots.savefig(mdp_results_plot, "results/figures/mdp_results.png")
-Plots.savefig(heuristic_results_plot, "results/figures/heuristic_results.png")
+mdp_results_plot = PlotViews.plot_mdp_results(mdp_results, "MDP Policy")
+heuristic_results_plot = PlotViews.plot_mdp_results(heuristic_results, "Heuristic Policy")
+Plots.savefig(mdp_results_plot, "results/figures/mdp_results_$(num_episodes)_$(steps_per_episode).png")
+Plots.savefig(heuristic_results_plot, "results/figures/heuristic_results_$(num_episodes)_$(steps_per_episode).png")
