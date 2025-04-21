@@ -15,4 +15,27 @@ function plot_sealice_levels_over_time(df)
     )
 end
 
+# Plot mdp results across lambda values
+function plot_mdp_results(results)
+    p = scatter(
+        results.avg_treatment_cost,
+        results.avg_sealice,
+        marker_z=results.lambda,
+        title="Treatment Cost vs Sea Lice Levels",
+        xlabel="Average Treatment Cost",
+        ylabel="Average Sea Lice Level",
+        colorbar_title="λ",
+        marker=:circle,
+        markersize=6,
+        legend=false,
+        grid=true,
+        framestyle=:box
+    )
+    
+    plot!(p, results.avg_treatment_cost, results.avg_sealice, 
+          line=:solid, color=:black, alpha=0.3)
+          
+    return p
+end
+
 end
