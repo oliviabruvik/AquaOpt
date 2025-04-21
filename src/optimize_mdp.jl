@@ -61,22 +61,29 @@ function POMDPs.actionindex(mdp::SeaLiceMDP, a::Action)
 end
 
 function POMDPs.transition(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
-    return ImplicitDistribution() do rng
-        growth_rate = mdp.growthRate
-        rho = a == Treatment ? mdp.rho : 0.0
-        next_sea_lice_mean = (1-rho) * exp(growth_rate) * s.SeaLiceLevel
-
-        # Sample the next sea lice level with 0.2 std
-        next_sea_lice_level = rand(rng, Normal(next_sea_lice_mean, 0.2))
-
-        # Clamp the next sea lice level to the range 0-10
-        next_sea_lice_level = clamp(next_sea_lice_level, 0.0, 10.0)
-
-        # Round the next sea lice level to 1 decimal place
-        next_sea_lice_level = round(next_sea_lice_level, digits=1)
-
-        return SeaLiceState(next_sea_lice_level)
-    end
+    growth_rate = mdp.growthRate
+    rho = a == Treatment ? mdp.rho : 0.0
+    next_sea_lice_mean = (1-rho) * exp(growth_rate) * s.SeaLiceLevel
+    
+    # Create a discrete distribution around the mean
+    # Sample 5 points around the mean with decreasing probabilities
+    std_dev = 0.2
+    points = [
+        next_sea_lice_mean - 2*std_dev,
+        next_sea_lice_mean - std_dev,
+        next_sea_lice_mean,
+        next_sea_lice_mean + std_dev,
+        next_sea_lice_mean + 2*std_dev
+    ]
+    
+    # Calculate probabilities using normal distribution
+    probs = [exp(-(x - next_sea_lice_mean)^2 / (2*std_dev^2)) for x in points]
+    probs = probs / sum(probs)  # Normalize
+    
+    # Create states and clamp/round values
+    states = [SeaLiceState(round(clamp(x, 0.0, 10.0), digits=1)) for x in points]
+    
+    return SparseCat(states, probs)
 end
 
 function POMDPs.reward(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
@@ -88,10 +95,14 @@ function POMDPs.reward(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
 end
 
 POMDPs.discount(mdp::SeaLiceMDP) = mdp.discount_factor
-POMDPs.initialstate(mdp::SeaLiceMDP) = ImplicitDistribution() do rng
-    initial_lice = round(rand(rng, Uniform(0.0, 1.0)), digits=1)
-    return SeaLiceState(initial_lice)
+
+function POMDPs.initialstate(mdp::SeaLiceMDP)
+    # Create a uniform distribution over initial states from 0.0 to 1.0
+    states = [SeaLiceState(round(i, digits=1)) for i in 0:0.1:1.0]
+    probs = ones(length(states)) / length(states)
+    return SparseCat(states, probs)
 end
+
 POMDPs.isterminal(mdp::SeaLiceMDP, s::SeaLiceState) = false
 
 function mdp_optimize(df::DataFrame)
@@ -116,12 +127,8 @@ function mdp_optimize(df::DataFrame)
     
     # Save the policy
     mkpath("results/policies")
-    save("results/policies/sea_lice_policy.jld2", "policy", policy)
+    save("results/policies/sea_lice_mdp_policy.jld2", "policy", policy)
 
-    # Plot the policy
-    # plot(policy, mdp)
-    # savefig("results/figures/sea_lice_policy.png")
-    
     return policy
 end
 

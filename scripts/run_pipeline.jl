@@ -1,8 +1,9 @@
 include("../src/cleaning.jl")
-include("../src/optimize.jl")
+include("../src/optimize_mdp.jl")
+include("../src/optimize_sarsop.jl")
 include("../src/plot_views.jl")
 
-using .Cleaning, .PlotViews, .Optimize, Plots
+using .Cleaning, .PlotViews, .OptimizeMDP, Plots
 ENV["PLOTS_BROWSER"] = "true"
 
 # Clean data
@@ -16,4 +17,4 @@ Plots.savefig(sealice_levels_over_time_plot, "results/figures/sealice_levels_ove
 
 # Run optimizations
 #sarsop_policy = Optimize.sarsop_optimize(df)
-mdp_policy = Optimize.mdp_optimize(df)
+mdp_policy = OptimizeMDP.mdp_optimize(df)
