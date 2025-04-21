@@ -22,18 +22,17 @@ function plot_mdp_results(results)
         results.avg_sealice,
         marker_z=results.lambda,
         title="Treatment Cost vs Sea Lice Levels",
-        xlabel="Average Treatment Cost",
-        ylabel="Average Sea Lice Level",
+        xlabel="Average Treatment Cost (MNOK / year)", 
+        ylabel="Average Sea Lice Level (Avg. Adult Female Lice per Fish)",
         colorbar_title="λ",
         marker=:circle,
         markersize=6,
         legend=false,
         grid=true,
-        framestyle=:box
+        framestyle=:box,
+        c=:viridis, # Add colormap
+        colorbar=true # Explicitly show colorbar
     )
-    
-    plot!(p, results.avg_treatment_cost, results.avg_sealice, 
-          line=:solid, color=:black, alpha=0.3)
           
     return p
 end

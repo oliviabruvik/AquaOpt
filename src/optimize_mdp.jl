@@ -12,7 +12,7 @@ using QMDP
 using QuickPOMDPs
 using SARSOP
 
-# Define the state
+# # Define the state
 struct SeaLiceState
 	SeaLiceLevel::Float64
 end
@@ -119,14 +119,31 @@ function mdp_optimize(df::DataFrame)
     return policy
 end
 
-function evaluate_mdp_policy(lambda_values; episodes=100, steps_per_episode=50)
+# Add heuristic policy for comparison
+struct HeuristicPolicy{P<:MDP} <: Policy
+    mdp::P
+end
+
+function POMDPs.action(policy::HeuristicPolicy, s::SeaLiceState)
+    if s.SeaLiceLevel > 0.5
+        return Treatment
+    else
+        return NoTreatment
+    end
+end
+
+function evaluate_mdp_policy(lambda_values; episodes=100, steps_per_episode=50, heuristic_policy=false)
     results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[])
 
     for λ in lambda_values
         mdp = SeaLiceMDP(lambda=λ)
-        solver = ValueIterationSolver(max_iterations=30)
-        policy = solve(solver, mdp)
-
+        if heuristic_policy
+            policy = HeuristicPolicy(mdp)
+        else
+            solver = ValueIterationSolver(max_iterations=30)
+            policy = solve(solver, mdp)
+        end
+        
         total_cost = 0.0
         total_sealice = 0.0
         total_steps = episodes * steps_per_episode
