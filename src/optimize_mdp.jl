@@ -17,11 +17,16 @@ struct SeaLiceState
 	SeaLiceLevel::Float64
 end
 
+# Define the observation
+struct SeaLiceObservation
+	SeaLiceLevel::Float64
+end
+
 # Define the action
 @enum Action NoTreatment Treatment
 
 # Define the MDP
-struct SeaLiceMDP <: MDP{SeaLiceState, Action}
+struct SeaLiceMDP <: POMDP{SeaLiceState, Action, SeaLiceObservation}
 	lambda::Float64
 	costOfTreatment::Float64
 	growthRate::Float64
@@ -46,7 +51,7 @@ function SeaLiceMDP(;
     )
 end
 
-# MDP interface functions
+# POMDP interface functions
 POMDPs.actions(mdp::SeaLiceMDP) = [NoTreatment, Treatment]
 POMDPs.states(mdp::SeaLiceMDP) = [SeaLiceState(round(i, digits=1)) for i in 0:0.1:10]
 
@@ -55,8 +60,8 @@ function POMDPs.stateindex(mdp::SeaLiceMDP, s::SeaLiceState)
     return clamp(round(Int, s.SeaLiceLevel * 10) + 1, 1, 101)
 end
 
+# Convert action to index (1 for NoTreatment, 2 for Treatment)
 function POMDPs.actionindex(mdp::SeaLiceMDP, a::Action)
-    # Convert action to index (1 for NoTreatment, 2 for Treatment)
     return Int(a) + 1
 end
 
@@ -103,20 +108,93 @@ function POMDPs.initialstate(mdp::SeaLiceMDP)
     return SparseCat(states, probs)
 end
 
+function POMDPs.observation(mdp::SeaLiceMDP, a::Action, s::SeaLiceState)
+    std_dev = 1.0
+    points = [
+        s.SeaLiceLevel - 2*std_dev,
+        s.SeaLiceLevel - std_dev,
+        s.SeaLiceLevel,
+        s.SeaLiceLevel + std_dev,
+        s.SeaLiceLevel + 2*std_dev
+    ]
+    
+    # Calculate probabilities using normal distribution
+    probs = [exp(-(x - s.SeaLiceLevel)^2 / (2*std_dev^2)) for x in points]
+    
+    # Normalize
+    probs = probs / sum(probs)
+    
+    # Create observations and clamp/round values
+    observations = [SeaLiceObservation(round(clamp(x, 0.0, 10.0), digits=1)) for x in points]
+    
+    return SparseCat(observations, probs)
+end
+
 POMDPs.isterminal(mdp::SeaLiceMDP, s::SeaLiceState) = false
 
-function mdp_optimize(df::DataFrame)
-    # Initialize the MDP and solver
-    mdp = SeaLiceMDP()
-    solver = ValueIterationSolver(max_iterations=30)
-    @show_requirements POMDPs.solve(solver, mdp)
+function find_policies_across_lambdas(lambda_values; solver)
+    policies = Dict{Float64, Tuple{Policy, SeaLiceMDP, MDP}}()
+    for λ in lambda_values
+        pomdp = SeaLiceMDP(lambda=λ)
+        mdp = UnderlyingMDP(pomdp)
+        policy = solve(solver, mdp)
+        policies[λ] = (policy, pomdp, mdp)
+
+        # save policy
+        save("results/policies/sea_lice_mdp_policy_$(λ).jld2", "policy", policy)
+    end
+    return policies
+end
+
+function evaluate_policy(policies_dict; episodes=100, steps_per_episode=50)
+    results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[])
     
-    # Solve for the policy
-    policy = solve(solver, mdp)
+    for (λ, (policy, pomdp, mdp)) in pairs(policies_dict)
+        
+        # optimize mdp
+        avg_cost, avg_sealice = run_simulation(policy, mdp, pomdp, episodes, steps_per_episode)
+
+        # add results to dataframe
+        push!(results, (λ, avg_cost, avg_sealice))
+
+    end
+
+    rename!(results, [:lambda, :avg_treatment_cost, :avg_sealice])
+    return results
+end
+
+function create_heuristic_policy_dict(lambda_values)
+    policies = Dict{Float64, Tuple{Policy, SeaLiceMDP, MDP}}()
+
+    for λ in lambda_values
+        pomdp = SeaLiceMDP(lambda=λ)
+        mdp = UnderlyingMDP(pomdp)
+        policy = HeuristicPolicy(mdp)
+        policies[λ] = (policy, pomdp, mdp)
+    end
+    return policies
+end
+
+function run_simulation(policy, mdp, pomdp, episodes=100, steps_per_episode=50)
     
-    # Save the policy
-    save("results/policies/sea_lice_mdp_policy.jld2", "policy", policy)
-    return policy
+    total_cost = 0.0
+    total_sealice = 0.0
+    total_steps = episodes * steps_per_episode
+
+    for _ in 1:episodes
+        s = rand(initialstate(mdp))
+        for _ in 1:steps_per_episode
+            a = action(policy, s)
+            total_cost += (a == Treatment ? pomdp.costOfTreatment : 0.0)
+            total_sealice += s.SeaLiceLevel
+            s = rand(transition(pomdp, s, a))
+        end
+    end
+
+    avg_cost = total_cost / total_steps
+    avg_sealice = total_sealice / total_steps
+
+    return avg_cost, avg_sealice
 end
 
 # Add heuristic policy
@@ -132,40 +210,5 @@ function POMDPs.action(policy::HeuristicPolicy, s::SeaLiceState)
     end
 end
 
-function evaluate_mdp_policy(lambda_values; episodes=100, steps_per_episode=50, heuristic_policy=false)
-    results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[])
-
-    for λ in lambda_values
-        mdp = SeaLiceMDP(lambda=λ)
-        if heuristic_policy
-            policy = HeuristicPolicy(mdp)
-        else
-            solver = ValueIterationSolver(max_iterations=30)
-            policy = solve(solver, mdp)
-        end
-        
-        total_cost = 0.0
-        total_sealice = 0.0
-        total_steps = episodes * steps_per_episode
-
-        for _ in 1:episodes
-            s = rand(initialstate(mdp))
-            for _ in 1:steps_per_episode
-                a = action(policy, s)
-                total_cost += (a == Treatment ? mdp.costOfTreatment : 0.0)
-                total_sealice += s.SeaLiceLevel
-                s = rand(transition(mdp, s, a))
-            end
-        end
-
-        avg_cost = total_cost / total_steps
-        avg_sealice = total_sealice / total_steps
-
-        push!(results, (λ, avg_cost, avg_sealice))
-    end
-
-    rename!(results, [:lambda, :avg_treatment_cost, :avg_sealice])
-    return results
-end
 
 end
