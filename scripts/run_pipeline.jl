@@ -3,36 +3,41 @@ include("../src/optimize_mdp.jl")
 include("../src/plot_views.jl")
 include("../src/simulations.jl")
 
-# Import required packages
-using DiscreteValueIteration
-using Logging
-using POMDPs
-using Plots
-using NativeSARSOP: SARSOPSolver
-
 # Environment variables
 ENV["PLOTS_BROWSER"] = "true"
 ENV["PLOTS_BACKEND"] = "plotlyjs"
 
+# Import required packages
+using Logging
+using DiscreteValueIteration
+using NativeSARSOP: SARSOPSolver
+using POMDPs
+using Plots
+
+plotlyjs()  # Activate Plotly backend
+
+# ----------------------------
+# Configuration
+# ----------------------------
 const CONFIG = Dict(
     :lambda_values => 0.0:0.2:1.0, # 0.0:0.05:1.0
     :num_episodes => 100, # 1000,
     :steps_per_episode => 50 # 100
 )
 
-run_algorithms = true
-
 # Create results directories
 mkpath("results/figures")
 mkpath("results/data")
 
+# ----------------------------
+# Main function
+# ----------------------------
 function main(run_algorithms=false)
 
     @info "Loading and cleaning data"
     df = load_and_clean("data/raw/licedata.csv")
     sealice_levels_over_time_plot = plot_sealice_levels_over_time(df)
 
-    # Run algorithms
     if run_algorithms
         policies = [
             ("Heuristic Policy", ValueIterationSolver(max_iterations=30), true),
@@ -54,10 +59,9 @@ function main(run_algorithms=false)
         end
     end
 
-    # Plot overlay of all policies
     @info "Generating result plots"
     overlay_plot = plot_mdp_results_overlay(CONFIG[:num_episodes], CONFIG[:steps_per_episode])
-    policy_sealice_comparison_plot = plot_policy_sealice_levels(CONFIG[:num_episodes], CONFIG[:steps_per_episode])
+    comparison_plot = plot_policy_sealice_levels(CONFIG[:num_episodes], CONFIG[:steps_per_episode])
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
