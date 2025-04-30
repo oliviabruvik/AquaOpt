@@ -1,5 +1,5 @@
 include("../src/cleaning.jl")
-include("../src/optimize_mdp.jl")
+include("../src/SeaLicePOMDP.jl")
 include("../src/plot_views.jl")
 include("../src/optimization.jl")
 
