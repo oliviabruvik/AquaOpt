@@ -1,4 +1,4 @@
-include("optimize_mdp.jl")
+include("SeaLicePOMDP.jl")
 
 using POMDPs
 using POMDPModels
@@ -79,7 +79,7 @@ function update_belief(b, a, o, pomdp)
     return Deterministic(SeaLiceState(o.SeaLiceLevel))
 end
 
-# Calculate average cost and average sea lice level for each lambda
+"Calculate average cost and average sea lice level for each lambda."
 function calculate_avg_rewards(policies_dict; episodes=100, steps_per_episode=50)
     results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[])
     

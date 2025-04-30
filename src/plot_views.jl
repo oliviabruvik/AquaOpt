@@ -55,38 +55,40 @@ function plot_mdp_results_overlay(num_episodes, steps_per_episode)
         framestyle=:box
     )
     
-    # Define colors and markers for each policy
-    policy_styles = Dict(
-        "Heuristic Policy" => (:circle, :blue),
-        "VI Policy" => (:square, :red),
-        "SARSOP Policy" => (:diamond, :green),
-        "QMDP Policy" => (:dtriangle, :purple)
+    # Define colors for each policy
+    policy_colors = Dict(
+        "Heuristic Policy" => :blue,
+        "VI Policy" => :red,
+        "SARSOP Policy" => :green,
+        "QMDP Policy" => :purple
     )
     
     # Load and plot each policy's results
-    for (policy_name, (marker, color)) in policy_styles
+    for (policy_name, color) in policy_colors
         try
             # Load the results from the JLD2 file
             @load "results/data/$(policy_name)_$(num_episodes)_$(steps_per_episode).jld2" results
             
-            # Add the scatter plot to the main plot
-            scatter!(
+            # Sort the data by treatment cost
+            sort_indices = sortperm(results.avg_treatment_cost)
+            sorted_costs = results.avg_treatment_cost[sort_indices]
+            sorted_sealice = results.avg_sealice[sort_indices]
+            
+            # Add the line plot to the main plot
+            plot!(
                 p,
-                results.avg_treatment_cost,
-                results.avg_sealice,
-                marker_z=results.lambda,
-                marker=marker,
-                markersize=6,
-                label=policy_name,
-                colorbar=false,
-                c=:viridis
+                sorted_costs,
+                sorted_sealice,
+                linewidth=2,
+                color=color,
+                label=policy_name
             )
         catch e
             println("Warning: Could not load results for $policy_name: $e")
         end
     end
     
-    # Add a single colorbar for all plots
+    # Save the figure
     savefig(p, "results/figures/all_policies_overlay_$(num_episodes)_$(steps_per_episode).png")
     return p
 end
