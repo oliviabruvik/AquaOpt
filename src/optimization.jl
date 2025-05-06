@@ -8,33 +8,42 @@ using JLD2
 using Plots
 
 # ----------------------------
+# Algorithm struct
+# ----------------------------
+struct Algorithm{S<:Solver}
+    solver::S
+    convert_to_mdp::Bool
+    solver_name::String
+end
+
+# ----------------------------
 # Policy Generation
 # ----------------------------
 "Train a policy for each lambda using the given solver."
-function find_policies_across_lambdas(lambda_values; solver, convert_to_mdp=false, solver_name="")
+function find_policies_across_lambdas(config; algorithm)
     policies = Dict{Float64, Tuple{Policy, SeaLiceMDP, MDP}}()
 
-    for λ in lambda_values
+    for λ in config.lambda_values
         pomdp = SeaLiceMDP(lambda=λ)
         mdp = UnderlyingMDP(pomdp)
-        policy = convert_to_mdp ? solve(solver, mdp) : solve(solver, pomdp)
+        policy = algorithm.convert_to_mdp ? solve(algorithm.solver, mdp) : solve(algorithm.solver, pomdp)
         
         policies[λ] = (policy, pomdp, mdp)
 
         # Save the policy, pomdp, and mdp to a file
-        save("results/policies/$(solver_name)_sea_lice_mdp_policy_$(λ).jld2", "policy", policy)
-        save("results/policies/$(solver_name)_sea_lice_pomdp_$(λ).jld2", "pomdp", pomdp)
-        save("results/policies/$(solver_name)_sea_lice_mdp_$(λ).jld2", "mdp", mdp)
+        save("results/policies/$(algorithm.solver_name)_sea_lice_mdp_policy_$(λ).jld2", "policy", policy)
+        save("results/policies/$(algorithm.solver_name)_sea_lice_pomdp_$(λ).jld2", "pomdp", pomdp)
+        save("results/policies/$(algorithm.solver_name)_sea_lice_mdp_$(λ).jld2", "mdp", mdp)
     end
 
     return policies
 end
 
 "Create a heuristic policy for each lambda."
-function create_heuristic_policy_dict(lambda_values)
+function create_heuristic_policy_dict(config)
     policies = Dict{Float64, Tuple{Policy, SeaLiceMDP, MDP}}()
 
-    for λ in lambda_values
+    for λ in config.lambda_values
         pomdp = SeaLiceMDP(lambda=λ)
         mdp = UnderlyingMDP(pomdp)
         policy = HeuristicPolicy(mdp)
@@ -87,14 +96,17 @@ function update_belief(b, a, o, pomdp)
 end
 
 "Calculate average cost and average sea lice level for each lambda."
-function calculate_avg_rewards(lambda_values; episodes=100, steps_per_episode=50, solver_name="")
+function calculate_avg_rewards(algorithm, config)
+
     results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[])
+    episodes = config.num_episodes
+    steps_per_episode = config.steps_per_episode
+    lambda_values = config.lambda_values
     
     for λ in lambda_values
-        
-        policy = load("results/policies/$(solver_name)_sea_lice_mdp_policy_$(λ).jld2", "policy")
-        pomdp = load("results/policies/$(solver_name)_sea_lice_pomdp_$(λ).jld2", "pomdp")
-        mdp = load("results/policies/$(solver_name)_sea_lice_mdp_$(λ).jld2", "mdp")
+        policy = load("results/policies/$(algorithm.solver_name)_sea_lice_mdp_policy_$(λ).jld2", "policy")
+        pomdp = load("results/policies/$(algorithm.solver_name)_sea_lice_pomdp_$(λ).jld2", "pomdp")
+        mdp = load("results/policies/$(algorithm.solver_name)_sea_lice_mdp_$(λ).jld2", "mdp")
 
         avg_cost, avg_sealice = run_simulation(policy, mdp, pomdp, episodes, steps_per_episode)
         push!(results, (λ, avg_cost, avg_sealice))
@@ -120,18 +132,19 @@ end
 # ----------------------------
 # Optimizer Wrapper
 # ----------------------------
-function test_optimizer(lambda_values, solver; episodes=100, steps_per_episode=50, convert_to_mdp=false, plot_name="MDP Policy")
-    if solver isa Nothing # No special cases - 
-        policies_dict = create_heuristic_policy_dict(lambda_values)
+function test_optimizer(algorithm, config)
+
+    if algorithm.solver isa Nothing # No special cases - 
+        policies_dict = create_heuristic_policy_dict(config)
     else
-        policies_dict = find_policies_across_lambdas(lambda_values, solver=solver, convert_to_mdp=convert_to_mdp, solver_name=plot_name)
+        policies_dict = find_policies_across_lambdas(config, algorithm=algorithm)
     end
-    results = calculate_avg_rewards(lambda_values, episodes=episodes, steps_per_episode=steps_per_episode, solver_name=plot_name)
+    results = calculate_avg_rewards(algorithm, config)
 
     # Save results
-    @save "results/data/$(plot_name)_$(episodes)_$(steps_per_episode).jld2" results
+    @save "results/data/$(algorithm.solver_name)_$(config.num_episodes)_$(config.steps_per_episode).jld2" results
     
     # Plot results
-    results_plot = plot_mdp_results(results, plot_name)
-    savefig(results_plot, "results/figures/$(plot_name)_$(episodes)_$(steps_per_episode).png")
+    results_plot = plot_mdp_results(results, algorithm.solver_name)
+    savefig(results_plot, "results/figures/$(algorithm.solver_name)_$(config.num_episodes)_$(config.steps_per_episode).png")
 end
