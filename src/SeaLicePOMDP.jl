@@ -71,6 +71,7 @@ POMDPs.actions(mdp::SeaLiceMDP) = [NoTreatment, Treatment]
 POMDPs.observations(mdp::SeaLiceMDP) = [SeaLiceObservation(round(i, digits=1)) for i in SEA_LICE_RANGE]
 POMDPs.discount(mdp::SeaLiceMDP) = mdp.discount_factor
 POMDPs.isterminal(mdp::SeaLiceMDP, s::SeaLiceState) = false
+POMDPs.stateindex(::UnderlyingMDP{SeaLiceMDP, SeaLiceState, Action}, s::SeaLiceState) = clamp(round(Int, s.SeaLiceLevel * 10) + 1, 1, 101)
 POMDPs.stateindex(::SeaLiceMDP, s::SeaLiceState) = clamp(round(Int, s.SeaLiceLevel * 10) + 1, 1, 101)
 POMDPs.actionindex(::SeaLiceMDP, a::Action) = clamp(Int(a) + 1, 1, 2)
 POMDPs.obsindex(::SeaLiceMDP, o::SeaLiceObservation) = clamp(round(Int, o.SeaLiceLevel * 10) + 1, 1, 101)

@@ -38,6 +38,9 @@ function load_and_clean(path::String)
     # Discretize sea lice levels
     df = discretize_sea_lice_levels(df)
 
+    # Save to processed data folder
+    CSV.write(joinpath("data", "processed", "sealice_data.csv"), df)
+
     return df
 end
 

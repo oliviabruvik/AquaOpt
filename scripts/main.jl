@@ -33,8 +33,8 @@ end
 
 const CONFIG = Config(
     collect(0.0:0.2:1.0), # 0.0:0.05:1.0
-    10, # 1000
-    5,  # 100
+    1000, #10, # 1000
+    50, #5,  # 100
     joinpath("results", "policies"),
     joinpath("results", "figures"),
     joinpath("results", "data")
@@ -52,17 +52,20 @@ interp = LocalGIFunctionApproximator(grid)
 # ----------------------------
 # Main function
 # ----------------------------
-function main(run_algorithms=false)
+function main(run_algorithms=true)
 
     @info "Loading and cleaning data"
-    df = load_and_clean("data/raw/licedata.csv")
-    sealice_levels_over_time_plot = plot_sealice_levels_over_time(df)
+    # df = load_and_clean("data/raw/licedata.csv")
+    df = CSV.read(joinpath("data", "processed", "sealice_data.csv"), DataFrame)
+    # sealice_levels_over_time_plot = plot_sealice_levels_over_time(df)
 
+    run_algorithms = true
+    println("run_algorithms: $run_algorithms")
     if run_algorithms
         algorithms = [
             Algorithm(ValueIterationSolver(max_iterations=30), true, "Heuristic_Policy", 0.5),
             Algorithm(ValueIterationSolver(max_iterations=30), true, "VI_Policy", nothing),
-            #Algorithm(LocalApproximationValueIterationSolver(interp, verbose=true, max_iterations=1000, is_mdp_generative=false), true, "VI_Policy", nothing),
+            # Algorithm(LocalApproximationValueIterationSolver(interp, verbose=true, max_iterations=1000, is_mdp_generative=false), true, "VI_Policy", nothing),
             Algorithm(SARSOPSolver(max_time=10.0), false, "SARSOP_Policy", nothing),
             Algorithm(QMDPSolver(max_iterations=30), false, "QMDP_Policy", nothing)
         ]

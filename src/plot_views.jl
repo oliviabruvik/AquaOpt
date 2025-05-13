@@ -84,7 +84,7 @@ function plot_mdp_results_overlay(num_episodes, steps_per_episode)
                 label=policy_name
             )
         catch e
-            @warn "Could not load results for $policy: $e"
+            @warn "Could not load results for $policy_name: $e"
         end
     end
     

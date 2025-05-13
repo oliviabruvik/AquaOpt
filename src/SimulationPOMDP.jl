@@ -17,6 +17,7 @@ using Distributions
 # -------------------------
 const SEA_LICE_BOUNDS = (0.0, 10.0)
 const INITIAL_BOUNDS = (0.0, 1.0)
+const SEA_LICE_INITIAL_MEAN = 1.0
 const STD_DEV = 1.0
 
 # -------------------------
@@ -83,7 +84,7 @@ end
 function POMDPs.initialstate(pomdp::SeaLiceSimMDP)
     ImplicitDistribution(pomdp) do pomdp, rng
         # TODO: Change from hardcoded mean
-        point = rand(rng, Normal(1.0, STD_DEV))
+        point = rand(rng, Normal(SEA_LICE_INITIAL_MEAN, STD_DEV))
         return SeaLiceState(clamp(point, INITIAL_BOUNDS...))
     end
 end

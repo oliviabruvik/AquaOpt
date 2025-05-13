@@ -1,5 +1,8 @@
+include("kalmanFilter.jl")
 include("SeaLicePOMDP.jl")
+include("SimulationPOMDP.jl")
 
+using GaussianFilters
 using POMDPs
 using POMDPModels
 using POMDPTools
@@ -44,7 +47,7 @@ function generate_policy(algorithm, λ)
     policy = if algorithm.solver_name == "Heuristic Policy"
         HeuristicPolicy(mdp, algorithm.heuristic_threshold)
     elseif algorithm.convert_to_mdp
-        solve(algorithm.solver, mdp)
+       solve(algorithm.solver, mdp)
     else
         solve(algorithm.solver, pomdp)
     end
@@ -58,30 +61,95 @@ end
 function run_simulation(policy, mdp, pomdp, config, algorithm)
     total_cost, total_sealice, total_reward = 0.0, 0.0, 0.0
     total_steps = config.num_episodes * config.steps_per_episode
-    
+
+    # Create simulator POMDP
+    sim_pomdp = SeaLiceSimMDP(
+        lambda=pomdp.lambda,
+        costOfTreatment=pomdp.costOfTreatment,
+        growthRate=pomdp.growthRate,
+        rho=pomdp.rho,
+        discount_factor=pomdp.discount_factor
+    )
+
     # Create simulator
-    hr = HistoryRecorder(max_steps=config.steps_per_episode)
-    updater = DiscreteUpdater(pomdp)
-    
+    sim = RolloutSimulator(max_steps=config.steps_per_episode)
+    updaterStruct = EKFUpdater(sim_pomdp, process_noise=STD_DEV, observation_noise=STD_DEV) # DiscreteUpdater()
+    updater = updaterStruct.ekf
+
     # Run simulation for each episode
     for _ in 1:config.num_episodes
-        s = rand(initialstate(mdp))
-        initial_belief = Deterministic(s)
-        
-        history = if algorithm.convert_to_mdp
-            simulate(hr, mdp, policy, s)
-        else
-            simulate(hr, pomdp, policy, updater, initial_belief, s)
-        end
+
+        # Get initial state
+        s = rand(initialstate(sim_pomdp))
+
+        # TODO: Not needed for kalman filter
+        initial_belief = Normal(0.5, 1.0)
+
+        r_total, action_hist, state_hist, measurement_hist, reward_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
 
         # Calculate costs and sea lice levels from the simulation
-        total_cost += sum(a == Treatment for a in action_hist(history)) * pomdp.costOfTreatment
-        total_sealice += sum(s.SeaLiceLevel for s in state_hist(history))
-        total_reward += sum(reward_hist(history))
+        total_cost += sum(a == Treatment for a in action_hist) * pomdp.costOfTreatment
+        total_sealice += sum(s.SeaLiceLevel for s in state_hist)
+        total_reward += sum(reward_hist)
     end
 
     # Return averages
     return total_reward / total_steps, total_cost / total_steps, total_sealice / total_steps  
+end
+
+# ----------------------------
+# Simulation Helper Function
+# ----------------------------
+function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy, updater::ExtendedKalmanFilter, initial_belief, s)
+    
+    # Store histories
+    action_hist = []
+    state_hist = []
+    measurement_hist = []
+    reward_hist = []
+    disc = 1.0
+    r_total = 0.0
+
+    b = initialize_belief(updater, initial_belief)
+
+    step = 1
+
+    while disc > sim.eps && !isterminal(sim_pomdp, s) && step <= sim.max_steps
+
+        # Calculate b as beliefvec from normal distribution
+        norm_distr = Normal(b.μ[1], b.Σ[1,1])
+
+        # Generate a belief vector from the normal distribution for POMDP policies
+        if typeof(policy) <: ValueIterationPolicy
+            a = action(policy, s)
+        else
+            # For POMDP policies, use the belief state
+            state_space = states(policy.pomdp)
+            bvec = [pdf(norm_distr, s.SeaLiceLevel) for s in state_space]
+            bvec = bvec ./ sum(bvec)
+            a = action(policy, bvec)
+        end
+
+        sp, o, r = @gen(:sp,:o,:r)(sim_pomdp, s, a, sim.rng)
+
+        # Update histories
+        push!(action_hist, a)
+        push!(state_hist, s)
+        push!(measurement_hist, o)
+        push!(reward_hist, r)
+
+        r_total += disc*r
+
+        s = sp
+
+        bp = kalmanFilterUpdate(updater, b, a, o)
+        b = bp
+
+        disc *= discount(sim_pomdp)
+        step += 1
+    end
+
+    return r_total, action_hist, state_hist, measurement_hist, reward_hist
 end
 
 
