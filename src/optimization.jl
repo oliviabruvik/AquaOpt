@@ -13,11 +13,12 @@ using Plots
 # ----------------------------
 # Algorithm struct
 # ----------------------------
-struct Algorithm{S<:Solver}
+struct Algorithm{S<:Union{Solver, Nothing}}
     solver::S
     convert_to_mdp::Bool
     solver_name::String
     heuristic_threshold::Union{Float64, Nothing}
+    heuristic_belief_threshold::Union{Float64, Nothing}
 end
 
 # ----------------------------
@@ -44,8 +45,8 @@ function generate_policy(algorithm, λ)
     pomdp = SeaLiceMDP(lambda=λ)
     mdp = UnderlyingMDP(pomdp)
 
-    policy = if algorithm.solver_name == "Heuristic Policy"
-        HeuristicPolicy(mdp, algorithm.heuristic_threshold)
+    policy = if algorithm.solver_name == "Heuristic_Policy"
+        HeuristicPolicy(pomdp, algorithm.heuristic_threshold, algorithm.heuristic_belief_threshold)
     elseif algorithm.convert_to_mdp
        solve(algorithm.solver, mdp)
     else
@@ -82,7 +83,7 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
         # Get initial state
         s = rand(initialstate(sim_pomdp))
 
-        # TODO: Not needed for kalman filter
+        # TODO: Not needed for kalman filter / fix arguments
         initial_belief = Normal(0.5, 1.0)
 
         r_total, action_hist, state_hist, measurement_hist, reward_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
@@ -142,7 +143,7 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
 
         s = sp
 
-        bp = kalmanFilterUpdate(updater, b, a, o)
+        bp = runKalmanFilter(updater, b, a, o)
         b = bp
 
         disc *= discount(sim_pomdp)
@@ -156,15 +157,38 @@ end
 # ----------------------------
 # Heuristic Policy
 # ----------------------------
-struct HeuristicPolicy{P<:MDP} <: Policy
-    mdp::P
+struct HeuristicPolicy{P<:POMDP} <: Policy
+    pomdp::P
     threshold::Float64
+    belief_threshold::Float64
 end
 
 # Heuristic action
-function POMDPs.action(policy::HeuristicPolicy, s::SeaLiceState)
-    return s.SeaLiceLevel > policy.threshold ? Treatment : NoTreatment
+function POMDPs.action(policy::HeuristicPolicy, b)
+    # Convert belief vector to a probability distribution
+    state_space = states(policy.pomdp)
+
+    # Method 1: Calculate probability of being above threshold
+    # TODO: switch to CDF
+    # prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > policy.threshold)
+    
+    # if prob_above_threshold > policy.belief_threshold
+    #     return Treatment
+    # else
+    #     return rand([NoTreatment, Treatment])
+    # end
+
+    # Method 2: Use mode of belief vector
+    mode_sealice_level_index = argmax(b)
+    mode_sealice_level = state_space[mode_sealice_level_index]
+
+    if mode_sealice_level.SeaLiceLevel > policy.threshold
+        return Treatment
+    else
+        return rand([NoTreatment, Treatment])
+    end
 end
+
 
 function POMDPs.updater(policy::HeuristicPolicy)
     return DiscreteUpdater(policy.pomdp)

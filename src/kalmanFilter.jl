@@ -63,20 +63,16 @@ function POMDPs.initialize_belief(updater::Union{ExtendedKalmanFilter, Unscented
     return GaussianBelief([mean_val], Matrix{Float64}(I, 1, 1) * sqrt(var_val))
 end
 
-function kalmanFilterUpdate(kf::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, b0::GaussianBelief, s::SeaLiceState, a::Action, o::SeaLiceObservation)
+function runKalmanFilter(kf::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, b0::GaussianBelief, a::Action, o::SeaLiceObservation)
     
     # Create action sequence
     action = [a == Treatment ? 1.0 : 0.0]
 
-    # Predict next state, using observation as initial state
-    xn = predict(kf.d, b0.μ, action, Random.GLOBAL_RNG)
+    # Use transition dynamics to get a predicted distribution
+    bp = GaussianFilters.predict(kf, b0, action)
 
-    # Measure next state
-    # yn = measure(kf.o, xn, action_sequence[end], Random.GLOBAL_RNG)
-
-    # update belief
-    # bn = GaussianFilters.update(kf, b0, action_sequence[end], yn)
-    bn = GaussianFilters.update(kf, b0, action, [o.SeaLiceLevel])
+    # Use observation to update the distribution
+    bn = GaussianFilters.update(kf, bp, action, [o.SeaLiceLevel])
 
     return bn
 end
