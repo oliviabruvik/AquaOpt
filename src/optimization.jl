@@ -60,8 +60,14 @@ end
 # Simulation & Evaluation
 # ----------------------------
 function run_simulation(policy, mdp, pomdp, config, algorithm)
-    total_cost, total_sealice, total_reward = 0.0, 0.0, 0.0
-    total_steps = config.num_episodes * config.steps_per_episode
+
+    # Store all histories
+    belief_hists = []
+    r_total_hists = []
+    action_hists = []
+    state_hists = []
+    measurement_hists = []
+    reward_hists = []
 
     # Create simulator POMDP
     sim_pomdp = SeaLiceSimMDP(
@@ -86,16 +92,32 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
         # TODO: Not needed for kalman filter / fix arguments
         initial_belief = Normal(0.5, 1.0)
 
-        r_total, action_hist, state_hist, measurement_hist, reward_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
+        r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
 
-        # Calculate costs and sea lice levels from the simulation
-        total_cost += sum(a == Treatment for a in action_hist) * pomdp.costOfTreatment
-        total_sealice += sum(s.SeaLiceLevel for s in state_hist)
-        total_reward += sum(reward_hist)
+        push!(r_total_hists, r_total)
+        push!(action_hists, action_hist)
+        push!(state_hists, state_hist)
+        push!(measurement_hists, measurement_hist)
+        push!(reward_hists, reward_hist)
+        push!(belief_hists, belief_hist)
     end
 
     # Return averages
-    return total_reward / total_steps, total_cost / total_steps, total_sealice / total_steps  
+    return r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists
+end
+
+function calculate_averages(config, pomdp, action_hists, state_hists, reward_hists)
+
+    total_steps = config.num_episodes * config.steps_per_episode
+    total_cost, total_sealice, total_reward = 0.0, 0.0, 0.0
+
+    for i in 1:config.num_episodes
+        total_cost += sum(a == Treatment for a in action_hists[i]) * pomdp.costOfTreatment
+        total_sealice += sum(s.SeaLiceLevel for s in state_hists[i])
+        total_reward += sum(reward_hists[i])
+    end
+
+    return total_reward / total_steps, total_cost / total_steps, total_sealice / total_steps
 end
 
 # ----------------------------
@@ -108,6 +130,7 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
     state_hist = []
     measurement_hist = []
     reward_hist = []
+    belief_hist = []
     disc = 1.0
     r_total = 0.0
 
@@ -133,12 +156,6 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
 
         sp, o, r = @gen(:sp,:o,:r)(sim_pomdp, s, a, sim.rng)
 
-        # Update histories
-        push!(action_hist, a)
-        push!(state_hist, s)
-        push!(measurement_hist, o)
-        push!(reward_hist, r)
-
         r_total += disc*r
 
         s = sp
@@ -148,9 +165,16 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
 
         disc *= discount(sim_pomdp)
         step += 1
+
+        # Update histories
+        push!(action_hist, a)
+        push!(state_hist, s)
+        push!(measurement_hist, o)
+        push!(reward_hist, r)
+        push!(belief_hist, b)
     end
 
-    return r_total, action_hist, state_hist, measurement_hist, reward_hist
+    return r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist
 end
 
 
@@ -194,7 +218,7 @@ end
 # ----------------------------
 function test_optimizer(algorithm, config)
 
-    results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[])
+    results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[], belief_hist=Vector{Any}[])
 
     # Generate policies for each lambda
     for λ in config.lambda_values
@@ -204,8 +228,11 @@ function test_optimizer(algorithm, config)
         save_policy(policy, pomdp, mdp, algorithm.solver_name, λ, config)
 
         # Run simulation to calculate average cost and average sea lice level
-        avg_reward, avg_cost, avg_sealice = run_simulation(policy, mdp, pomdp, config, algorithm)
-        push!(results, (λ, avg_cost, avg_sealice))
+        r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists = run_simulation(policy, mdp, pomdp, config, algorithm)
+        avg_reward, avg_cost, avg_sealice = calculate_averages(config, pomdp, action_hists, state_hists, reward_hists)
+
+        # Calculate the average reward, cost, and sea lice level
+        push!(results, (λ, avg_cost, avg_sealice, belief_hists))
     end
 
     # Plot results
