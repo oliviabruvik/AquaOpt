@@ -165,30 +165,25 @@ end
 
 # Heuristic action
 function POMDPs.action(policy::HeuristicPolicy, b)
+    return heuristicChooseAction(policy, b, true) ? Treatment : NoTreatment
+end
+
+# Function to decide whether we choose the action or randomize
+function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
     # Convert belief vector to a probability distribution
     state_space = states(policy.pomdp)
 
-    # Method 1: Calculate probability of being above threshold
-    # TODO: switch to CDF
-    # prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > policy.threshold)
-    
-    # if prob_above_threshold > policy.belief_threshold
-    #     return Treatment
-    # else
-    #     return rand([NoTreatment, Treatment])
-    # end
-
-    # Method 2: Use mode of belief vector
-    mode_sealice_level_index = argmax(b)
-    mode_sealice_level = state_space[mode_sealice_level_index]
-
-    if mode_sealice_level.SeaLiceLevel > policy.threshold
-        return Treatment
+    if use_cdf
+        # Method 1: Calculate probability of being above threshold
+        prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > policy.threshold)
+        return prob_above_threshold > policy.belief_threshold
     else
-        return rand([NoTreatment, Treatment])
+        # Method 2: Use mode of belief vector
+        mode_sealice_level_index = argmax(b)
+        mode_sealice_level = state_space[mode_sealice_level_index]
+        return mode_sealice_level.SeaLiceLevel > policy.threshold
     end
 end
-
 
 function POMDPs.updater(policy::HeuristicPolicy)
     return DiscreteUpdater(policy.pomdp)
