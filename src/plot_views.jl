@@ -139,3 +139,47 @@ function plot_policy_sealice_levels(num_episodes, steps_per_episode)
     savefig(p, "results/figures/policy_sealice_comparison_$(num_episodes)_$(steps_per_episode).png")
     return p
 end
+
+# ----------------------------
+# Plot 5: Time-series of belief for each policy
+# ----------------------------
+function plot_policy_belief_levels(results, title)
+    # Initialize the plot with the y-axis range starting at 0 always
+    p = plot(
+        title="Belief Levels Over Time",
+        xlabel="Time Step (Weeks)",
+        ylabel="Sea Lice Level (Avg. Adult Female Lice per Fish)",
+        legend=:topleft,
+        grid=true,
+        ylims=(0, 15)
+    )
+
+    # Get values for first episode of first lambda
+    lambda = results.lambda[1]
+    first_episode_belief_hist = results.belief_hists[1][1]
+    first_episode_action_hist = results.action_hists[1][1]
+
+    # Convert Gaussian belief to mean and variance
+    belief_means = [belief.μ[1] for belief in first_episode_belief_hist]
+    belief_vars = [belief.Σ[1,1] for belief in first_episode_belief_hist]
+    actions = [first_episode_action_hist[i] == Treatment ? "T" : "N" for i in 1:length(first_episode_action_hist)]
+
+    # Add the scatter plot to the main plot with variance as error bars
+    scatter!(
+        p,
+        1:length(belief_means),
+        belief_means,
+        label=title,
+        color=:blue,
+        marker=:circle,
+        alpha=0.7,
+        yerror=belief_vars
+    )
+
+    for (t, a) in zip(1:length(actions), actions)
+        annotate!(p, t, 0.4, text(a, 8, :black))
+    end
+
+    savefig(p, "results/figures/$(title)/policy_belief_comparison.png")
+    return p
+end

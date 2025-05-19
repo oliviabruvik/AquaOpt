@@ -218,7 +218,13 @@ end
 # ----------------------------
 function test_optimizer(algorithm, config)
 
-    results = DataFrame(lambda=Float64[], avg_treatment_cost=Float64[], avg_sealice=Float64[], belief_hist=Vector{Any}[])
+    results = DataFrame(
+        lambda=Float64[],
+        avg_treatment_cost=Float64[],
+        avg_sealice=Float64[],
+        action_hists=Vector{Any}[],
+        belief_hists=Vector{Any}[]
+    )
 
     # Generate policies for each lambda
     for λ in config.lambda_values
@@ -232,15 +238,17 @@ function test_optimizer(algorithm, config)
         avg_reward, avg_cost, avg_sealice = calculate_averages(config, pomdp, action_hists, state_hists, reward_hists)
 
         # Calculate the average reward, cost, and sea lice level
-        push!(results, (λ, avg_cost, avg_sealice, belief_hists))
+        push!(results, (λ, avg_cost, avg_sealice, action_hists, belief_hists))
     end
 
     # Plot results
     results_plot = plot_mdp_results(results, algorithm.solver_name)
+    belief_plot = plot_policy_belief_levels(results, algorithm.solver_name)
     
     # Save results
     mkpath(joinpath(config.figures_dir, algorithm.solver_name))
     mkpath(joinpath(config.data_dir, algorithm.solver_name))
     @save joinpath(config.data_dir, "$(algorithm.solver_name)/results_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2") results
     savefig(results_plot, joinpath(config.figures_dir, "$(algorithm.solver_name)/results_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    savefig(belief_plot, joinpath(config.figures_dir, "$(algorithm.solver_name)/beliefs_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
 end
