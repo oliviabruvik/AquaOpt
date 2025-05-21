@@ -15,9 +15,11 @@ using POMDPLinter
 # -------------------------
 # Constants
 # -------------------------
-const SEA_LICE_RANGE = 0.0:0.1:10.0
-const INITIAL_RANGE = 0.0:0.1:1.0
-const STD_DEV = 1.0
+const MIN_LICE_LEVEL = 0.0
+const MAX_LICE_LEVEL = 10.0
+const SEA_LICE_RANGE = MIN_LICE_LEVEL:0.1:MAX_LICE_LEVEL
+const INITIAL_RANGE = MIN_LICE_LEVEL:0.1:MAX_LICE_LEVEL
+const STD_DEV = 1.0 # TODO: Fix from hard coded value
 
 # -------------------------
 # State, Observation, Action
@@ -57,9 +59,17 @@ end
 # -------------------------
 "Returns a 5-point approximation of a normal distribution."
 function discretized_normal_points(mean::Float64; std_dev=1.0)
+
+    # Calculate the points
     points = mean .+ std_dev .* [-2, -1, 0, 1, 2]
+
+    # Ensure points are within the range of the sea lice range
+    points = clamp.(points, MIN_LICE_LEVEL, MAX_LICE_LEVEL)
+
+    # Normalize the probabilities
     probs = exp.(-((points .- mean).^2) ./ (2 * std_dev^2))
     probs ./= sum(probs)
+    
     return points, probs
 end
 
