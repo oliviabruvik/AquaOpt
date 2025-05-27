@@ -11,14 +11,8 @@ using NativeSARSOP
 using DiscreteValueIteration
 using POMDPLinter
 using Distributions
-
-# -------------------------
-# Constants
-# -------------------------
-const SEA_LICE_BOUNDS = (0.0, 10.0)
-const INITIAL_BOUNDS = (0.0, 1.0)
-const SEA_LICE_INITIAL_MEAN = 1.0
-const STD_DEV = 1.0
+using Parameters
+using Random
 
 # -------------------------
 # State, Observation, Action
@@ -40,17 +34,18 @@ end
 # SeaLiceMDP Definition
 # -------------------------
 "Sea lice MDP with growth dynamics and treatment effects."
-struct SeaLiceSimMDP <: POMDP{SeaLiceState, Action, SeaLiceObservation}
-	lambda::Float64
-	costOfTreatment::Float64
-	growthRate::Float64
-	rho::Float64
-    discount_factor::Float64
-end
-
-"Constructor with default parameters."
-function SeaLiceSimMDP(; lambda=0.5, costOfTreatment=10.0, growthRate=1.2, rho=0.7, discount_factor=0.95)
-    SeaLiceSimMDP(lambda, costOfTreatment, growthRate, rho, discount_factor)
+@with_kw struct SeaLiceSimMDP <: POMDP{SeaLiceState, Action, SeaLiceObservation}
+	lambda::Float64 = 0.5
+	costOfTreatment::Float64 = 10.0
+	growthRate::Float64 = 1.2
+	rho::Float64 = 0.7
+    discount_factor::Float64 = 0.95
+    sea_lice_bounds::Tuple{Float64, Float64} = (0.0, 10.0)
+    initial_bounds::Tuple{Float64, Float64} = (0.0, 1.0)
+    sea_lice_initial_mean::Float64 = 1.0
+    sampling_sd::Float64 = 1.0
+    rng::AbstractRNG = Random.GLOBAL_RNG
+    normal_dist::Distribution = Normal(0, sampling_sd)
 end
 
 # -------------------------
@@ -61,17 +56,19 @@ POMDPs.discount(mdp::SeaLiceSimMDP) = mdp.discount_factor
 POMDPs.isterminal(mdp::SeaLiceSimMDP, s::SeaLiceState) = false
 
 function POMDPs.transition(pomdp::SeaLiceSimMDP, s::SeaLiceState, a::Action)
+    # TODO:Use log normal distribution - distributions.jl
+    # TODO: mu, SD of gaussian distribution before exp transformation
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
         μ = (1 - (a == Treatment ? pomdp.rho : 0.0)) * exp(pomdp.growthRate) * s.SeaLiceLevel
-        point = rand(rng, Normal(μ, STD_DEV))
-        return SeaLiceState(clamp(point, SEA_LICE_BOUNDS...))
+        next_state = μ + rand(rng, pomdp.normal_dist)
+        return SeaLiceState(clamp(next_state, pomdp.sea_lice_bounds...))
     end
 end
 
 function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::SeaLiceState)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
-        point = rand(rng, Normal(s.SeaLiceLevel, STD_DEV))
-        return SeaLiceObservation(clamp(point, SEA_LICE_BOUNDS...))
+        next_state = s.SeaLiceLevel + rand(rng, pomdp.normal_dist)
+        return SeaLiceObservation(clamp(next_state, pomdp.sea_lice_bounds...))
     end
 end
 
@@ -83,8 +80,7 @@ end
 
 function POMDPs.initialstate(pomdp::SeaLiceSimMDP)
     ImplicitDistribution(pomdp) do pomdp, rng
-        # TODO: Change from hardcoded mean
-        point = rand(rng, Normal(SEA_LICE_INITIAL_MEAN, STD_DEV))
-        return SeaLiceState(clamp(point, INITIAL_BOUNDS...))
+        next_state = pomdp.sea_lice_initial_mean + rand(rng, pomdp.normal_dist)
+        return SeaLiceState(clamp(next_state, pomdp.initial_bounds...))
     end
 end

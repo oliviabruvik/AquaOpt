@@ -6,6 +6,10 @@ using Random
 
 include("SimulationPOMDP.jl")
 
+# CONSTANTS
+const process_noise = 1.0
+const observation_noise = 1.0
+
 struct KFUpdaterStruct
     ekf::ExtendedKalmanFilter
     ukf::UnscentedKalmanFilter
@@ -27,7 +31,7 @@ function observe(x, u)
 end
 
 # Extended Kalman Filter Updater
-function KFUpdater(pomdp::SeaLiceSimMDP; process_noise=STD_DEV, observation_noise=STD_DEV)
+function KFUpdater(pomdp::SeaLiceSimMDP; process_noise=process_noise, observation_noise=observation_noise)
     
     # Create noise matrices
     W = process_noise^2 * Matrix{Float64}(I, 1, 1)
@@ -43,36 +47,17 @@ function KFUpdater(pomdp::SeaLiceSimMDP; process_noise=STD_DEV, observation_nois
     return KFUpdaterStruct(ekf, ukf, pomdp)
 end
 
-POMDPs.updater(policy::Policy, pomdp::SeaLiceSimMDP) = EKFUpdater(pomdp, process_noise=STD_DEV, observation_noise=STD_DEV)
+# POMDPs.updater(policy::Policy, pomdp::SeaLiceSimMDP) = EKFUpdater(pomdp, process_noise=ST_DEV, observation_noise=ST_DEV)
 
-function POMDPs.initialize_belief(updater::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, dist::Any)
-    # Mimic DiscreteUpdater: initialize belief from distribution or sampled value
-    if dist isa ImplicitDistribution
-        # Sample to estimate mean and variance
-        samples = [rand(dist).SeaLiceLevel for _ in 1:1000]
-        mean_val = mean(samples)
-        var_val = var(samples)
-    elseif dist isa Number
-        mean_val = dist
-        var_val = STD_DEV^2
-    else
-        mean_val = mean(dist)
-        var_val = var(dist)
-    end
-
-    return GaussianBelief([mean_val], Matrix{Float64}(I, 1, 1) * sqrt(var_val))
+function POMDPs.initialize_belief(updater::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, dist::Distribution)
+    return GaussianBelief([mean(dist)], Matrix{Float64}(I, 1, 1) * std(dist))
 end
 
 function runKalmanFilter(kf::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, b0::GaussianBelief, a::Action, o::SeaLiceObservation)
     
-    # Create action sequence
+    # Convert action to vector
     action = [a == Treatment ? 1.0 : 0.0]
 
-    # Use transition dynamics to get a predicted distribution
-    bp = GaussianFilters.predict(kf, b0, action)
-
-    # Use observation to update the distribution
-    bn = GaussianFilters.update(kf, bp, action, [o.SeaLiceLevel])
-
-    return bn
+    # Update belief
+    return GaussianFilters.update(kf, b0, action, [o.SeaLiceLevel])
 end

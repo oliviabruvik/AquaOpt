@@ -9,16 +9,55 @@ using POMDPTools
 using DataFrames
 using JLD2
 using Plots
+using Distributions
+using Parameters
+
+# TODO: sweep of different threshold parameters - sensitivity analysis
+# randomness - add stochasticity to the model
+# if above threshold, choose treatment with probability rho
+# TODO: never treat - model, nothing policy + check growth rate
+# TODO: try transforming problem to log space - 361! comparison - log vs not. better likelihood
+
+# CONSTANTS
+const process_noise = 1.0
+const observation_noise = 1.0
+
+# ----------------------------
+# Configuration struct
+# ----------------------------
+@with_kw struct Config
+    # TODO: parameters.jl - default parameters
+    lambda_values::Vector{Float64} = collect(0.0:0.05:1.0)
+    num_episodes::Int = 10
+    steps_per_episode::Int = 20
+    heuristic_threshold::Float64 = 5
+    heuristic_belief_threshold::Float64 = 0.5
+    policies_dir::String = joinpath("results", "policies")
+    figures_dir::String = joinpath("results", "figures")
+    data_dir::String = joinpath("results", "data")
+    ekf_filter::Bool = true
+end
 
 # ----------------------------
 # Algorithm struct
 # ----------------------------
-struct Algorithm{S<:Union{Solver, Nothing}}
-    solver::S
-    convert_to_mdp::Bool
-    solver_name::String
-    heuristic_threshold::Union{Float64, Nothing}
-    heuristic_belief_threshold::Union{Float64, Nothing}
+@with_kw struct Algorithm{S<:Union{Solver, Nothing}}
+    solver::S = nothing
+    convert_to_mdp::Bool = false
+    solver_name::String = "Heuristic_Policy"
+    # TODO: nullable + float64
+    heuristic_threshold::Union{Float64, Nothing} = nothing
+    heuristic_belief_threshold::Union{Float64, Nothing} = nothing
+end
+
+# ----------------------------
+# POMDP config struct
+# ----------------------------
+@with_kw struct POMDPConfig
+    costOfTreatment::Float64 = 10.0
+    growthRate::Float64 = 1.2
+    rho::Float64 = 0.7
+    discount_factor::Float64 = 0.95
 end
 
 # ----------------------------
@@ -41,8 +80,8 @@ end
 # ----------------------------
 # Policy Generation
 # ----------------------------
-function generate_policy(algorithm, λ)
-    pomdp = SeaLiceMDP(lambda=λ)
+function generate_policy(algorithm, λ, pomdp_config)
+    pomdp = SeaLiceMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
     mdp = UnderlyingMDP(pomdp)
 
     policy = if algorithm.solver_name == "Heuristic_Policy"
@@ -80,7 +119,7 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
 
     # Create simulator
     sim = RolloutSimulator(max_steps=config.steps_per_episode)
-    updaterStruct = KFUpdater(sim_pomdp, process_noise=STD_DEV, observation_noise=STD_DEV)
+    updaterStruct = KFUpdater(sim_pomdp, process_noise=process_noise, observation_noise=observation_noise)
     updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
 
     # Run simulation for each episode
@@ -89,8 +128,8 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
         # Get initial state
         s = rand(initialstate(sim_pomdp))
 
-        # TODO: Not needed for kalman filter / fix arguments
-        initial_belief = Normal(0.5, 1.0)
+        # Get initial belief from initial mean and sampling sd
+        initial_belief = Normal(sim_pomdp.sea_lice_initial_mean, sim_pomdp.sampling_sd)
 
         r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
 
@@ -111,6 +150,7 @@ function calculate_averages(config, pomdp, action_hists, state_hists, reward_his
     total_steps = config.num_episodes * config.steps_per_episode
     total_cost, total_sealice, total_reward = 0.0, 0.0, 0.0
 
+    # TODO: run for one episode to error check
     for i in 1:config.num_episodes
         total_cost += sum(a == Treatment for a in action_hists[i]) * pomdp.costOfTreatment
         total_sealice += sum(s.SeaLiceLevel for s in state_hists[i])
@@ -150,18 +190,17 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
             # For POMDP policies, use the belief state
             state_space = states(policy.pomdp)
             bvec = [pdf(norm_distr, s.SeaLiceLevel) for s in state_space]
-            bvec = bvec ./ sum(bvec)
+            bvec = normalize(bvec, 1)
             a = action(policy, bvec)
         end
 
         sp, o, r = @gen(:sp,:o,:r)(sim_pomdp, s, a, sim.rng)
 
-        r_total += disc*r
+        r_total += disc * r
 
         s = sp
 
-        bp = runKalmanFilter(updater, b, a, o)
-        b = bp
+        b = runKalmanFilter(updater, b, a, o)
 
         disc *= discount(sim_pomdp)
         step += 1
@@ -189,16 +228,24 @@ end
 
 # Heuristic action
 function POMDPs.action(policy::HeuristicPolicy, b)
-    return heuristicChooseAction(policy, b, true) ? Treatment : NoTreatment
+    if heuristicChooseAction(policy, b, true)
+        return Treatment
+    else
+        return rand((Treatment, NoTreatment))
+    end
 end
+
+# TODO: plot heuristic bvec with imageMap
 
 # Function to decide whether we choose the action or randomize
 function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
+
     # Convert belief vector to a probability distribution
     state_space = states(policy.pomdp)
 
     if use_cdf
         # Method 1: Calculate probability of being above threshold
+        # TODO: cumsum(b[0:discretizer.index(policy.threshold)])
         prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > policy.threshold)
         return prob_above_threshold > policy.belief_threshold
     else
@@ -216,7 +263,7 @@ end
 # ----------------------------
 # Optimizer Wrapper
 # ----------------------------
-function test_optimizer(algorithm, config)
+function test_optimizer(algorithm, config, pomdp_config)
 
     results = DataFrame(
         lambda=Float64[],
@@ -230,8 +277,7 @@ function test_optimizer(algorithm, config)
     for λ in config.lambda_values
 
         # Generate policy
-        policy, pomdp, mdp = generate_policy(algorithm, λ)
-        save_policy(policy, pomdp, mdp, algorithm.solver_name, λ, config)
+        policy, pomdp, mdp = generate_policy(algorithm, λ, pomdp_config)
 
         # Run simulation to calculate average cost and average sea lice level
         r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists = run_simulation(policy, mdp, pomdp, config, algorithm)
@@ -251,4 +297,5 @@ function test_optimizer(algorithm, config)
     @save joinpath(config.data_dir, "$(algorithm.solver_name)/results_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2") results
     savefig(results_plot, joinpath(config.figures_dir, "$(algorithm.solver_name)/results_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
     savefig(belief_plot, joinpath(config.figures_dir, "$(algorithm.solver_name)/beliefs_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    return results
 end
