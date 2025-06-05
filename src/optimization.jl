@@ -1,6 +1,8 @@
 include("kalmanFilter.jl")
 include("SeaLicePOMDP.jl")
+include("SeaLiceLogPOMDP.jl")
 include("SimulationPOMDP.jl")
+include("SimulationLogPOMDP.jl")
 
 using GaussianFilters
 using POMDPs
@@ -16,7 +18,6 @@ using Parameters
 # randomness - add stochasticity to the model
 # if above threshold, choose treatment with probability rho
 # TODO: never treat - model, nothing policy + check growth rate
-# TODO: try transforming problem to log space - 361! comparison - log vs not. better likelihood
 
 # CONSTANTS
 const process_noise = 1.0
@@ -26,11 +27,10 @@ const observation_noise = 1.0
 # Configuration struct
 # ----------------------------
 @with_kw struct Config
-    # TODO: parameters.jl - default parameters
     lambda_values::Vector{Float64} = collect(0.0:0.05:1.0)
     num_episodes::Int = 10
     steps_per_episode::Int = 20
-    heuristic_threshold::Float64 = 5
+    heuristic_threshold::Float64 = 5.0  # In absolute space
     heuristic_belief_threshold::Float64 = 0.5
     policies_dir::String = joinpath("results", "policies")
     figures_dir::String = joinpath("results", "figures")
@@ -42,11 +42,10 @@ end
 # Algorithm struct
 # ----------------------------
 @with_kw struct Algorithm{S<:Union{Solver, Nothing}}
-    solver::S = nothing
+    solver::S = nothing # TODO: set to heuristic solver
     convert_to_mdp::Bool = false
     solver_name::String = "Heuristic_Policy"
-    # TODO: nullable + float64
-    heuristic_threshold::Union{Float64, Nothing} = nothing
+    heuristic_threshold::Union{Float64, Nothing} = nothing # set to heuristic threshold
     heuristic_belief_threshold::Union{Float64, Nothing} = nothing
 end
 
@@ -58,6 +57,7 @@ end
     growthRate::Float64 = 1.2
     rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
+    log_space::Bool = true
 end
 
 # ----------------------------
@@ -81,11 +81,17 @@ end
 # Policy Generation
 # ----------------------------
 function generate_policy(algorithm, λ, pomdp_config)
-    pomdp = SeaLiceMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
+
+    if pomdp_config.log_space
+        pomdp = SeaLiceLogMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
+    else
+        pomdp = SeaLiceMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
+    end
     mdp = UnderlyingMDP(pomdp)
 
     policy = if algorithm.solver_name == "Heuristic_Policy"
-        HeuristicPolicy(pomdp, algorithm.heuristic_threshold, algorithm.heuristic_belief_threshold)
+        threshold = pomdp_config.log_space ? log(algorithm.heuristic_threshold) : algorithm.heuristic_threshold
+        HeuristicPolicy(pomdp, threshold, algorithm.heuristic_belief_threshold)
     elseif algorithm.convert_to_mdp
        solve(algorithm.solver, mdp)
     else
@@ -108,14 +114,24 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     measurement_hists = []
     reward_hists = []
 
-    # Create simulator POMDP
-    sim_pomdp = SeaLiceSimMDP(
-        lambda=pomdp.lambda,
-        costOfTreatment=pomdp.costOfTreatment,
-        growthRate=pomdp.growthRate,
-        rho=pomdp.rho,
-        discount_factor=pomdp.discount_factor
-    )
+    # Create simulator POMDP based on whether we're in log space
+    sim_pomdp = if typeof(pomdp) <: SeaLiceLogMDP
+        SeaLiceLogSimMDP(
+            lambda=pomdp.lambda,
+            costOfTreatment=pomdp.costOfTreatment,
+            growthRate=pomdp.growthRate,
+            rho=pomdp.rho,
+            discount_factor=pomdp.discount_factor
+        )
+    else
+        SeaLiceSimMDP(
+            lambda=pomdp.lambda,
+            costOfTreatment=pomdp.costOfTreatment,
+            growthRate=pomdp.growthRate,
+            rho=pomdp.rho,
+            discount_factor=pomdp.discount_factor
+        )
+    end
 
     # Create simulator
     sim = RolloutSimulator(max_steps=config.steps_per_episode)
@@ -129,7 +145,11 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
         s = rand(initialstate(sim_pomdp))
 
         # Get initial belief from initial mean and sampling sd
-        initial_belief = Normal(sim_pomdp.sea_lice_initial_mean, sim_pomdp.sampling_sd)
+        initial_belief = if typeof(sim_pomdp) <: SeaLiceLogSimMDP
+            Normal(sim_pomdp.log_lice_initial_mean, sim_pomdp.sampling_sd)
+        else
+            Normal(sim_pomdp.sea_lice_initial_mean, sim_pomdp.sampling_sd)
+        end
 
         r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
 
@@ -153,7 +173,12 @@ function calculate_averages(config, pomdp, action_hists, state_hists, reward_his
     # TODO: run for one episode to error check
     for i in 1:config.num_episodes
         total_cost += sum(a == Treatment for a in action_hists[i]) * pomdp.costOfTreatment
-        total_sealice += sum(s.SeaLiceLevel for s in state_hists[i])
+        # Handle both regular and log space states
+        total_sealice += if typeof(state_hists[i][1]) <: SeaLiceLogState
+            sum(exp(s.SeaLiceLevel) for s in state_hists[i])
+        else
+            sum(s.SeaLiceLevel for s in state_hists[i])
+        end
         total_reward += sum(reward_hists[i])
     end
 

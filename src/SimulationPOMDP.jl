@@ -56,8 +56,6 @@ POMDPs.discount(mdp::SeaLiceSimMDP) = mdp.discount_factor
 POMDPs.isterminal(mdp::SeaLiceSimMDP, s::SeaLiceState) = false
 
 function POMDPs.transition(pomdp::SeaLiceSimMDP, s::SeaLiceState, a::Action)
-    # TODO:Use log normal distribution - distributions.jl
-    # TODO: mu, SD of gaussian distribution before exp transformation
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
         μ = (1 - (a == Treatment ? pomdp.rho : 0.0)) * exp(pomdp.growthRate) * s.SeaLiceLevel
         next_state = μ + rand(rng, pomdp.normal_dist)

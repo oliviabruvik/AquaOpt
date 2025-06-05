@@ -21,39 +21,7 @@ using LocalApproximationValueIteration
 plotlyjs()  # Activate Plotly backend
 
 # TODO: STD should be decreasing over time
-# TODO: plot STD, not variance
 # TODO: belief plot diff lambda
-
-# ----------------------------
-# Configuration
-# ----------------------------
-# const CONFIG = Config(
-#     collect(0.0:0.2:1.0),           # lambda_values
-#     10,                           # num_episodes
-#     20,                             # steps_per_episode
-#     5,                              # heuristic_threshold
-#     0.5,                            # heuristic_belief_threshold
-#     joinpath("results", "policies"), # policies_dir
-#     joinpath("results", "figures"), # figures_dir
-#     joinpath("results", "data"),    # data_dir
-#     true                            # ekf_filter
-# )
-
-# const POMDP_CONFIG = POMDPConfig(
-#     10.0,  # costOfTreatment
-#     1.2,   # growthRate
-#     0.7,   # rho
-#     0.95   # discount_factor
-# )
-
-# Create results directories
-# mkpath(CONFIG.policies_dir)
-# mkpath(CONFIG.figures_dir)
-# mkpath(CONFIG.data_dir)
-
-# Create interpolation points for sea lice levels (0.0 to 10.0)
-# grid = RectangleGrid(range(0.0, 10.0, length=100))
-# interp = LocalGIFunctionApproximator(grid)
 
 # ----------------------------
 # Main function
