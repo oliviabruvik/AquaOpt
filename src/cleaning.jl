@@ -36,7 +36,7 @@ function load_and_clean(path::String)
     df = convert_to_total_weeks(df)
 
     # Discretize sea lice levels
-    df = discretize_sea_lice_levels(df)
+    # df = discretize_sea_lice_levels(df)
 
     # Save to processed data folder
     CSV.write(joinpath("data", "processed", "sealice_data.csv"), df)
@@ -213,3 +213,32 @@ function clean_bayesian_data(df::DataFrame)
     return df
 end
 
+function process_bayesian_data()
+
+    LICE_PATH = "data/raw/salmon_lice.csv"
+    DISEASE_PATH = "data/raw/fish_disease.csv"
+    TREATMENT_PATH = "data/raw/lice_treatments.csv"
+
+    # Load data
+    lice_df = load_baretswatch_lice_data(LICE_PATH)
+    disease_df = load_baretswatch_disease_data(DISEASE_PATH)
+    treatment_df = load_baretswatch_treatment_data(TREATMENT_PATH)
+
+    # Combine data
+    inner_df, outer_df = combine_baretswatch_data(lice_df, disease_df, treatment_df)
+
+    # Prepare data for Bayesian analysis
+    inner_df = clean_bayesian_data(inner_df)
+    outer_df = clean_bayesian_data(outer_df)
+
+    # Save to processed data folder
+    CSV.write(joinpath("data", "processed", "bayesian_inner_data.csv"), inner_df)
+    CSV.write(joinpath("data", "processed", "bayesian_outer_data.csv"), outer_df)
+
+end
+
+function main()
+    load_and_clean("data/raw/licedata.csv")
+end
+
+main()

@@ -1,6 +1,8 @@
 include("kalmanFilter.jl")
 include("SeaLicePOMDP.jl")
+include("SeaLiceLogPOMDP.jl")
 include("SimulationPOMDP.jl")
+include("SimulationLogPOMDP.jl")
 
 using GaussianFilters
 using POMDPs
@@ -16,37 +18,32 @@ using Parameters
 # randomness - add stochasticity to the model
 # if above threshold, choose treatment with probability rho
 # TODO: never treat - model, nothing policy + check growth rate
-# TODO: try transforming problem to log space - 361! comparison - log vs not. better likelihood
-
-# CONSTANTS
-const process_noise = 1.0
-const observation_noise = 1.0
 
 # ----------------------------
 # Configuration struct
 # ----------------------------
 @with_kw struct Config
-    # TODO: parameters.jl - default parameters
     lambda_values::Vector{Float64} = collect(0.0:0.05:1.0)
     num_episodes::Int = 10
     steps_per_episode::Int = 20
-    heuristic_threshold::Float64 = 5
+    heuristic_threshold::Float64 = 5.0  # In absolute space
     heuristic_belief_threshold::Float64 = 0.5
+    process_noise::Float64 = 0.5
+    observation_noise::Float64 = 0.5
     policies_dir::String = joinpath("results", "policies")
     figures_dir::String = joinpath("results", "figures")
     data_dir::String = joinpath("results", "data")
-    ekf_filter::Bool = true
+    ekf_filter::Bool = false
 end
 
 # ----------------------------
 # Algorithm struct
 # ----------------------------
 @with_kw struct Algorithm{S<:Union{Solver, Nothing}}
-    solver::S = nothing
+    solver::S = nothing # TODO: set to heuristic solver
     convert_to_mdp::Bool = false
     solver_name::String = "Heuristic_Policy"
-    # TODO: nullable + float64
-    heuristic_threshold::Union{Float64, Nothing} = nothing
+    heuristic_threshold::Union{Float64, Nothing} = nothing # set to heuristic threshold
     heuristic_belief_threshold::Union{Float64, Nothing} = nothing
 end
 
@@ -55,9 +52,10 @@ end
 # ----------------------------
 @with_kw struct POMDPConfig
     costOfTreatment::Float64 = 10.0
-    growthRate::Float64 = 1.2
+    growthRate::Float64 = 1.26
     rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
+    log_space::Bool = false
 end
 
 # ----------------------------
@@ -81,11 +79,19 @@ end
 # Policy Generation
 # ----------------------------
 function generate_policy(algorithm, λ, pomdp_config)
-    pomdp = SeaLiceMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
+
+    if pomdp_config.log_space
+        pomdp = SeaLiceLogMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
+    else
+        pomdp = SeaLiceMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
+    end
     mdp = UnderlyingMDP(pomdp)
 
     policy = if algorithm.solver_name == "Heuristic_Policy"
-        HeuristicPolicy(pomdp, algorithm.heuristic_threshold, algorithm.heuristic_belief_threshold)
+        threshold = pomdp_config.log_space ? log(algorithm.heuristic_threshold) : algorithm.heuristic_threshold
+        HeuristicPolicy(pomdp, threshold, algorithm.heuristic_belief_threshold)
+    elseif algorithm.solver_name == "Random_Policy"
+        RandomPolicy(pomdp)
     elseif algorithm.convert_to_mdp
        solve(algorithm.solver, mdp)
     else
@@ -108,18 +114,28 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     measurement_hists = []
     reward_hists = []
 
-    # Create simulator POMDP
-    sim_pomdp = SeaLiceSimMDP(
-        lambda=pomdp.lambda,
-        costOfTreatment=pomdp.costOfTreatment,
-        growthRate=pomdp.growthRate,
-        rho=pomdp.rho,
-        discount_factor=pomdp.discount_factor
-    )
+    # Create simulator POMDP based on whether we're in log space
+    sim_pomdp = if typeof(pomdp) <: SeaLiceLogMDP
+        SeaLiceLogSimMDP(
+            lambda=pomdp.lambda,
+            costOfTreatment=pomdp.costOfTreatment,
+            growthRate=pomdp.growthRate,
+            rho=pomdp.rho,
+            discount_factor=pomdp.discount_factor
+        )
+    else
+        SeaLiceSimMDP(
+            lambda=pomdp.lambda,
+            costOfTreatment=pomdp.costOfTreatment,
+            growthRate=pomdp.growthRate,
+            rho=pomdp.rho,
+            discount_factor=pomdp.discount_factor
+        )
+    end
 
     # Create simulator
     sim = RolloutSimulator(max_steps=config.steps_per_episode)
-    updaterStruct = KFUpdater(sim_pomdp, process_noise=process_noise, observation_noise=observation_noise)
+    updaterStruct = KFUpdater(sim_pomdp, process_noise=config.process_noise, observation_noise=config.observation_noise)
     updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
 
     # Run simulation for each episode
@@ -129,9 +145,20 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
         s = rand(initialstate(sim_pomdp))
 
         # Get initial belief from initial mean and sampling sd
-        initial_belief = Normal(sim_pomdp.sea_lice_initial_mean, sim_pomdp.sampling_sd)
+        initial_belief = if typeof(sim_pomdp) <: SeaLiceLogSimMDP
+            Normal(sim_pomdp.log_lice_initial_mean, sim_pomdp.sampling_sd)
+        else
+            Normal(sim_pomdp.sea_lice_initial_mean, sim_pomdp.sampling_sd)
+        end
 
         r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist = simulate_helper(sim, sim_pomdp, policy, updater, initial_belief, s)
+
+        # If we are using log space, convert the state history to raw space
+        # if typeof(sim_pomdp) <: SeaLiceLogSimMDP
+        #     state_hist = [pomdp.SeaLiceLogState(exp(s.SeaLiceLevel)) for s in state_hist]
+        #     measurement_hist = [pomdp.SeaLiceLogObservation(exp(o.SeaLiceLevel)) for o in measurement_hist]
+        #     # belief_hist = [Normal(exp(b.μ[1]), exp(b.Σ[1,1])) for b in belief_hist]
+        # end
 
         push!(r_total_hists, r_total)
         push!(action_hists, action_hist)
@@ -153,7 +180,12 @@ function calculate_averages(config, pomdp, action_hists, state_hists, reward_his
     # TODO: run for one episode to error check
     for i in 1:config.num_episodes
         total_cost += sum(a == Treatment for a in action_hists[i]) * pomdp.costOfTreatment
-        total_sealice += sum(s.SeaLiceLevel for s in state_hists[i])
+        # Handle both regular and log space states
+        total_sealice += if typeof(state_hists[i][1]) <: SeaLiceLogState
+            sum(exp(s.SeaLiceLevel) for s in state_hists[i])
+        else
+            sum(s.SeaLiceLevel for s in state_hists[i])
+        end
         total_reward += sum(reward_hists[i])
     end
 
@@ -216,6 +248,21 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
     return r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist
 end
 
+# ----------------------------
+# Random Policy
+# ----------------------------
+struct RandomPolicy{P<:POMDP} <: Policy
+    pomdp::P
+end
+
+# Random action
+function POMDPs.action(policy::RandomPolicy, b)
+    return rand((Treatment, NoTreatment))
+end
+
+function POMDPs.updater(policy::RandomPolicy)
+    return DiscreteUpdater(policy.pomdp)
+end
 
 # ----------------------------
 # Heuristic Policy
@@ -269,9 +316,18 @@ function test_optimizer(algorithm, config, pomdp_config)
         lambda=Float64[],
         avg_treatment_cost=Float64[],
         avg_sealice=Float64[],
+        state_hists=Vector{Any}[],
         action_hists=Vector{Any}[],
         belief_hists=Vector{Any}[]
     )
+
+    # Create directory for simulation histories and results
+    histories_dir = joinpath(config.data_dir, "simulation_histories", algorithm.solver_name)
+    mkpath(histories_dir)
+    results_dir = joinpath(config.data_dir, "avg_results", algorithm.solver_name)
+    mkpath(results_dir)
+    policies_dir = joinpath(config.data_dir, "policies", algorithm.solver_name)
+    mkpath(policies_dir)
 
     # Generate policies for each lambda
     for λ in config.lambda_values
@@ -284,18 +340,36 @@ function test_optimizer(algorithm, config, pomdp_config)
         avg_reward, avg_cost, avg_sealice = calculate_averages(config, pomdp, action_hists, state_hists, reward_hists)
 
         # Calculate the average reward, cost, and sea lice level
-        push!(results, (λ, avg_cost, avg_sealice, action_hists, belief_hists))
+        push!(results, (λ, avg_cost, avg_sealice, state_hists, action_hists, belief_hists))
+
+        # Save all histories for this lambda
+        histories = Dict(
+            "r_total_hists" => r_total_hists,
+            "action_hists" => action_hists,
+            "state_hists" => state_hists,
+            "measurement_hists" => measurement_hists,
+            "reward_hists" => reward_hists,
+            "belief_hists" => belief_hists,
+            "lambda" => λ,
+            "avg_reward" => avg_reward,
+            "avg_cost" => avg_cost,
+            "avg_sealice" => avg_sealice
+        )
+        
+        # Save histories to file
+        history_filename = "hists_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps_$(λ)_lambda"
+        @save joinpath(histories_dir, "$(history_filename).jld2") histories
+        CSV.write(joinpath(histories_dir, "$(history_filename).csv"), DataFrame(histories))
+
+        # Save policy, pomdp, and mdp to file
+        policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps_$(λ)_lambda"
+        @save joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
     end
 
-    # Plot results
-    results_plot = plot_mdp_results(results, algorithm.solver_name)
-    belief_plot = plot_policy_belief_levels(results, algorithm.solver_name)
-    
     # Save results
-    mkpath(joinpath(config.figures_dir, algorithm.solver_name))
-    mkpath(joinpath(config.data_dir, algorithm.solver_name))
-    @save joinpath(config.data_dir, "$(algorithm.solver_name)/results_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2") results
-    savefig(results_plot, joinpath(config.figures_dir, "$(algorithm.solver_name)/results_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
-    savefig(belief_plot, joinpath(config.figures_dir, "$(algorithm.solver_name)/beliefs_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    avg_results_filename = "avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps"
+    @save joinpath(results_dir, "$(avg_results_filename).jld2") results
+    # CSV.write(joinpath(results_dir, "$(avg_results_filename).csv"), results)
+    
     return results
 end
