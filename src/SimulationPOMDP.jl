@@ -43,7 +43,7 @@ end
     sea_lice_bounds::Tuple{Float64, Float64} = (0.0, 10.0)
     initial_bounds::Tuple{Float64, Float64} = (0.0, 1.0)
     sea_lice_initial_mean::Float64 = 1.0
-    sampling_sd::Float64 = 1.0
+    sampling_sd::Float64 = 0.5
     rng::AbstractRNG = Random.GLOBAL_RNG
     normal_dist::Distribution = Normal(0, sampling_sd)
 end

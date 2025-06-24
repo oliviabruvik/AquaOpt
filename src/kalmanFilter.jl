@@ -7,10 +7,6 @@ using Random
 include("SimulationPOMDP.jl")
 include("SimulationLogPOMDP.jl")
 
-# CONSTANTS
-const process_noise = 1.0
-const observation_noise = 1.0
-
 struct KFUpdaterStruct
     ekf::ExtendedKalmanFilter
     ukf::UnscentedKalmanFilter

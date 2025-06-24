@@ -45,7 +45,7 @@ end
     log_lice_bounds::Tuple{Float64, Float64} = (log(min_lice_level), log(max_lice_level))
     initial_bounds::Tuple{Float64, Float64} = (log(0.1), log(1.0))
     log_lice_initial_mean::Float64 = log(1.0)
-    sampling_sd::Float64 = 1.0
+    sampling_sd::Float64 = 0.5
     rng::AbstractRNG = Random.GLOBAL_RNG
     normal_dist::Distribution = Normal(0, sampling_sd)
 end

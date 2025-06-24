@@ -42,16 +42,17 @@ end
     discount_factor::Float64 = 0.95
     min_lice_level::Float64 = 1e-3 # 1e-3 is the minimum sea lice level
     max_lice_level::Float64 = 10.0 # 10.0 is the maximum sea lice level
+    max_initial_level::Float64 = 1.0 # 1.0 is the maximum initial sea lice level
     discretization_step::Float64 = 0.1
     sea_lice_range::Vector{Float64} = collect(min_lice_level:discretization_step:(max_lice_level + discretization_step))
-    initial_range::Vector{Float64} = collect(min_lice_level:discretization_step:(max_lice_level + discretization_step))
-    sampling_sd::Float64 = 1.0
+    initial_range::Vector{Float64} = collect(min_lice_level:discretization_step:(max_initial_level + discretization_step))
+    sampling_sd::Float64 = 0.5
     catdisc::CategoricalDiscretizer = CategoricalDiscretizer([NoTreatment, Treatment])
 
     # Log space
     min_log_lice_level::Float64 = log(min_lice_level)
     max_log_lice_level::Float64 = log(max_lice_level)
-    log_discretization_step::Float64 = 0.1
+    log_discretization_step::Float64 = 0.005  # Reduced from 0.01 for finer granularity
     log_sea_lice_range::Vector{Float64} = collect(range(min_log_lice_level, stop=max_log_lice_level, step=log_discretization_step))
     log_initial_range::Vector{Float64} = collect(range(min_log_lice_level, stop=max_log_lice_level, step=log_discretization_step))
     log_state_dict::Dict{Float64, Int} = Dict(level => idx for (idx, level) in enumerate(log_sea_lice_range))

@@ -19,10 +19,6 @@ using Parameters
 # if above threshold, choose treatment with probability rho
 # TODO: never treat - model, nothing policy + check growth rate
 
-# CONSTANTS
-const process_noise = 1.0
-const observation_noise = 1.0
-
 # ----------------------------
 # Configuration struct
 # ----------------------------
@@ -32,10 +28,12 @@ const observation_noise = 1.0
     steps_per_episode::Int = 20
     heuristic_threshold::Float64 = 5.0  # In absolute space
     heuristic_belief_threshold::Float64 = 0.5
+    process_noise::Float64 = 0.5
+    observation_noise::Float64 = 0.5
     policies_dir::String = joinpath("results", "policies")
     figures_dir::String = joinpath("results", "figures")
     data_dir::String = joinpath("results", "data")
-    ekf_filter::Bool = true
+    ekf_filter::Bool = false
 end
 
 # ----------------------------
@@ -54,7 +52,7 @@ end
 # ----------------------------
 @with_kw struct POMDPConfig
     costOfTreatment::Float64 = 10.0
-    growthRate::Float64 = 1.2
+    growthRate::Float64 = 1.26
     rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
     log_space::Bool = false
@@ -92,6 +90,8 @@ function generate_policy(algorithm, λ, pomdp_config)
     policy = if algorithm.solver_name == "Heuristic_Policy"
         threshold = pomdp_config.log_space ? log(algorithm.heuristic_threshold) : algorithm.heuristic_threshold
         HeuristicPolicy(pomdp, threshold, algorithm.heuristic_belief_threshold)
+    elseif algorithm.solver_name == "Random_Policy"
+        RandomPolicy(pomdp)
     elseif algorithm.convert_to_mdp
        solve(algorithm.solver, mdp)
     else
@@ -135,7 +135,7 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
 
     # Create simulator
     sim = RolloutSimulator(max_steps=config.steps_per_episode)
-    updaterStruct = KFUpdater(sim_pomdp, process_noise=process_noise, observation_noise=observation_noise)
+    updaterStruct = KFUpdater(sim_pomdp, process_noise=config.process_noise, observation_noise=config.observation_noise)
     updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
 
     # Run simulation for each episode
@@ -248,6 +248,21 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
     return r_total, action_hist, state_hist, measurement_hist, reward_hist, belief_hist
 end
 
+# ----------------------------
+# Random Policy
+# ----------------------------
+struct RandomPolicy{P<:POMDP} <: Policy
+    pomdp::P
+end
+
+# Random action
+function POMDPs.action(policy::RandomPolicy, b)
+    return rand((Treatment, NoTreatment))
+end
+
+function POMDPs.updater(policy::RandomPolicy)
+    return DiscreteUpdater(policy.pomdp)
+end
 
 # ----------------------------
 # Heuristic Policy
@@ -349,13 +364,12 @@ function test_optimizer(algorithm, config, pomdp_config)
         # Save policy, pomdp, and mdp to file
         policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps_$(λ)_lambda"
         @save joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
-
     end
 
     # Save results
     avg_results_filename = "avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps"
     @save joinpath(results_dir, "$(avg_results_filename).jld2") results
-    CSV.write(joinpath(results_dir, "$(avg_results_filename).csv"), results)
+    # CSV.write(joinpath(results_dir, "$(avg_results_filename).csv"), results)
     
     return results
 end
