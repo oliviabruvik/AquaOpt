@@ -1,10 +1,13 @@
-include("Data/Cleaning.jl")
-include("Models/SeaLicePOMDP.jl")
 include("Algorithms/Evaluation.jl")
 include("Algorithms/Policies.jl")
 include("Algorithms/Simulation.jl")
+include("Data/Cleaning.jl")
+include("Models/SeaLicePOMDP.jl")
+include("Plotting/Heatmaps.jl")
+include("Plotting/Timeseries.jl")
+include("Plotting/Comparison.jl")
+# include("Plotting/gpt.jl")
 include("Utils/Config.jl")
-include("Plotting/plot_views.jl")
 
 # Environment variables
 ENV["PLOTS_BROWSER"] = "true"
@@ -99,7 +102,6 @@ function plot_results(algorithms, CONFIG, POMDP_CONFIG)
 
     end
     
-
     # Plot comparison plots
     plot_all_cost_vs_sealice(CONFIG, POMDP_CONFIG)
     plot_policy_sealice_levels_over_lambdas(CONFIG, POMDP_CONFIG)
@@ -114,5 +116,5 @@ function plot_results(algorithms, CONFIG, POMDP_CONFIG)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main(run_algorithms=true, run_plots=true, log_space=true)
+    main(run_algorithms=false, run_plots=true, log_space=true)
 end

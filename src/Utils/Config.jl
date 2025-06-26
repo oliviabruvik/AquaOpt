@@ -1,8 +1,5 @@
 using Parameters
 
-
-
-
 # ----------------------------
 # Configuration struct
 # ----------------------------
