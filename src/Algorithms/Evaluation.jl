@@ -18,10 +18,7 @@ using Plots
 using Distributions
 using Parameters
 
-# TODO: sweep of different threshold parameters - sensitivity analysis
-# randomness - add stochasticity to the model
 # if above threshold, choose treatment with probability rho
-# TODO: never treat - model, nothing policy + check growth rate
 
 # ----------------------------
 # Optimizer Wrapper
@@ -32,6 +29,7 @@ function test_optimizer(algorithm, config, pomdp_config)
         lambda=Float64[],
         avg_treatment_cost=Float64[],
         avg_sealice=Float64[],
+        avg_reward=Float64[],
         state_hists=Vector{Any}[],
         action_hists=Vector{Any}[],
         belief_hists=Vector{Any}[]
@@ -56,7 +54,7 @@ function test_optimizer(algorithm, config, pomdp_config)
         avg_reward, avg_cost, avg_sealice = calculate_averages(config, pomdp, action_hists, state_hists, reward_hists)
 
         # Calculate the average reward, cost, and sea lice level
-        push!(results, (λ, avg_cost, avg_sealice, state_hists, action_hists, belief_hists))
+        push!(results, (λ, avg_cost, avg_sealice, avg_reward, state_hists, action_hists, belief_hists))
 
         # Save all histories for this lambda
         histories = Dict(
@@ -85,7 +83,6 @@ function test_optimizer(algorithm, config, pomdp_config)
     # Save results
     avg_results_filename = "avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps"
     @save joinpath(results_dir, "$(avg_results_filename).jld2") results
-    # CSV.write(joinpath(results_dir, "$(avg_results_filename).csv"), results)
     
     return results
 end
