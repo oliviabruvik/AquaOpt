@@ -143,7 +143,6 @@ function calculate_averages(config, pomdp, action_hists, state_hists, reward_his
     total_steps = config.num_episodes * config.steps_per_episode
     total_cost, total_sealice, total_reward = 0.0, 0.0, 0.0
 
-    # TODO: run for one episode to error check
     for i in 1:config.num_episodes
         total_cost += sum(a == Treatment for a in action_hists[i]) * pomdp.costOfTreatment
         # Handle both regular and log space states

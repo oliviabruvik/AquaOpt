@@ -6,7 +6,6 @@ include("Models/SeaLicePOMDP.jl")
 include("Plotting/Heatmaps.jl")
 include("Plotting/Timeseries.jl")
 include("Plotting/Comparison.jl")
-# include("Plotting/gpt.jl")
 include("Utils/Config.jl")
 
 # Environment variables
@@ -34,12 +33,13 @@ function main(;run_algorithms=true, run_plots=true, log_space=true)
     @info "Loading and cleaning data"
     df = CSV.read(joinpath("data", "processed", "sealice_data.csv"), DataFrame)
 
-    CONFIG = Config(num_episodes=10, steps_per_episode=52)
+    CONFIG = Config(num_episodes=3, steps_per_episode=52)
     POMDP_CONFIG = POMDPConfig(log_space=log_space)
 
     algorithms = [
+        Algorithm(solver_name="NoTreatment_Policy"),
         Algorithm(solver_name="Random_Policy"),
-        Algorithm(heuristic_threshold=CONFIG.heuristic_threshold, heuristic_belief_threshold=CONFIG.heuristic_belief_threshold),
+        Algorithm(heuristic_threshold=CONFIG.heuristic_threshold, heuristic_belief_threshold=CONFIG.heuristic_belief_threshold, heuristic_rho=CONFIG.heuristic_rho),
         Algorithm(solver=ValueIterationSolver(max_iterations=30), convert_to_mdp=true, solver_name="VI_Policy"),
         Algorithm(solver=SARSOPSolver(max_time=10.0), solver_name="SARSOP_Policy"),
         Algorithm(solver=QMDPSolver(max_iterations=30), solver_name="QMDP_Policy")
@@ -116,5 +116,5 @@ function plot_results(algorithms, CONFIG, POMDP_CONFIG)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main(run_algorithms=false, run_plots=true, log_space=true)
+    main(run_algorithms=true, run_plots=true, log_space=true)
 end

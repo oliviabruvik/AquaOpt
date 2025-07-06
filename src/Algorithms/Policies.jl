@@ -27,9 +27,11 @@ function generate_policy(algorithm, λ, pomdp_config)
 
     policy = if algorithm.solver_name == "Heuristic_Policy"
         threshold = pomdp_config.log_space ? log(algorithm.heuristic_threshold) : algorithm.heuristic_threshold
-        HeuristicPolicy(pomdp, threshold, algorithm.heuristic_belief_threshold)
+        HeuristicPolicy(pomdp, threshold, algorithm.heuristic_belief_threshold, algorithm.heuristic_rho)
     elseif algorithm.solver_name == "Random_Policy"
         RandomPolicy(pomdp)
+    elseif algorithm.solver_name == "NoTreatment_Policy"
+        NoTreatmentPolicy(pomdp)
     elseif algorithm.convert_to_mdp
        solve(algorithm.solver, mdp)
     else
@@ -37,6 +39,22 @@ function generate_policy(algorithm, λ, pomdp_config)
     end
     
     return (policy, pomdp, mdp)
+end
+
+# ----------------------------
+# No Treatment Policy
+# ----------------------------
+struct NoTreatmentPolicy{P<:POMDP} <: Policy
+    pomdp::P
+end
+
+# No Treatment action
+function POMDPs.action(policy::NoTreatmentPolicy, b)
+    return NoTreatment
+end
+
+function POMDPs.updater(policy::NoTreatmentPolicy)
+    return DiscreteUpdater(policy.pomdp)
 end
 
 # ----------------------------
@@ -62,12 +80,14 @@ struct HeuristicPolicy{P<:POMDP} <: Policy
     pomdp::P
     threshold::Float64
     belief_threshold::Float64
+    heuristic_rho::Float64
 end
 
 # Heuristic action
 function POMDPs.action(policy::HeuristicPolicy, b)
     if heuristicChooseAction(policy, b, true)
-        return Treatment
+        # Choose Treatment with probability heuristic_rho, otherwise NoTreatment
+        return rand() < policy.heuristic_rho ? Treatment : NoTreatment
     else
         return rand((Treatment, NoTreatment))
     end
@@ -83,7 +103,6 @@ function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
 
     if use_cdf
         # Method 1: Calculate probability of being above threshold
-        # TODO: cumsum(b[0:discretizer.index(policy.threshold)])
         prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > policy.threshold)
         return prob_above_threshold > policy.belief_threshold
     else
