@@ -44,8 +44,30 @@ function test_optimizer(algorithm, config, pomdp_config)
     # Generate policies for each lambda
     for λ in config.lambda_values
 
+        # Generate POMDP and MDP
+        if pomdp_config.log_space
+            pomdp = SeaLiceLogMDP(
+                lambda=λ,
+                costOfTreatment=pomdp_config.costOfTreatment,
+                growthRate=pomdp_config.growthRate,
+                rho=pomdp_config.rho,
+                discount_factor=pomdp_config.discount_factor
+            )
+        else
+            pomdp = SeaLiceMDP(
+                lambda=λ,
+                costOfTreatment=pomdp_config.costOfTreatment,
+                growthRate=pomdp_config.growthRate,
+                rho=pomdp_config.rho,
+                discount_factor=pomdp_config.discount_factor
+            )
+        end
+    
+        # Get the underlying MDP
+        mdp = UnderlyingMDP(pomdp)
+
         # Generate policy
-        policy, pomdp, mdp = generate_policy(algorithm, λ, pomdp_config)
+        policy = generate_policy(algorithm, λ, pomdp_config, pomdp, mdp)
 
         # Run simulation to calculate average cost and average sea lice level
         r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists = run_simulation(policy, mdp, pomdp, config, algorithm)

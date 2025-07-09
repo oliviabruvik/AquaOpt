@@ -16,29 +16,28 @@ using Parameters
 # ----------------------------
 # Policy Generation
 # ----------------------------
-function generate_policy(algorithm, λ, pomdp_config)
+function generate_policy(algorithm, λ, pomdp_config, pomdp, mdp)
 
-    if pomdp_config.log_space
-        pomdp = SeaLiceLogMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
-    else
-        pomdp = SeaLiceMDP(lambda=λ, costOfTreatment=pomdp_config.costOfTreatment, growthRate=pomdp_config.growthRate, rho=pomdp_config.rho, discount_factor=pomdp_config.discount_factor)
-    end
-    mdp = UnderlyingMDP(pomdp)
+    # Heuristic Policy
+    if algorithm.solver_name == "Heuristic_Policy"
+        return HeuristicPolicy(pomdp, algorithm.heuristic_config)
 
-    policy = if algorithm.solver_name == "Heuristic_Policy"
-        threshold = pomdp_config.log_space ? log(algorithm.heuristic_threshold) : algorithm.heuristic_threshold
-        HeuristicPolicy(pomdp, threshold, algorithm.heuristic_belief_threshold, algorithm.heuristic_rho)
+    # Random policy
     elseif algorithm.solver_name == "Random_Policy"
-        RandomPolicy(pomdp)
+        return RandomPolicy(pomdp)
+
+    # No Treatment policy
     elseif algorithm.solver_name == "NoTreatment_Policy"
-        NoTreatmentPolicy(pomdp)
+        return NoTreatmentPolicy(pomdp)
+
+    # Value Iteration policy
     elseif algorithm.convert_to_mdp
-       solve(algorithm.solver, mdp)
+        return solve(algorithm.solver, mdp)
+
+    # SARSOP and QMDP policies
     else
-        solve(algorithm.solver, pomdp)
+        return solve(algorithm.solver, pomdp)
     end
-    
-    return (policy, pomdp, mdp)
 end
 
 # ----------------------------
@@ -78,16 +77,14 @@ end
 # ----------------------------
 struct HeuristicPolicy{P<:POMDP} <: Policy
     pomdp::P
-    threshold::Float64
-    belief_threshold::Float64
-    heuristic_rho::Float64
+    heuristic_config::HeuristicConfig
 end
 
 # Heuristic action
 function POMDPs.action(policy::HeuristicPolicy, b)
     if heuristicChooseAction(policy, b, true)
         # Choose Treatment with probability heuristic_rho, otherwise NoTreatment
-        return rand() < policy.heuristic_rho ? Treatment : NoTreatment
+        return rand() < policy.heuristic_config.rho ? Treatment : NoTreatment
     else
         return rand((Treatment, NoTreatment))
     end
@@ -101,15 +98,22 @@ function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
     # Convert belief vector to a probability distribution
     state_space = states(policy.pomdp)
 
+    # Convert the threshold in log space if needed
+    if policy.pomdp isa SeaLiceLogMDP
+        threshold = log(policy.heuristic_config.raw_space_threshold)
+    else
+        threshold = policy.heuristic_config.raw_space_threshold
+    end
+
     if use_cdf
         # Method 1: Calculate probability of being above threshold
-        prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > policy.threshold)
-        return prob_above_threshold > policy.belief_threshold
+        prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
+        return prob_above_threshold > policy.heuristic_config.belief_threshold
     else
         # Method 2: Use mode of belief vector
         mode_sealice_level_index = argmax(b)
         mode_sealice_level = state_space[mode_sealice_level_index]
-        return mode_sealice_level.SeaLiceLevel > policy.threshold
+        return mode_sealice_level.SeaLiceLevel > threshold
     end
 end
 
