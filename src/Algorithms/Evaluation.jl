@@ -67,7 +67,7 @@ function test_optimizer(algorithm, config, pomdp_config)
         mdp = UnderlyingMDP(pomdp)
 
         # Generate policy
-        policy = generate_policy(algorithm, λ, pomdp_config, pomdp, mdp)
+        policy = generate_policy(algorithm, pomdp, mdp)
 
         # Run simulation to calculate average cost and average sea lice level
         r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists = run_simulation(policy, mdp, pomdp, config, algorithm)

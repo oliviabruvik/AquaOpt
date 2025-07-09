@@ -62,7 +62,7 @@ function main(;run_algorithms=true, run_plots=true, log_space=true)
         Algorithm(solver_name="NoTreatment_Policy"),
         Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=HEURISTIC_CONFIG),
-        Algorithm(solver=ValueIterationSolver(max_iterations=30), convert_to_mdp=true, solver_name="VI_Policy"),
+        Algorithm(solver=ValueIterationSolver(max_iterations=30), solver_name="VI_Policy"),
         Algorithm(solver=SARSOPSolver(max_time=10.0), solver_name="SARSOP_Policy"),
         Algorithm(solver=QMDPSolver(max_iterations=30), solver_name="QMDP_Policy")
     ]

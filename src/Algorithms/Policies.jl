@@ -16,7 +16,7 @@ using Parameters
 # ----------------------------
 # Policy Generation
 # ----------------------------
-function generate_policy(algorithm, λ, pomdp_config, pomdp, mdp)
+function generate_policy(algorithm, pomdp, mdp)
 
     # Heuristic Policy
     if algorithm.solver_name == "Heuristic_Policy"
@@ -31,7 +31,7 @@ function generate_policy(algorithm, λ, pomdp_config, pomdp, mdp)
         return NoTreatmentPolicy(pomdp)
 
     # Value Iteration policy
-    elseif algorithm.convert_to_mdp
+    elseif algorithm.solver isa ValueIterationSolver
         return solve(algorithm.solver, mdp)
 
     # SARSOP and QMDP policies

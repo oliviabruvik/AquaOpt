@@ -45,7 +45,6 @@ end
 # ----------------------------
 @with_kw struct Algorithm{S<:Union{Solver, Nothing}}
     solver::S = nothing # TODO: set to heuristic solver
-    convert_to_mdp::Bool = false
     solver_name::String = "Heuristic_Policy"
     heuristic_config::HeuristicConfig = HeuristicConfig()
 end
