@@ -22,7 +22,7 @@ end
 # Plot 6: Time-series of belief for each policy
 # NOTE: RESULTS ARE IN LOG SPACE
 # ----------------------------
-function plot_policy_belief_levels(results, title, config, pomdp_config, lambda; show_actual_states=true)
+function plot_policy_belief_levels(results, title, config, lambda; show_actual_states=true)
 
     # Get values for first episode of lambda
     lambda_index = findfirst(isequal(lambda), results.lambda)
@@ -35,7 +35,7 @@ function plot_policy_belief_levels(results, title, config, pomdp_config, lambda;
     first_episode_action_hist = results.action_hists[lambda_index][1]
 
     # Convert Gaussian belief to mean and variance
-    if pomdp_config.log_space
+    if config.log_space
         belief_means = [exp(belief.μ[1]) for belief in first_episode_belief_hist]
         belief_stds = [sqrt(exp(belief.Σ[1,1])) for belief in first_episode_belief_hist]
         actual_states = [exp(s.SeaLiceLevel) for s in first_episode_state_hist]
@@ -97,7 +97,7 @@ function plot_policy_belief_levels(results, title, config, pomdp_config, lambda;
     mkpath(joinpath(config.figures_dir, "research_plots"))
     
     # Save to belief_plots for individual policy analysis
-    savefig(p, joinpath(config.figures_dir, "belief_plots/$(title)/beliefs_$(lambda)_lambda_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    savefig(p, joinpath(config.figures_dir, "belief_plots/$(title)/beliefs_$(lambda)_lambda.png"))
     
     return p
 end
@@ -105,7 +105,7 @@ end
 # ----------------------------
 # Plot 7: Time-series of sea lice levels for each policy at specific lambda
 # ----------------------------
-function plot_policy_sealice_levels_over_time(config, pomdp_config, lambda_value)
+function plot_policy_sealice_levels_over_time(config, lambda_value)
     # Initialize the plot
     p = plot(
         title="Policy Comparison: Sea Lice Levels Over Time (λ = $lambda_value)",
@@ -129,7 +129,7 @@ function plot_policy_sealice_levels_over_time(config, pomdp_config, lambda_value
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load "results/data/avg_results/$(policy_name)/avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2" results
+            @load joinpath(config.data_dir, "avg_results", policy_name, "avg_results.jld2") results
             
             # Find the index for the specified lambda value
             lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, results.lambda)
@@ -153,7 +153,7 @@ function plot_policy_sealice_levels_over_time(config, pomdp_config, lambda_value
                 for episode_states in state_hists
                     if t <= length(episode_states)
                         # Handle both regular and log space states
-                        if pomdp_config.log_space
+                        if config.log_space
                             sealice_level = exp(episode_states[t].SeaLiceLevel)
                         else
                             sealice_level = episode_states[t].SeaLiceLevel
@@ -203,15 +203,15 @@ function plot_policy_sealice_levels_over_time(config, pomdp_config, lambda_value
             @warn "Could not load results for $policy_name: $e"
         end
     end
-    mkpath(joinpath(config.figures_dir, "sealice_time_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "sealice_time_plots/All_policies/sealice_time_lambda_$(lambda_value)_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "sealice_time_plots"))
+    savefig(p, joinpath(config.figures_dir, "sealice_time_plots/All_policies_sealice_time_lambda_$(lambda_value).png"))
     return p
 end
 
 # ----------------------------
 # Plot 8: Time-series of treatment cost for each policy at specific lambda
 # ----------------------------
-function plot_policy_treatment_cost_over_time(config, pomdp_config, lambda_value)
+function plot_policy_treatment_cost_over_time(config, lambda_value)
     # Initialize the plot
     p = plot(
         title="Policy Comparison: Treatment Cost Over Time (λ = $lambda_value)",
@@ -235,7 +235,7 @@ function plot_policy_treatment_cost_over_time(config, pomdp_config, lambda_value
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load "results/data/avg_results/$(policy_name)/avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2" results
+            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
             
             # Find the index for the specified lambda value
             lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, results.lambda)
@@ -305,15 +305,15 @@ function plot_policy_treatment_cost_over_time(config, pomdp_config, lambda_value
             @warn "Could not load results for $policy_name: $e"
         end
     end
-    mkpath(joinpath(config.figures_dir, "treatment_cost_time_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "treatment_cost_time_plots/All_policies/treatment_cost_time_lambda_$(lambda_value)_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "treatment_cost_time_plots"))
+    savefig(p, joinpath(config.figures_dir, "treatment_cost_time_plots/All_policies_treatment_cost_time_lambda_$(lambda_value).png"))
     return p
 end
 
 # ----------------------------
 # Plot 8b: Time-series of actual treatment cost (probability * cost) for each policy at specific lambda
 # ----------------------------
-function plot_policy_actual_treatment_cost_over_time(config, pomdp_config, lambda_value)
+function plot_policy_actual_treatment_cost_over_time(config, lambda_value)
     # Initialize the plot
     p = plot(
         title="Policy Comparison: Actual Treatment Cost Over Time (λ = $lambda_value)",
@@ -337,7 +337,7 @@ function plot_policy_actual_treatment_cost_over_time(config, pomdp_config, lambd
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load "results/data/avg_results/$(policy_name)/avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2" results
+            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
             
             # Find the index for the specified lambda value
             lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, results.lambda)
@@ -361,7 +361,7 @@ function plot_policy_actual_treatment_cost_over_time(config, pomdp_config, lambd
                 for episode_actions in action_hists
                     if t <= length(episode_actions)
                         # Treatment cost: costOfTreatment if Treatment, 0 if NoTreatment
-                        treatment_cost = episode_actions[t] == Treatment ? pomdp_config.costOfTreatment : 0.0
+                        treatment_cost = episode_actions[t] == Treatment ? config.costOfTreatment : 0.0
                         push!(step_costs, treatment_cost)
                     end
                 end
@@ -407,7 +407,7 @@ function plot_policy_actual_treatment_cost_over_time(config, pomdp_config, lambd
             @warn "Could not load results for $policy_name: $e"
         end
     end
-    mkpath(joinpath(config.figures_dir, "actual_treatment_cost_time_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "actual_treatment_cost_time_plots/All_policies/actual_treatment_cost_time_lambda_$(lambda_value)_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "actual_treatment_cost_time_plots"))
+    savefig(p, joinpath(config.figures_dir, "actual_treatment_cost_time_plots/All_policies_actual_treatment_cost_time_lambda_$(lambda_value).png"))
     return p
 end

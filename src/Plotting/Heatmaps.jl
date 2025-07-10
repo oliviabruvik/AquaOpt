@@ -5,7 +5,7 @@ plotlyjs()  # Set the backend to PlotlyJS
 # ----------------------------
 # Plot 9: Treatment Decision Heatmap
 # ----------------------------
-function plot_treatment_heatmap(algorithm, config, pomdp_config)
+function plot_treatment_heatmap(algorithm, config)
 
     # Get lambda values from config
     lambda_values = config.lambda_values
@@ -19,7 +19,7 @@ function plot_treatment_heatmap(algorithm, config, pomdp_config)
     
     for (i, λ) in enumerate(lambda_values)
         # Load policy, pomdp, and mdp for this lambda
-        policy_file_path = joinpath(policies_dir, "policy_pomdp_mdp_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps_$(λ)_lambda.jld2")
+        policy_file_path = joinpath(policies_dir, "policy_pomdp_mdp_$(λ)_lambda.jld2")
         
         if !isfile(policy_file_path)
             @warn "Policy file not found at $policy_file_path for λ=$λ"
@@ -29,7 +29,7 @@ function plot_treatment_heatmap(algorithm, config, pomdp_config)
         @load policy_file_path policy pomdp mdp
 
         # Create state space grid
-        if pomdp_config.log_space
+        if config.log_space
             states = [SeaLiceLogState(x) for x in pomdp.log_sea_lice_range]
             if y_vals === nothing
                 y_vals = [exp(s.SeaLiceLevel) for s in states]  # Convert back to original space for y-axis
@@ -104,14 +104,14 @@ function plot_treatment_heatmap(algorithm, config, pomdp_config)
     # Save plot
     plot_dir = joinpath(config.figures_dir, "treatment_heatmaps", algorithm.solver_name)
     mkpath(plot_dir)
-    savefig(p, joinpath(plot_dir, "treatment_heatmap_lambda_vs_state_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    savefig(p, joinpath(plot_dir, "treatment_heatmap_lambda_vs_state.png"))
     return p
 end
 
 # ----------------------------
 # Plot 10: Simulation-Based Treatment Decision Heatmap
 # ----------------------------
-function plot_simulation_treatment_heatmap(algorithm, config, pomdp_config; use_observations=false, n_bins=50)
+function plot_simulation_treatment_heatmap(algorithm, config; use_observations=false, n_bins=50)
     
     # Get lambda values from config
     lambda_values = config.lambda_values
@@ -126,7 +126,7 @@ function plot_simulation_treatment_heatmap(algorithm, config, pomdp_config; use_
     for (i, λ) in enumerate(lambda_values)
         try
             # Load simulation histories for this lambda
-            history_filename = "hists_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps_$(λ)_lambda.jld2"
+            history_filename = "hists_$(λ)_lambda.jld2"
             history_file_path = joinpath(histories_dir, history_filename)
             
             if !isfile(history_file_path)
@@ -148,14 +148,14 @@ function plot_simulation_treatment_heatmap(algorithm, config, pomdp_config; use_
                 if use_observations
                     # Use measurements instead of states if requested
                     measurement_hist = histories["measurement_hists"][episode]
-                    sea_lice_levels = if pomdp_config.log_space
+                    sea_lice_levels = if config.log_space
                         [exp(o.SeaLiceLevel) for o in measurement_hist]
                     else
                         [o.SeaLiceLevel for o in measurement_hist]
                     end
                 else
                     # Use actual states
-                    sea_lice_levels = if pomdp_config.log_space
+                    sea_lice_levels = if config.log_space
                         [exp(s.SeaLiceLevel) for s in state_hist]
                     else
                         [s.SeaLiceLevel for s in state_hist]
@@ -233,6 +233,6 @@ function plot_simulation_treatment_heatmap(algorithm, config, pomdp_config; use_
     plot_dir = joinpath(config.figures_dir, "simulation_treatment_heatmaps", algorithm.solver_name)
     mkpath(plot_dir)
     filename_suffix = use_observations ? "observations" : "states"
-    savefig(p, joinpath(plot_dir, "simulation_treatment_heatmap_$(filename_suffix)_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    savefig(p, joinpath(plot_dir, "simulation_treatment_heatmap_$(filename_suffix).png"))
     return p
 end

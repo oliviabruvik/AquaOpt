@@ -5,7 +5,7 @@ plotlyjs()  # Set the backend to PlotlyJS
 # ----------------------------
 # Plot 2: Cost vs Sea Lice for one policy
 # ----------------------------
-function plot_policy_cost_vs_sealice(results, title, config, pomdp_config)
+function plot_policy_cost_vs_sealice(results, title, config)
     # Calculate confidence intervals for each lambda
     lambda_values = results.lambda
     mean_costs = Float64[]
@@ -26,12 +26,12 @@ function plot_policy_cost_vs_sealice(results, title, config, pomdp_config)
         
         for j in 1:length(action_hists)
             # Episode treatment cost
-            episode_cost = sum(a == Treatment for a in action_hists[j]) * pomdp_config.costOfTreatment
+            episode_cost = sum(a == Treatment for a in action_hists[j]) * config.costOfTreatment
             episode_cost_per_step = episode_cost / config.steps_per_episode
             push!(episode_costs, episode_cost_per_step)
             
             # Episode sea lice level
-            if pomdp_config.log_space
+            if config.log_space
                 episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in state_hists[j])
             else
                 episode_avg_sealice = mean(s.SeaLiceLevel for s in state_hists[j])
@@ -116,14 +116,14 @@ function plot_policy_cost_vs_sealice(results, title, config, pomdp_config)
     end
 
     mkpath(joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots", title))
-    savefig(p, joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots/$(title)/results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    savefig(p, joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots/$(title)/results.png"))
     return p
 end
 
 # ----------------------------
 # Plot 3: Overlay all policies
 # ----------------------------
-function plot_all_cost_vs_sealice(config, pomdp_config)
+function plot_all_cost_vs_sealice(config)
     # Create a new plot
     p = plot(
         title="Pareto Frontier: Treatment Cost vs Sea Lice Levels",
@@ -148,7 +148,7 @@ function plot_all_cost_vs_sealice(config, pomdp_config)
     for (policy_name, color) in policy_colors
         try
             # Load the results from the JLD2 file
-            @load "results/data/avg_results/$(policy_name)/avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2" results
+            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
             
             # Calculate confidence intervals for each lambda
             lambda_values = results.lambda
@@ -170,12 +170,12 @@ function plot_all_cost_vs_sealice(config, pomdp_config)
                 
                 for j in 1:length(action_hists)
                     # Episode treatment cost
-                    episode_cost = sum(a == Treatment for a in action_hists[j]) * pomdp_config.costOfTreatment
+                    episode_cost = sum(a == Treatment for a in action_hists[j]) * config.costOfTreatment
                     episode_cost_per_step = episode_cost / config.steps_per_episode
                     push!(episode_costs, episode_cost_per_step)
                     
                     # Episode sea lice level
-                    if pomdp_config.log_space
+                    if config.log_space
                         episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in state_hists[j])
                     else
                         episode_avg_sealice = mean(s.SeaLiceLevel for s in state_hists[j])
@@ -254,15 +254,15 @@ function plot_all_cost_vs_sealice(config, pomdp_config)
     end
     
     # Save the figure
-    mkpath(joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots/All_policies/results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots"))
+    savefig(p, joinpath(config.figures_dir, "treatment_cost_vs_sealice_plots/All_policies_results.png"))
     return p
 end
 
 # ----------------------------
 # Plot 4: Lambda vs sea lice levels for each policy
 # ----------------------------
-function plot_policy_sealice_levels_over_lambdas(config, pomdp_config)
+function plot_policy_sealice_levels_over_lambdas(config)
     # Initialize the plot
     p = plot(
         title="Policy Comparison: Average Sea Lice Levels over Lambda",
@@ -286,7 +286,7 @@ function plot_policy_sealice_levels_over_lambdas(config, pomdp_config)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load "results/data/avg_results/$(policy_name)/avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2" results
+            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
             
             # Calculate per-episode sea lice levels and 95% CI for each lambda
             lambda_values = results.lambda
@@ -301,7 +301,7 @@ function plot_policy_sealice_levels_over_lambdas(config, pomdp_config)
                 episode_sealice = Float64[]
                 for episode_states in state_hists
                     # Handle both regular and log space states
-                    if pomdp_config.log_space
+                    if config.log_space
                         episode_avg = mean(exp(s.SeaLiceLevel) for s in episode_states)
                     else
                         episode_avg = mean(s.SeaLiceLevel for s in episode_states)
@@ -343,15 +343,15 @@ function plot_policy_sealice_levels_over_lambdas(config, pomdp_config)
             @warn "Could not load results for $policy_name: $e"
         end
     end
-    mkpath(joinpath(config.figures_dir, "sealice_lambda_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "sealice_lambda_plots/All_policies/sealice_lambda_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "sealice_lambda_plots"))
+    savefig(p, joinpath(config.figures_dir, "sealice_lambda_plots/All_policies_sealice_lambda.png"))
     return p
 end
 
 # ----------------------------
 # Plot 5: Lambda vs treatment cost for each policy
 # ----------------------------
-function plot_policy_treatment_cost_over_lambdas(config, pomdp_config)
+function plot_policy_treatment_cost_over_lambdas(config)
     # Initialize the plot
     p = plot(
         title="Policy Comparison: Average Treatment Cost Over Lambda",
@@ -375,7 +375,7 @@ function plot_policy_treatment_cost_over_lambdas(config, pomdp_config)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load "results/data/avg_results/$(policy_name)/avg_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2" results
+            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
             
             # Calculate per-episode treatment costs and 95% CI for each lambda
             lambda_values = results.lambda
@@ -389,7 +389,7 @@ function plot_policy_treatment_cost_over_lambdas(config, pomdp_config)
                 # Calculate treatment cost for each episode
                 episode_costs = Float64[]
                 for episode_actions in action_hists
-                    episode_cost = sum(a == Treatment for a in episode_actions) * pomdp_config.costOfTreatment
+                    episode_cost = sum(a == Treatment for a in episode_actions) * config.costOfTreatment
                     episode_cost_per_step = episode_cost / config.steps_per_episode
                     push!(episode_costs, episode_cost_per_step)
                 end
@@ -428,15 +428,15 @@ function plot_policy_treatment_cost_over_lambdas(config, pomdp_config)
             @warn "Could not load results for $policy_name: $e"
         end
     end
-    mkpath(joinpath(config.figures_dir, "treatment_cost_lambda_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "treatment_cost_lambda_plots/All_policies/treatment_cost_lambda_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "treatment_cost_lambda_plots"))
+    savefig(p, joinpath(config.figures_dir, "treatment_cost_lambda_plots/All_policies_treatment_cost_lambda.png"))
     return p
 end
 
 # ----------------------------
 # Plot 11: Lambda vs average reward for each policy
 # ----------------------------
-function plot_policy_reward_over_lambdas(config, pomdp_config)
+function plot_policy_reward_over_lambdas(config)
     # Initialize the plot
     p = plot(
         title="Policy Comparison: Average Reward Over Lambda",
@@ -469,7 +469,7 @@ function plot_policy_reward_over_lambdas(config, pomdp_config)
             for λ in lambda_values
                 try
                     # Load simulation histories for this lambda
-                    history_filename = "hists_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps_$(λ)_lambda.jld2"
+                    history_filename = "hists_$(λ)_lambda.jld2"
                     history_file_path = joinpath(histories_dir, history_filename)
                     
                     if !isfile(history_file_path)
@@ -529,15 +529,15 @@ function plot_policy_reward_over_lambdas(config, pomdp_config)
             @warn "Could not load results for $policy_name: $e"
         end
     end
-    mkpath(joinpath(config.figures_dir, "reward_lambda_plots", "All_policies"))
-    savefig(p, joinpath(config.figures_dir, "reward_lambda_plots/All_policies/reward_lambda_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    mkpath(joinpath(config.figures_dir, "reward_lambda_plots"))
+    savefig(p, joinpath(config.figures_dir, "reward_lambda_plots/All_policies_reward_lambda.png"))
     return p
 end
 
 # Pareto Frontier Plot
-function plot_pareto_frontier(config, pomdp_config)
+function plot_pareto_frontier(config)
     # Load all results
-    results_file_path = joinpath(config.data_dir, "avg_results", "All_policies", "all_results_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.jld2")
+    results_file_path = joinpath(config.data_dir, "avg_results", "All_policies_all_results.jld2")
     if !isfile(results_file_path)
         @warn "Results file not found at $results_file_path"
         return nothing
@@ -579,6 +579,6 @@ function plot_pareto_frontier(config, pomdp_config)
 
     # Save plot
     mkpath(joinpath(config.figures_dir, "research_plots"))
-    savefig(p, joinpath(config.figures_dir, "research_plots", "pareto_frontier_$(pomdp_config.log_space)_log_space_$(config.num_episodes)_episodes_$(config.steps_per_episode)_steps.png"))
+    savefig(p, joinpath(config.figures_dir, "research_plots", "pareto_frontier.png"))
     return p
 end
