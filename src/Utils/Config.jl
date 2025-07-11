@@ -11,9 +11,7 @@ using Parameters
     process_noise::Float64 = 0.5
     observation_noise::Float64 = 0.5
     ekf_filter::Bool = false
-    step_through::Bool = false
-    verbose::Bool = false
-    
+
     # POMDP parameters
     costOfTreatment::Float64 = 10.0
     growthRate::Float64 = 1.26
@@ -23,10 +21,10 @@ using Parameters
     skew::Bool = false
 
     # Algorithm parameters
-    lambda_values::Vector{Float64} = collect(0.0:0.2:1.0) # collect(0.0:0.05:1.0)
-    sarsop_max_time::Float64 = 150.0
-    VI_max_iterations::Int = 30
-    QMDP_max_iterations::Int = 30
+    lambda_values::Vector{Float64} = collect(0.0:0.05:1.0)
+    sarsop_max_time::Float64 = 10.0 # 150.0 # 10
+    VI_max_iterations::Int = 30 #100 # 30
+    QMDP_max_iterations::Int = 30 #100 # 30
 
     # Heuristic parameters
     heuristic_threshold::Float64 = 5.0  # In absolute space

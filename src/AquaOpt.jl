@@ -16,8 +16,7 @@ ENV["PLOTS_BACKEND"] = "plotlyjs"
 using Logging
 using DiscreteValueIteration
 using GridInterpolations
-# using NativeSARSOP: SARSOPSolver
-using SARSOP
+using NativeSARSOP: SARSOPSolver
 using POMDPs
 using POMDPTools
 using Plots: plot, plot!, scatter, scatter!, heatmap, heatmap!, histogram, histogram!, savefig
@@ -30,14 +29,9 @@ plotlyjs()  # Activate Plotly backend
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;run_algorithms=true, log_space=true, experiment_name="exp", skew=false, mode="light")
+function main(;run_algorithms=true, log_space=true, experiment_name="exp")
 
-    EXPERIMENT_CONFIG, HEURISTIC_CONFIG = setup_configs(
-        experiment_name,
-        log_space,
-        skew,
-        mode
-    )
+    EXPERIMENT_CONFIG, HEURISTIC_CONFIG = setup_configs(experiment_name, log_space)
 
     # Define algorithms
     algorithms = [
@@ -45,9 +39,9 @@ function main(;run_algorithms=true, log_space=true, experiment_name="exp", skew=
         Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=HEURISTIC_CONFIG),
         Algorithm(solver=ValueIterationSolver(max_iterations=EXPERIMENT_CONFIG.VI_max_iterations), solver_name="VI_Policy"),
-        Algorithm(solver=QMDPSolver(max_iterations=EXPERIMENT_CONFIG.QMDP_max_iterations), solver_name="QMDP_Policy"),
-        # Algorithm(solver=SARSOPSolver(max_time=EXPERIMENT_CONFIG.sarsop_max_time, verbose=true), solver_name="SARSOP_Policy"),
-        Algorithm(solver=SARSOPSolver(timeout=EXPERIMENT_CONFIG.sarsop_max_time, verbose=true), solver_name="SARSOP_Policy")
+        # time out
+        Algorithm(solver=SARSOPSolver(max_time=EXPERIMENT_CONFIG.sarsop_max_time, verbose=true), solver_name="SARSOP_Policy"),
+        Algorithm(solver=QMDPSolver(max_iterations=EXPERIMENT_CONFIG.QMDP_max_iterations), solver_name="QMDP_Policy")
     ]
 
     # Solve POMDPs and simulate policies
@@ -105,10 +99,10 @@ function plot_results(all_results, algorithms, EXPERIMENT_CONFIG)
         plot_policy_belief_levels(results, algo.solver_name, EXPERIMENT_CONFIG, 0.6)
 
         # Plot treatment heatmap
-        plot_treatment_heatmap(algo, EXPERIMENT_CONFIG)
+        # plot_treatment_heatmap(algo, EXPERIMENT_CONFIG)
 
         # Plot simulation treatment heatmap
-        plot_simulation_treatment_heatmap(algo, EXPERIMENT_CONFIG; use_observations=false, n_bins=50)
+        # plot_simulation_treatment_heatmap(algo, EXPERIMENT_CONFIG; use_observations=false, n_bins=50)
 
     end
     
@@ -146,47 +140,16 @@ end
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_configs(experiment_name, log_space, skew=false, mode="light")
+function setup_configs(experiment_name, log_space)
 
     # Define experiment configuration
-    exp_name = string(Dates.now()) * "_" * experiment_name * "_mode_" * string(mode)
-
-    if mode == "light"
-        EXPERIMENT_CONFIG = ExperimentConfig(
-            num_episodes=10,
-            steps_per_episode=52,
-            log_space=log_space,
-            skew=skew,
-            experiment_name=exp_name,
-            verbose=false,
-            step_through=false,
-        )
-    elseif mode == "debug"
-        EXPERIMENT_CONFIG = ExperimentConfig(
-            num_episodes=1,
-            steps_per_episode=20,
-            log_space=log_space,
-            skew=skew,
-            experiment_name=exp_name,
-            verbose=true,
-            step_through=true,
-            lambda_values=[0.2, 0.4, 0.6, 0.8],
-            sarsop_max_time=5.0,
-            VI_max_iterations=10,
-            QMDP_max_iterations=10,
-        )
-    elseif mode == "full"
-        EXPERIMENT_CONFIG = ExperimentConfig(
-            num_episodes=10,
-            steps_per_episode=52,
-            log_space=log_space,
-            skew=skew,
-            experiment_name=exp_name,
-            verbose=false,
-            step_through=false,
-        )
-    end
-        
+    exp_name = experiment_name * "_" * string(log_space) * "_log_space" * "_" * string(Dates.now())
+    EXPERIMENT_CONFIG = ExperimentConfig(
+        num_episodes=1, #10,
+        steps_per_episode=52,
+        log_space=log_space,
+        experiment_name=exp_name,
+    )
 
     # Define heuristic configuration
     HEURISTIC_CONFIG = HeuristicConfig(
@@ -214,13 +177,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     run_algorithms_flag = true
     log_space_flag = true
     experiment_name_flag = "exp"
-    mode_flag = "light"
 
     for arg in ARGS
         if occursin("--experiment_name=", arg)
             global experiment_name_flag = split(arg, "=")[2]
-        elseif occursin("--mode=", arg)
-            global mode_flag = split(arg, "=")[2]
         elseif arg == "--no-run_algorithms"
             global run_algorithms_flag = false
         elseif arg == "--no-log_space"
@@ -228,7 +188,5 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
     end
 
-    println("Running with mode: $mode_flag")
-
-    main(run_algorithms=run_algorithms_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    main(run_algorithms=run_algorithms_flag, log_space=log_space_flag, experiment_name=experiment_name_flag)
 end

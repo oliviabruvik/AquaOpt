@@ -7,6 +7,7 @@ using QuickPOMDPs
 using POMDPTools
 using POMDPModels
 using QMDP
+using NativeSARSOP
 using DiscreteValueIteration
 using POMDPLinter
 using Distributions
@@ -39,14 +40,12 @@ end
 	growthRate::Float64 = 1.2
 	rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
-    skew::Bool = false
     sea_lice_bounds::Tuple{Float64, Float64} = (0.0, 10.0)
     initial_bounds::Tuple{Float64, Float64} = (0.0, 1.0)
     sea_lice_initial_mean::Float64 = 1.0
     sampling_sd::Float64 = 0.5
     rng::AbstractRNG = Random.GLOBAL_RNG
     normal_dist::Distribution = Normal(0, sampling_sd)
-    skew_normal_dist::Distribution = SkewNormal(0, sampling_sd, 2.0)
 end
 
 # -------------------------
@@ -66,8 +65,7 @@ end
 
 function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::SeaLiceState)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
-        dist = pomdp.skew ? pomdp.skew_normal_dist : pomdp.normal_dist
-        next_state = s.SeaLiceLevel + rand(rng, dist)
+        next_state = s.SeaLiceLevel + rand(rng, pomdp.normal_dist)
         return SeaLiceObservation(clamp(next_state, pomdp.sea_lice_bounds...))
     end
 end

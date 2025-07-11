@@ -45,7 +45,28 @@ function test_optimizer(algorithm, config)
     for λ in config.lambda_values
 
         # Generate POMDP and MDP
-        pomdp, mdp = create_pomdp_mdp(λ, config)
+        if config.log_space
+            pomdp = SeaLiceLogMDP(
+                lambda=λ,
+                costOfTreatment=config.costOfTreatment,
+                growthRate=config.growthRate,
+                rho=config.rho,
+                discount_factor=config.discount_factor,
+                skew=config.skew
+            )
+        else
+            pomdp = SeaLiceMDP(
+                lambda=λ,
+                costOfTreatment=config.costOfTreatment,
+                growthRate=config.growthRate,
+                rho=config.rho,
+                discount_factor=config.discount_factor,
+                skew=config.skew
+            )
+        end
+    
+        # Get the underlying MDP
+        mdp = UnderlyingMDP(pomdp)
 
         # Generate policy
         policy = generate_policy(algorithm, pomdp, mdp)
@@ -86,45 +107,6 @@ function test_optimizer(algorithm, config)
     @save joinpath(results_dir, "$(avg_results_filename).jld2") results
     
     return results
-end
-
-# ----------------------------
-# Create POMDP and MDP for a given lambda
-# ----------------------------
-function create_pomdp_mdp(λ, config)
-
-    # Create directory for POMDP and MDP
-    pomdp_mdp_dir = joinpath(config.data_dir, "pomdp_mdp")
-    mkpath(pomdp_mdp_dir)
-
-    if config.log_space
-        pomdp = SeaLiceLogMDP(
-            lambda=λ,
-            costOfTreatment=config.costOfTreatment,
-            growthRate=config.growthRate,
-            rho=config.rho,
-            discount_factor=config.discount_factor,
-            skew=config.skew
-        )
-    else
-        pomdp = SeaLiceMDP(
-            lambda=λ,
-            costOfTreatment=config.costOfTreatment,
-            growthRate=config.growthRate,
-            rho=config.rho,
-            discount_factor=config.discount_factor,
-            skew=config.skew
-        )
-    end
-
-    mdp = UnderlyingMDP(pomdp)
-
-    # Save POMDP and MDP to file
-    pomdp_mdp_filename = "pomdp_mdp_$(λ)_lambda"
-    pomdp_mdp_file_path = joinpath(pomdp_mdp_dir, "$(pomdp_mdp_filename).jld2")
-    @save pomdp_mdp_file_path pomdp mdp
-
-    return pomdp, mdp
 end
 
 # ----------------------------

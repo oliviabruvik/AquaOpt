@@ -7,7 +7,7 @@ using QuickPOMDPs
 using POMDPTools
 using POMDPModels
 using QMDP
-# using NativeSARSOP
+using NativeSARSOP
 using DiscreteValueIteration
 using POMDPLinter
 using Distributions
@@ -39,7 +39,6 @@ end
 	costOfTreatment::Float64 = 10.0
 	growthRate::Float64 = 1.2
 	rho::Float64 = 0.7
-    skew::Bool = false
     discount_factor::Float64 = 0.95
     min_lice_level::Float64 = 1e-3
     max_lice_level::Float64 = 10.0
@@ -49,7 +48,6 @@ end
     sampling_sd::Float64 = 0.5
     rng::AbstractRNG = Random.GLOBAL_RNG
     normal_dist::Distribution = Normal(0, sampling_sd)
-    skew_normal_dist::Distribution = SkewNormal(0, sampling_sd, 2.0)
 end
 
 # -------------------------
@@ -61,6 +59,7 @@ POMDPs.isterminal(mdp::SeaLiceLogSimMDP, s::SeaLiceLogState) = false
 
 function POMDPs.transition(pomdp::SeaLiceLogSimMDP, s::SeaLiceLogState, a::Action)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
+        # Calculate next state in log space
         μ = log(1 - (a == Treatment ? pomdp.rho : 0.0)) + pomdp.growthRate + s.SeaLiceLevel
         next_state = μ + rand(rng, pomdp.normal_dist)
         return SeaLiceLogState(clamp(next_state, pomdp.log_lice_bounds...))
@@ -69,8 +68,7 @@ end
 
 function POMDPs.observation(pomdp::SeaLiceLogSimMDP, a::Action, s::SeaLiceLogState)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
-        dist = pomdp.skew ? pomdp.skew_normal_dist : pomdp.normal_dist
-        next_state = s.SeaLiceLevel + rand(rng, dist)
+        next_state = s.SeaLiceLevel + rand(rng, pomdp.normal_dist)
         return SeaLiceLogObservation(clamp(next_state, pomdp.log_lice_bounds...))
     end
 end
