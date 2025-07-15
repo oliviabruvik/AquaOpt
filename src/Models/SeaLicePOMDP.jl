@@ -7,12 +7,13 @@ using QuickPOMDPs
 using POMDPTools
 using POMDPModels
 using QMDP
-# using NativeSARSOP
 using DiscreteValueIteration
 using POMDPLinter
 using Distributions
 using Parameters
 using Discretizers
+
+include("../Utils/Utils.jl")
 
 # -------------------------
 # State, Observation, Action
@@ -98,25 +99,8 @@ function POMDPs.transition(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
     states = POMDPs.states(mdp)
 
     # Calculate the probs using the cdf
-    probs = zeros(length(states))
-    past_cdf = 0.0
-    for (i, s) in enumerate(states)
-        curr_cdf = cdf(dist, s.SeaLiceLevel)
-        probs[i] = curr_cdf - past_cdf
-        past_cdf = curr_cdf
-    end
+    probs = discretize_distribution(dist, states, mdp.skew)
 
-    # Normalize the probs
-    probs = normalize(probs, 1)
-
-    # Check that the probs sum to 1.0
-    try
-        @assert sum(probs) ≈ 1.0
-    catch
-        println("probs: $probs")
-        println("sum(probs): $(sum(probs))")
-        error("Probs do not sum to 1.0")
-    end
     return SparseCat(states, probs)
 end
 
@@ -129,32 +113,7 @@ function POMDPs.observation(mdp::SeaLiceMDP, a::Action, s::SeaLiceState)
     observations = POMDPs.observations(mdp)
 
     # Calculate the probs using the cdf
-    probs = zeros(length(observations))
-    past_cdf = 0.0
-    for (i, o) in enumerate(observations)
-        curr_cdf = cdf(dist, o.SeaLiceLevel)
-        probs[i] = curr_cdf - past_cdf
-        past_cdf = curr_cdf
-    end
-
-    if sum(probs) < 0.01
-        println("probs: $probs")
-        println("sum(probs): $(sum(probs))")
-        println("observations: $observations \n")
-        error("Probs do not sum to 1.0")
-    end
-
-    # Normalize the probs
-    probs = normalize(probs, 1)
-
-    # Check that the probs sum to 1.0
-    try
-        @assert sum(probs) ≈ 1.0
-    catch
-        println("probs: $probs")
-        println("sum(probs): $(sum(probs))")
-        error("Probs do not sum to 1.0")
-    end
+    probs = discretize_distribution(dist, observations, mdp.skew)
 
     return SparseCat(observations, probs)
 

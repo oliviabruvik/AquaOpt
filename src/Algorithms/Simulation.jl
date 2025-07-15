@@ -49,7 +49,13 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     # Create simulator
     sim = RolloutSimulator(max_steps=config.steps_per_episode)
     updaterStruct = KFUpdater(sim_pomdp, process_noise=config.process_noise, observation_noise=config.observation_noise)
-    updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
+    
+    # Use discrete updater for skew normal distribution, kalman filter otherwise
+    if sim_pomdp.skew
+        updater = DiscreteUpdater(sim_pomdp)
+    else
+        updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
+    end
 
     # Run simulation for each episode
     for episode in 1:config.num_episodes
@@ -122,11 +128,28 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
     disc = 1.0
     r_total = 0.0
 
+    # Get initial belief
+    # b = if sim_pomdp.skew
+    #     # norm_distr = SkewNormal(initial_belief.μ[1], initial_belief.Σ[1,1], 2.0)
+    #     # bvec = [pdf(initial_belief, s.SeaLiceLevel) for s in states(sim_pomdp)]
+    #     # bvec = normalize(bvec, 1)
+    #     initialize_belief(updater, initial_belief)
+    # else
+    #     initialize_belief(updater, initial_belief)
+    # end
+
     b = initialize_belief(updater, initial_belief)
 
     step = 1
 
     while disc > sim.eps && !isterminal(sim_pomdp, s) && step <= sim.max_steps
+
+        # Clamp gaussian distribution to the range of the sea lice range
+        b.μ[1] = if typeof(sim_pomdp) <: SeaLiceLogSimMDP
+            clamp(b.μ[1], sim_pomdp.log_lice_bounds[1], sim_pomdp.log_lice_bounds[2])
+        else
+            clamp(b.μ[1], sim_pomdp.sea_lice_bounds[1], sim_pomdp.sea_lice_bounds[2])
+        end
 
         # Calculate b as beliefvec from normal distribution
         if sim_pomdp.skew
@@ -139,10 +162,9 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
         if typeof(policy) <: ValueIterationPolicy
             a = action(policy, s)
         else
-            # For POMDP policies, use the belief state
+            # Discretize alpha vectors (representation of utility over belief states per action)
             state_space = states(policy.pomdp)
-            bvec = [pdf(norm_distr, s.SeaLiceLevel) for s in state_space]
-            bvec = normalize(bvec, 1)
+            bvec = discretize_distribution(norm_distr, state_space, sim_pomdp.skew)
             a = action(policy, bvec)
         end
 
@@ -150,7 +172,11 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
 
         r_total += disc * r
 
-        b = runKalmanFilter(updater, b, a, o)
+        if sim_pomdp.skew
+            b = update(updater, b, a, o)
+        else
+            b = runKalmanFilter(updater, b, a, o)
+        end
 
         if verbose
 
@@ -272,7 +298,7 @@ function plot_belief_distribution(s, b, o, a, step, sim_pomdp, policy)
     p = plot(
         x_range, y_values,
         title="$solver_type with λ=$(sim_pomdp.lambda) (Step $step)",
-        xlabel="Sea Lice Level",
+        xlabel="Sea Lice Level ($action_text)",
         ylabel="Probability Density",
         label="Belief Distribution",
         linewidth=2,
@@ -283,7 +309,7 @@ function plot_belief_distribution(s, b, o, a, step, sim_pomdp, policy)
     )
     
     # Add action as subtitle using annotation
-    annotate!(mean(x_range), maximum(y_values) * 1.05, text("Action: $action_text", 12, :black, :center))
+    # annotate!(mean(x_range), maximum(y_values) * 1.05, text("Action: $action_text", 12, :black, :center))
     
     # Add vertical lines for key values
     vline!([current_state], label="True State", color=:red, linestyle=:dash, linewidth=2)
@@ -302,7 +328,7 @@ function plot_belief_distribution(s, b, o, a, step, sim_pomdp, policy)
     plot!([ci_95_lower, ci_95_upper], [maximum(y_values), maximum(y_values)], fillrange=0, fillalpha=0.1, color=:blue, label="95% CI")
     
     # Set y-axis to start from 0
-    ylims!(0, 0.5)
+    ylims!(0, 1.0)
     
     # Create directory for plots if it doesn't exist
     plot_dir = "debug_plots"
