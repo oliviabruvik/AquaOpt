@@ -42,11 +42,11 @@ end
     skew::Bool = false
     discount_factor::Float64 = 0.95
     min_lice_level::Float64 = 1e-3
-    max_lice_level::Float64 = 10.0
+    max_lice_level::Float64 = 30 # 10.0
     log_lice_bounds::Tuple{Float64, Float64} = (log(min_lice_level), log(max_lice_level))
-    initial_bounds::Tuple{Float64, Float64} = (log(0.1), log(1.0))
-    log_lice_initial_mean::Float64 = log(1.0)
-    sampling_sd::Float64 = 0.5
+    initial_bounds::Tuple{Float64, Float64} = (log(1e-3), log(0.25))
+    log_lice_initial_mean::Float64 = log(0.125)
+    sampling_sd::Float64 = abs(log(0.25))
     rng::AbstractRNG = Random.GLOBAL_RNG
     normal_dist::Distribution = Normal(0, sampling_sd)
     skew_normal_dist::Distribution = SkewNormal(0, sampling_sd, 2.0)
@@ -78,7 +78,11 @@ end
 function POMDPs.reward(pomdp::SeaLiceLogSimMDP, s::SeaLiceLogState, a::Action)
     # Convert log lice level back to actual lice level for penalty calculation
     lice_level = exp(s.SeaLiceLevel)
-    lice_penalty = pomdp.lambda * lice_level
+    if lice_level > 0.5
+        lice_penalty = 1000.0
+    else
+        lice_penalty = pomdp.lambda * lice_level
+    end
     treatment_penalty = a == Treatment ? (1 - pomdp.lambda) * pomdp.costOfTreatment : 0.0
     return - (lice_penalty + treatment_penalty)
 end
