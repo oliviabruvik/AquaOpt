@@ -13,6 +13,8 @@ using Distributions
 using Parameters
 using Discretizers
 
+include("../Utils/Utils.jl")
+
 # -------------------------
 # State, Observation, Action
 # -------------------------
@@ -57,42 +59,6 @@ end
 end
 
 # -------------------------
-# Discretized Normal Sampling Utility
-# -------------------------
-"Returns a transition distribution that ensures all states are reachable."
-function discretized_normal_points(mean::Float64, mdp::SeaLiceLogMDP, skew::Bool=false)
-
-    if skew
-        skew_factor = 2.0
-        dist = SkewNormal(mean, mdp.sampling_sd, skew_factor)
-    else
-        dist = Normal(mean, mdp.sampling_sd)
-    end
-
-    # Calculate the points
-    points = mean .+ mdp.sampling_sd .* [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3]
-    if skew
-        points = points .* (1 + 0.3 * skew_factor)
-    end
-    
-    # Ensure points are within the range of the sea lice range
-    points = clamp.(points, mdp.min_log_lice_level, mdp.max_log_lice_level)
-
-    # Calculate and normalize the probabilities
-    probs = pdf.(dist, points)
-    probs = normalize(probs, 1)
-    
-    # Ensure we have at least one transition
-    if length(points) == 0 || sum(probs) == 0
-        # Fallback to mean state
-        points = [mean]
-        probs = [1.0]
-    end
-
-    return points, probs
-end
-
-# -------------------------
 # POMDPs.jl Interface
 # -------------------------
 POMDPs.states(mdp::SeaLiceLogMDP) = [SeaLiceLogState(i) for i in mdp.log_sea_lice_range]
@@ -131,84 +97,40 @@ end
 # Transition, Observation, Reward, Initial State
 # -------------------------
 function POMDPs.transition(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action)
-    μ = log(1 - (a == Treatment ? mdp.rho : 0.0)) + mdp.growthRate + s.SeaLiceLevel
-    pts, probs = discretized_normal_points(μ, mdp, false)
-    
-    # Map points to nearest valid states in the discretized state space
-    valid_states = []
-    valid_probs = []
-    
-    for (pt, prob) in zip(pts, probs)
-        # Find the closest state in the discretized state space
-        closest_state = mdp.log_sea_lice_range[argmin(abs.(mdp.log_sea_lice_range .- pt))]
-        state = SeaLiceLogState(closest_state)
-        
-        # Check if this state is already in our list
-        state_idx = findfirst(s -> s.SeaLiceLevel == closest_state, valid_states)
-        if state_idx === nothing
-            push!(valid_states, state)
-            push!(valid_probs, prob)
-        else
-            valid_probs[state_idx] += prob
-        end
-    end
-    
-    # Ensure we have at least one valid transition
-    if isempty(valid_states)
-        println("No valid states")
-        # Fallback to current state
-        valid_states = [s]
-        valid_probs = [1.0]
-    end
-    
-    # Normalize probabilities
-    valid_probs = normalize(valid_probs, 1)
 
-    # Check that the probabilities sum to 1.0
-    try
-        @assert sum(valid_probs) ≈ 1.0
-    catch
-        println(valid_probs)
-        println(sum(valid_probs))
-        error("Probs do not sum to 1.0")
-    end
-    
-    return SparseCat(valid_states, valid_probs)
+    # Calculate the mean of the transition distribution
+    μ = log(1 - (a == Treatment ? mdp.rho : 0.0)) + mdp.growthRate + s.SeaLiceLevel
+
+    # Clamp the mean to the range of the sea lice range
+    # TODO: consider the correctness of this
+    μ = clamp(μ, mdp.min_log_lice_level, mdp.max_log_lice_level)
+
+    # Get the distribution
+    dist = Normal(μ, mdp.sampling_sd)
+
+    # Get the states
+    states = POMDPs.states(mdp)
+
+    # Calculate the probs using the cdf
+    probs = discretize_distribution(dist, states, mdp.skew)
+
+    return SparseCat(states, probs)
 end
 
+
 function POMDPs.observation(mdp::SeaLiceLogMDP, a::Action, s::SeaLiceLogState)
-    pts, probs = discretized_normal_points(s.SeaLiceLevel, mdp, mdp.skew)
-    
-    # Map points to nearest valid observations in the discretized observation space
-    valid_obs = []
-    valid_probs = []
-    
-    for (pt, prob) in zip(pts, probs)
-        # Find the closest observation in the discretized observation space
-        closest_obs = mdp.log_sea_lice_range[argmin(abs.(mdp.log_sea_lice_range .- pt))]
-        obs = SeaLiceLogObservation(closest_obs)
-        
-        # Check if this observation is already in our list
-        obs_idx = findfirst(o -> o.SeaLiceLevel == closest_obs, valid_obs)
-        if obs_idx === nothing
-            push!(valid_obs, obs)
-            push!(valid_probs, prob)
-        else
-            valid_probs[obs_idx] += prob
-        end
-    end
-    
-    # Ensure we have at least one valid observation
-    if isempty(valid_obs)
-        # Fallback to current state observation
-        valid_obs = [SeaLiceLogObservation(s.SeaLiceLevel)]
-        valid_probs = [1.0]
-    end
-    
-    # Normalize probabilities
-    valid_probs = normalize(valid_probs, 1)
-    
-    return SparseCat(valid_obs, valid_probs)
+
+    # Get the distribution
+    dist = Normal(s.SeaLiceLevel, mdp.sampling_sd)
+
+    # Get the observations
+    observations = POMDPs.observations(mdp)
+
+    # Calculate the probs using the cdf
+    probs = discretize_distribution(dist, observations, mdp.skew)
+
+    return SparseCat(observations, probs)
+
 end
 
 function POMDPs.reward(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action)
