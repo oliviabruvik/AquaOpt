@@ -93,7 +93,7 @@ function POMDPs.transition(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
     μ = clamp(μ, mdp.min_lice_level, mdp.max_lice_level)
 
     # Get the distribution
-    dist = Normal(μ, mdp.sampling_sd)
+    dist = truncated(Normal(μ, mdp.sampling_sd), mdp.min_lice_level, mdp.max_lice_level)
 
     # Get the states
     states = POMDPs.states(mdp)
@@ -107,7 +107,7 @@ end
 function POMDPs.observation(mdp::SeaLiceMDP, a::Action, s::SeaLiceState)
 
     # Get the distribution
-    dist = Normal(s.SeaLiceLevel, mdp.sampling_sd)
+    dist = truncated(Normal(s.SeaLiceLevel, mdp.sampling_sd), mdp.min_lice_level, mdp.max_lice_level)
 
     # Get the observations
     observations = POMDPs.observations(mdp)
