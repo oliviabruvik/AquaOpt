@@ -1,3 +1,7 @@
+include("../Utils/Config.jl")
+include("../Models/SeaLiceLogPOMDP.jl")
+include("../Models/SeaLicePOMDP.jl")
+
 using POMDPs
 using POMDPModels
 using POMDPTools
@@ -14,7 +18,7 @@ using Plots
 function create_pomdp_mdp(λ, config)
 
     # Create directory for POMDP and MDP
-    pomdp_mdp_dir = joinpath(config.data_dir, "pomdp_mdp")
+    pomdp_mdp_dir = joinpath(config.experiment_dir, "pomdp_mdp")
     mkpath(pomdp_mdp_dir)
 
     if config.log_space
@@ -57,7 +61,7 @@ end
 # ----------------------------
 function generate_mdp_pomdp_policies(algorithm, config)
 
-    policies_dir = joinpath(config.data_dir, "policies", "$(algorithm.solver_name)")
+    policies_dir = joinpath(config.policies_dir, "$(algorithm.solver_name)")
     mkpath(policies_dir)
 
     # Generate policies for each lambda
@@ -103,9 +107,7 @@ function generate_policy(algorithm, pomdp, mdp)
 
     # SARSOP and QMDP policies
     else
-        @info "Solving with $(algorithm.solver_name)"
         return solve(algorithm.solver, pomdp)
-        @info "Done solving with $(algorithm.solver_name)"
     end
 end
 

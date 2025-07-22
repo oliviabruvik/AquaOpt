@@ -11,7 +11,9 @@ using Statistics
 using Base.Sys
 
 include("../../src/Utils/Utils.jl")
-
+include("../../src/Models/SeaLiceLogPOMDP.jl")
+include("../../src/Models/SeaLicePOMDP.jl")
+include("../../src/Models/KalmanFilter.jl")
 
 # ----------------------------
 # Simulate policy
@@ -19,11 +21,11 @@ include("../../src/Utils/Utils.jl")
 function simulate_policy(algorithm, config)
 
     # Create directory for simulation histories
-    histories_dir = joinpath(config.data_dir, "simulation_histories", "$(algorithm.solver_name)")
+    histories_dir = joinpath(config.simulations_dir, "$(algorithm.solver_name)")
     mkpath(histories_dir)
 
     # Create directory for policies
-    policies_dir = joinpath(config.data_dir, "policies", "$(algorithm.solver_name)")
+    policies_dir = joinpath(config.policies_dir, "$(algorithm.solver_name)")
     mkpath(policies_dir)
 
     histories = DataFrame(

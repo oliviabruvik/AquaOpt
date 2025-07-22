@@ -130,8 +130,8 @@ function plot_policy_sealice_levels_over_time(config, lambda_value)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
-            @load joinpath(config.data_dir, "simulation_histories", "$(policy_name)", "$(policy_name)_histories.jld2") histories
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Find the index for the specified lambda value
             lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, avg_results.lambda)
@@ -238,8 +238,8 @@ function plot_policy_treatment_cost_over_time(config, lambda_value)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
-            @load joinpath(config.data_dir, "simulation_histories", "$(policy_name)", "$(policy_name)_histories.jld2") histories
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Find the index for the specified lambda value
             lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, avg_results.lambda)
@@ -342,8 +342,8 @@ function plot_policy_actual_treatment_cost_over_time(config, lambda_value)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
-            @load joinpath(config.data_dir, "simulation_histories", "$(policy_name)", "$(policy_name)_histories.jld2") histories
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Find the index for the specified lambda value
             lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, avg_results.lambda)

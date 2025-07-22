@@ -15,7 +15,7 @@ function plot_treatment_heatmap(algorithm, config)
     treatment_matrix = nothing
     y_vals = nothing
     
-    policies_dir = joinpath(config.data_dir, "policies", algorithm.solver_name)
+    policies_dir = joinpath(config.policies_dir, algorithm.solver_name)
     
     for (i, λ) in enumerate(lambda_values)
         # Load policy, pomdp, and mdp for this lambda
@@ -121,7 +121,7 @@ function plot_simulation_treatment_heatmap(algorithm, config; use_observations=f
     treatment_freq_matrix = nothing
     bin_centers = nothing
     
-    histories_dir = joinpath(config.data_dir, "simulation_histories", algorithm.solver_name)
+    histories_dir = joinpath(config.simulations_dir, algorithm.solver_name)
     histories_filename = "$(algorithm.solver_name)_histories"
     @load joinpath(histories_dir, "$(histories_filename).jld2") histories
     

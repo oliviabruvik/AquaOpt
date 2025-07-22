@@ -1,10 +1,3 @@
-include("../Models/KalmanFilter.jl")
-include("../Models/SeaLicePOMDP.jl")
-include("../Models/SeaLiceLogPOMDP.jl")
-include("../Models/SimulationPOMDP.jl")
-include("../Models/SimulationLogPOMDP.jl")
-include("../Utils/Config.jl")
-include("Policies.jl")
 include("Simulation.jl")
 
 using GaussianFilters
@@ -24,11 +17,8 @@ using Parameters
 function evaluate_simulation_results(config, algorithm, histories)
 
     # Create directory for simulation histories
-    histories_dir = joinpath(config.data_dir, "simulation_histories", "$(algorithm.solver_name)")
+    histories_dir = joinpath(config.simulations_dir, "$(algorithm.solver_name)")
     histories_filename = "$(algorithm.solver_name)_histories"
-
-    avg_results_dir = joinpath(config.data_dir, "avg_results")
-    mkpath(avg_results_dir)
     
     @load joinpath(histories_dir, "$(histories_filename).jld2") histories
 
@@ -57,8 +47,8 @@ function evaluate_simulation_results(config, algorithm, histories)
     end
 
     # Save results
-    avg_results_filename = "$(algorithm.solver_name)_avg_results"
-    @save joinpath(avg_results_dir, "$(avg_results_filename).jld2") avg_results
+    mkpath(config.results_dir)
+    @save joinpath(config.results_dir, "$(algorithm.solver_name)_avg_results.jld2") avg_results
     
     return avg_results
 end

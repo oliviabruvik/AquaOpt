@@ -149,8 +149,8 @@ function plot_all_cost_vs_sealice(config)
     for (policy_name, color) in policy_colors
         try
             # Load the results from the JLD2 files
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
-            @load joinpath(config.data_dir, "simulation_histories", "$(policy_name)", "$(policy_name)_histories.jld2") histories
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate confidence intervals for each lambda
             lambda_values = avg_results.lambda
@@ -289,8 +289,8 @@ function plot_policy_sealice_levels_over_lambdas(config)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
-            @load joinpath(config.data_dir, "simulation_histories", "$(policy_name)", "$(policy_name)_histories.jld2") histories
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate per-episode sea lice levels and 95% CI for each lambda
             lambda_values = avg_results.lambda
@@ -380,8 +380,8 @@ function plot_policy_treatment_cost_over_lambdas(config)
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
-            @load joinpath(config.data_dir, "simulation_histories", "$(policy_name)", "$(policy_name)_histories.jld2") histories
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate per-episode treatment costs and 95% CI for each lambda
             lambda_values = avg_results.lambda
@@ -467,7 +467,7 @@ function plot_policy_reward_over_lambdas(config)
     for (policy_name, style) in policy_styles
         try
             # Load the simulation histories from the JLD2 file
-            histories_dir = joinpath(config.data_dir, "simulation_histories", "$(policy_name)")
+            histories_dir = joinpath(config.simulations_dir, "$(policy_name)")
             histories_filename = "$(policy_name)_histories"
             @load joinpath(histories_dir, "$(histories_filename).jld2") histories
 
@@ -562,7 +562,7 @@ function plot_pareto_frontier(config)
 
     # Plot each policy's results
     for (policy_name, style) in policy_styles
-        @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") avg_results
+        @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
         scatter!(
             p,
             avg_results.avg_treatment_cost,
