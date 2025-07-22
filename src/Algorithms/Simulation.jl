@@ -12,6 +12,51 @@ using Base.Sys
 
 include("../../src/Utils/Utils.jl")
 
+
+# ----------------------------
+# Simulate policy
+# ----------------------------
+function simulate_policy(algorithm, config)
+
+    # Create directory for simulation histories
+    histories_dir = joinpath(config.data_dir, "simulation_histories", "$(algorithm.solver_name)")
+    mkpath(histories_dir)
+
+    # Create directory for policies
+    policies_dir = joinpath(config.data_dir, "policies", "$(algorithm.solver_name)")
+    mkpath(policies_dir)
+
+    histories = DataFrame(
+        lambda=Float64[],
+        state_hists=Vector{Any}[],
+        action_hists=Vector{Any}[],
+        belief_hists=Vector{Any}[],
+        r_total_hists=Vector{Any}[],
+        measurement_hists=Vector{Any}[],
+        reward_hists=Vector{Any}[]
+    )
+
+    # Simulate policy
+    for λ in config.lambda_values
+
+        # Load policy, pomdp, and mdp
+        policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
+        @load joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
+
+        # Simulate policy
+        r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists = run_simulation(policy, mdp, pomdp, config, algorithm)
+        push!(histories, (λ, state_hists, action_hists, belief_hists, r_total_hists, measurement_hists, reward_hists))
+
+    end
+
+    # Save results
+    histories_filename = "$(algorithm.solver_name)_histories"
+    @save joinpath(histories_dir, "$(histories_filename).jld2") histories
+    
+    return histories
+end
+
+
 # ----------------------------
 # Simulation & Evaluation
 # ----------------------------

@@ -4,14 +4,77 @@ using POMDPTools
 using Distributions
 using Parameters
 using GaussianFilters
-using POMDPs
-using POMDPModels
-using POMDPTools
 using DataFrames
 using JLD2
 using Plots
-using Distributions
-using Parameters
+
+# ----------------------------
+# Create POMDP and MDP for a given lambda
+# ----------------------------
+function create_pomdp_mdp(λ, config)
+
+    # Create directory for POMDP and MDP
+    pomdp_mdp_dir = joinpath(config.data_dir, "pomdp_mdp")
+    mkpath(pomdp_mdp_dir)
+
+    if config.log_space
+        pomdp = SeaLiceLogMDP(
+            lambda=λ,
+            costOfTreatment=config.costOfTreatment,
+            growthRate=config.growthRate,
+            rho=config.rho,
+            discount_factor=config.discount_factor,
+            skew=config.skew
+        )
+    else
+        pomdp = SeaLiceMDP(
+            lambda=λ,
+            costOfTreatment=config.costOfTreatment,
+            growthRate=config.growthRate,
+            rho=config.rho,
+            discount_factor=config.discount_factor,
+            skew=config.skew
+        )
+    end
+
+    mdp = UnderlyingMDP(pomdp)
+
+    # Save POMDP and MDP to file
+    pomdp_mdp_filename = "pomdp_mdp_$(λ)_lambda"
+    pomdp_mdp_file_path = joinpath(pomdp_mdp_dir, "$(pomdp_mdp_filename).jld2")
+    @save pomdp_mdp_file_path pomdp mdp
+
+    # Save POMDP as POMDPX file for NUS SARSOP
+    pomdpx_file_path = joinpath(pomdp_mdp_dir, "pomdp.pomdpx")
+    pomdpx = POMDPXFile(pomdpx_file_path)
+    POMDPXFiles.write(pomdp, pomdpx)
+
+    return pomdp, mdp
+end
+
+# ----------------------------
+# Generate MDP and POMDP policies
+# ----------------------------
+function generate_mdp_pomdp_policies(algorithm, config)
+
+    policies_dir = joinpath(config.data_dir, "policies", "$(algorithm.solver_name)")
+    mkpath(policies_dir)
+
+    # Generate policies for each lambda
+    for λ in config.lambda_values
+
+        # Generate POMDP and MDP
+        pomdp, mdp = create_pomdp_mdp(λ, config)
+
+        # Generate policy
+        policy = generate_policy(algorithm, pomdp, mdp)
+
+        # Save policy, pomdp, and mdp to file
+        policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
+        @save joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
+
+    end
+end
 
 # ----------------------------
 # Policy Generation
