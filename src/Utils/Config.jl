@@ -3,7 +3,7 @@ using Parameters
 # ----------------------------
 # Experiment struct
 # ----------------------------
-@with_kw struct ExperimentConfig
+@with_kw mutable struct ExperimentConfig
 
     # Simulation parameters
     num_episodes::Int = 10
@@ -16,8 +16,8 @@ using Parameters
     
     # POMDP parameters
     costOfTreatment::Float64 = 10.0
-    growthRate::Float64 = 1.26
-    rho::Float64 = 0.7
+    growthRate::Float64 = 0.3 #1.26 # "The growth rate of sea lice is 0.3 per day." Costello (2006)
+    rho::Float64 = 0.95 # "The treatment kills off 95% on all stages." DOI: 10.1016/j.aquaculture.2019.734329
     discount_factor::Float64 = 0.95
     log_space::Bool = false
     skew::Bool = false
@@ -36,8 +36,10 @@ using Parameters
     # File management
     experiment_name::String = "exp"
     policies_dir::String = joinpath("results", "experiments", experiment_name,"policies")
+    simulations_dir::String = joinpath("results", "experiments", experiment_name, "simulation_histories")
+    results_dir::String = joinpath("results", "experiments", experiment_name, "avg_results")
     figures_dir::String = joinpath("results", "experiments", experiment_name, "figures")
-    data_dir::String = joinpath("results", "experiments", experiment_name, "data")
+    experiment_dir::String = joinpath("results", "experiments", experiment_name)
 end
 
 # ----------------------------

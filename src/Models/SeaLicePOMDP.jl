@@ -7,12 +7,13 @@ using QuickPOMDPs
 using POMDPTools
 using POMDPModels
 using QMDP
-# using NativeSARSOP
 using DiscreteValueIteration
 using POMDPLinter
 using Distributions
 using Parameters
 using Discretizers
+
+include("../Utils/Utils.jl")
 
 # -------------------------
 # State, Observation, Action
@@ -40,51 +41,18 @@ end
 	growthRate::Float64 = 1.2
 	rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
+    skew::Bool = false
     min_lice_level::Float64 = 0.0
-    max_lice_level::Float64 = 10.0
+    max_lice_level::Float64 = 30.0
+    min_initial_level::Float64 = 0.0
+    max_initial_level::Float64 = 0.25
     discretization_step::Float64 = 0.1
     num_points::Int = Int((max_lice_level - min_lice_level) / discretization_step) + 1
     sea_lice_range::Vector{Float64} = collect(min_lice_level:discretization_step:max_lice_level)
-    initial_range::Vector{Float64} = collect(min_lice_level:discretization_step:max_lice_level)
-    sampling_sd::Float64 = 1.0
+    initial_range::Vector{Float64} = collect(min_initial_level:discretization_step:max_initial_level)
+    sampling_sd::Float64 = 2 # TODO: debug sampling sd and its significance
     lindisc::LinearDiscretizer = LinearDiscretizer(collect(min_lice_level:discretization_step:(max_lice_level+discretization_step)))
     catdisc::CategoricalDiscretizer = CategoricalDiscretizer([NoTreatment, Treatment])
-end
-
-# -------------------------
-# Discretized Normal Sampling Utility
-# -------------------------
-"Returns a transition distribution that ensures all states are reachable."
-function discretized_normal_points(mean::Float64, mdp::SeaLiceMDP, skew::Bool=false)
-
-    if skew
-        skew_factor = 2.0
-        dist = SkewNormal(mean, mdp.sampling_sd, skew_factor)
-    else
-        dist = Normal(mean, mdp.sampling_sd)
-    end
-
-    # Calculate the points
-    points = mean .+ mdp.sampling_sd .* [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3]
-    if skew
-        points = points .* (1 + 0.3 * skew_factor)
-    end
-    
-    # Ensure points are within the range of the sea lice range
-    points = clamp.(points, mdp.min_lice_level, mdp.max_lice_level)
-
-    # Calculate and normalize the probabilities
-    probs = pdf.(dist, points)
-    probs = normalize(probs, 1)
-    
-    # Ensure we have at least one transition
-    if length(points) == 0 || sum(probs) == 0
-        # Fallback to mean state
-        points = [mean]
-        probs = [1.0]
-    end
-
-    return points, probs
 end
 
 # -------------------------
@@ -116,21 +84,47 @@ end
 # Transition, Observation, Reward, Initial State
 # -------------------------
 function POMDPs.transition(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
-    μ = (1 - (a == Treatment ? mdp.rho : 0.0)) * exp(mdp.growthRate) * s.SeaLiceLevel
-    pts, probs = discretized_normal_points(μ, mdp, false)
 
-    # TODO: USE discretizers.jl: but discretizers sampled uniformally
-    states = [SeaLiceState(round(clamp(x, mdp.min_lice_level, mdp.max_lice_level), digits=1)) for x in pts]
+    # Calculate the mean of the transition distribution
+    μ = (1 - (a == Treatment ? mdp.rho : 0.0)) * exp(mdp.growthRate) * s.SeaLiceLevel
+
+    # Clamp the mean to the range of the sea lice range
+    # TODO: consider the correctness of this
+    μ = clamp(μ, mdp.min_lice_level, mdp.max_lice_level)
+
+    # Get the distribution
+    dist = truncated(Normal(μ, mdp.sampling_sd), mdp.min_lice_level, mdp.max_lice_level)
+
+    # Get the states
+    states = POMDPs.states(mdp)
+
+    # Calculate the probs using the cdf
+    probs = discretize_distribution(dist, states, mdp.skew)
+
     return SparseCat(states, probs)
 end
 
 function POMDPs.observation(mdp::SeaLiceMDP, a::Action, s::SeaLiceState)
-    pts, probs = discretized_normal_points(s.SeaLiceLevel, mdp, mdp.skew)
-    obs = [SeaLiceObservation(round(clamp(x, mdp.min_lice_level, mdp.max_lice_level), digits=1)) for x in pts]
-    return SparseCat(obs, probs)
+
+    # Get the distribution
+    dist = truncated(Normal(s.SeaLiceLevel, mdp.sampling_sd), mdp.min_lice_level, mdp.max_lice_level)
+
+    # Get the observations
+    observations = POMDPs.observations(mdp)
+
+    # Calculate the probs using the cdf
+    probs = discretize_distribution(dist, observations, mdp.skew)
+
+    return SparseCat(observations, probs)
+
 end
 
 function POMDPs.reward(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
+    # if s.SeaLiceLevel > 0.5
+    #    lice_penalty = 1000.0
+    # else
+    #    lice_penalty = mdp.lambda * s.SeaLiceLevel
+    # end
     lice_penalty = mdp.lambda * s.SeaLiceLevel
     treatment_penalty = a == Treatment ? (1 - mdp.lambda) * mdp.costOfTreatment : 0.0
     return - (lice_penalty + treatment_penalty)

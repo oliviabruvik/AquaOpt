@@ -15,7 +15,7 @@ function plot_treatment_heatmap(algorithm, config)
     treatment_matrix = nothing
     y_vals = nothing
     
-    policies_dir = joinpath(config.data_dir, "policies", algorithm.solver_name)
+    policies_dir = joinpath(config.policies_dir, algorithm.solver_name)
     
     for (i, λ) in enumerate(lambda_values)
         # Load policy, pomdp, and mdp for this lambda
@@ -121,33 +121,37 @@ function plot_simulation_treatment_heatmap(algorithm, config; use_observations=f
     treatment_freq_matrix = nothing
     bin_centers = nothing
     
-    histories_dir = joinpath(config.data_dir, "simulation_histories", algorithm.solver_name)
+    histories_dir = joinpath(config.simulations_dir, algorithm.solver_name)
+    histories_filename = "$(algorithm.solver_name)_histories"
+    @load joinpath(histories_dir, "$(histories_filename).jld2") histories
     
     for (i, λ) in enumerate(lambda_values)
         try
             # Load simulation histories for this lambda
-            history_filename = "hists_$(λ)_lambda.jld2"
-            history_file_path = joinpath(histories_dir, history_filename)
-            
-            if !isfile(history_file_path)
-                @warn "History file not found at $history_file_path for λ=$λ"
+            histories_lambda = histories[histories.lambda .== λ, :]
+
+            if isempty(histories_lambda)
+                @warn "No histories found for λ=$λ"
                 continue
             end
-            
-            @load history_file_path histories
+
+            # Get action, state, and reward histories
+            action_hists = histories_lambda.action_hists[1]
+            state_hists = histories_lambda.state_hists[1]
+            measurement_hists = histories_lambda.measurement_hists[1]
             
             # Extract data from all episodes
             all_states = []
             all_actions = []
-            
-            for episode in 1:length(histories["state_hists"])
-                state_hist = histories["state_hists"][episode]
-                action_hist = histories["action_hists"][episode]
+
+            for episode in 1:length(state_hists)
+                state_hist = state_hists[episode]
+                action_hist = action_hists[episode]
                 
                 # Convert states to sea lice levels
                 if use_observations
                     # Use measurements instead of states if requested
-                    measurement_hist = histories["measurement_hists"][episode]
+                    measurement_hist = measurement_hists[episode]
                     sea_lice_levels = if config.log_space
                         [exp(o.SeaLiceLevel) for o in measurement_hist]
                     else

@@ -22,17 +22,17 @@ end
 # Plot 6: Time-series of belief for each policy
 # NOTE: RESULTS ARE IN LOG SPACE
 # ----------------------------
-function plot_policy_belief_levels(results, title, config, lambda; show_actual_states=true)
+function plot_policy_belief_levels(histories, title, config, lambda; show_actual_states=true)
 
     # Get values for first episode of lambda
-    lambda_index = findfirst(isequal(lambda), results.lambda)
+    lambda_index = findfirst(isequal(lambda), histories.lambda)
 
-    @assert results.lambda[lambda_index] == lambda "Lambda index not found"
+    @assert histories.lambda[lambda_index] == lambda "Lambda index not found"
 
     # Get values for first episode of lambda
-    first_episode_belief_hist = results.belief_hists[lambda_index][1]
-    first_episode_state_hist = results.state_hists[lambda_index][1]
-    first_episode_action_hist = results.action_hists[lambda_index][1]
+    first_episode_belief_hist = histories.belief_hists[lambda_index][1]
+    first_episode_state_hist = histories.state_hists[lambda_index][1]
+    first_episode_action_hist = histories.action_hists[lambda_index][1]
 
     # Convert Gaussian belief to mean and variance
     if config.log_space
@@ -122,24 +122,26 @@ function plot_policy_sealice_levels_over_time(config, lambda_value)
         "SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
-        "NoTreatment_Policy" => (color=:black, marker=:star)
+        # "NeverTreat_Policy" => (color=:black, marker=:star),
+        "AlwaysTreat_Policy" => (color=:brown, marker=:dtriangle)
     )
     
     # Load and plot results for each policy
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Find the index for the specified lambda value
-            lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, results.lambda)
+            lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, avg_results.lambda)
             if lambda_index === nothing
                 @warn "Lambda value $lambda_value not found for $policy_name"
                 continue
             end
             
             # Get state histories for this lambda
-            state_hists = results.state_hists[lambda_index]
+            state_hists = histories.state_hists[lambda_index]
             
             # Calculate mean and 95% CI for each time step
             time_steps = 1:config.steps_per_episode
@@ -228,24 +230,26 @@ function plot_policy_treatment_cost_over_time(config, lambda_value)
         "SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
-        "NoTreatment_Policy" => (color=:black, marker=:star)
+        # "NeverTreat_Policy" => (color=:black, marker=:star),
+        "AlwaysTreat_Policy" => (color=:brown, marker=:dtriangle)
     )
     
     # Load and plot results for each policy
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Find the index for the specified lambda value
-            lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, results.lambda)
+            lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, avg_results.lambda)
             if lambda_index === nothing
                 @warn "Lambda value $lambda_value not found for $policy_name"
                 continue
             end
             
             # Get ACTION histories for this lambda (not state histories!)
-            action_hists = results.action_hists[lambda_index]
+            action_hists = histories.action_hists[lambda_index]
             
             # Calculate mean treatment probability and 95% CI for each time step
             time_steps = 1:config.steps_per_episode
@@ -330,24 +334,26 @@ function plot_policy_actual_treatment_cost_over_time(config, lambda_value)
         "SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
-        "NoTreatment_Policy" => (color=:black, marker=:star)
+        # "NeverTreat_Policy" => (color=:black, marker=:star),
+        "AlwaysTreat_Policy" => (color=:brown, marker=:dtriangle)
     )
     
     # Load and plot results for each policy
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Find the index for the specified lambda value
-            lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, results.lambda)
+            lambda_index = findfirst(λ -> abs(λ - lambda_value) < 1e-10, avg_results.lambda)
             if lambda_index === nothing
                 @warn "Lambda value $lambda_value not found for $policy_name"
                 continue
             end
             
             # Get ACTION histories for this lambda
-            action_hists = results.action_hists[lambda_index]
+            action_hists = histories.action_hists[lambda_index]
             
             # Calculate mean treatment cost and 95% CI for each time step
             time_steps = 1:config.steps_per_episode

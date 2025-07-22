@@ -11,6 +11,53 @@ using Statistics
 using Base.Sys
 
 include("../../src/Utils/Utils.jl")
+include("../../src/Models/SeaLiceLogPOMDP.jl")
+include("../../src/Models/SeaLicePOMDP.jl")
+include("../../src/Models/KalmanFilter.jl")
+
+# ----------------------------
+# Simulate policy
+# ----------------------------
+function simulate_policy(algorithm, config)
+
+    # Create directory for simulation histories
+    histories_dir = joinpath(config.simulations_dir, "$(algorithm.solver_name)")
+    mkpath(histories_dir)
+
+    # Create directory for policies
+    policies_dir = joinpath(config.policies_dir, "$(algorithm.solver_name)")
+    mkpath(policies_dir)
+
+    histories = DataFrame(
+        lambda=Float64[],
+        state_hists=Vector{Any}[],
+        action_hists=Vector{Any}[],
+        belief_hists=Vector{Any}[],
+        r_total_hists=Vector{Any}[],
+        measurement_hists=Vector{Any}[],
+        reward_hists=Vector{Any}[]
+    )
+
+    # Simulate policy
+    for λ in config.lambda_values
+
+        # Load policy, pomdp, and mdp
+        policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
+        @load joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
+
+        # Simulate policy
+        r_total_hists, action_hists, state_hists, measurement_hists, reward_hists, belief_hists = run_simulation(policy, mdp, pomdp, config, algorithm)
+        push!(histories, (λ, state_hists, action_hists, belief_hists, r_total_hists, measurement_hists, reward_hists))
+
+    end
+
+    # Save results
+    histories_filename = "$(algorithm.solver_name)_histories"
+    @save joinpath(histories_dir, "$(histories_filename).jld2") histories
+    
+    return histories
+end
+
 
 # ----------------------------
 # Simulation & Evaluation
@@ -49,7 +96,13 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     # Create simulator
     sim = RolloutSimulator(max_steps=config.steps_per_episode)
     updaterStruct = KFUpdater(sim_pomdp, process_noise=config.process_noise, observation_noise=config.observation_noise)
-    updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
+    
+    # Use discrete updater for skew normal distribution, kalman filter otherwise
+    if sim_pomdp.skew
+        updater = DiscreteUpdater(sim_pomdp)
+    else
+        updater = config.ekf_filter ? updaterStruct.ekf : updaterStruct.ukf
+    end
 
     # Run simulation for each episode
     for episode in 1:config.num_episodes
@@ -128,6 +181,13 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
 
     while disc > sim.eps && !isterminal(sim_pomdp, s) && step <= sim.max_steps
 
+        # Clamp gaussian distribution to the range of the sea lice range
+        b.μ[1] = if typeof(sim_pomdp) <: SeaLiceLogSimMDP
+            clamp(b.μ[1], sim_pomdp.log_lice_bounds[1], sim_pomdp.log_lice_bounds[2])
+        else
+            clamp(b.μ[1], sim_pomdp.sea_lice_bounds[1], sim_pomdp.sea_lice_bounds[2])
+        end
+
         # Calculate b as beliefvec from normal distribution
         if sim_pomdp.skew
             norm_distr = SkewNormal(b.μ[1], b.Σ[1,1], 2.0)
@@ -139,10 +199,9 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
         if typeof(policy) <: ValueIterationPolicy
             a = action(policy, s)
         else
-            # For POMDP policies, use the belief state
+            # Discretize alpha vectors (representation of utility over belief states per action)
             state_space = states(policy.pomdp)
-            bvec = [pdf(norm_distr, s.SeaLiceLevel) for s in state_space]
-            bvec = normalize(bvec, 1)
+            bvec = discretize_distribution(norm_distr, state_space, sim_pomdp.skew)
             a = action(policy, bvec)
         end
 
@@ -150,7 +209,11 @@ function simulate_helper(sim::RolloutSimulator, sim_pomdp::POMDP, policy::Policy
 
         r_total += disc * r
 
-        b = runKalmanFilter(updater, b, a, o)
+        if sim_pomdp.skew
+            b = update(updater, b, a, o)
+        else
+            b = runKalmanFilter(updater, b, a, o)
+        end
 
         if verbose
 
@@ -206,13 +269,13 @@ end
 # ----------------------------
 # Calculate Averages
 # ----------------------------
-function calculate_averages(config, pomdp, action_hists, state_hists, reward_hists)
+function calculate_averages(config, action_hists, state_hists, reward_hists)
 
     total_steps = config.num_episodes * config.steps_per_episode
     total_cost, total_sealice, total_reward = 0.0, 0.0, 0.0
 
     for i in 1:config.num_episodes
-        total_cost += sum(a == Treatment for a in action_hists[i]) * pomdp.costOfTreatment
+        total_cost += sum(a == Treatment for a in action_hists[i]) * config.costOfTreatment
         # Handle both regular and log space states
         total_sealice += if typeof(state_hists[i][1]) <: SeaLiceLogState
             sum(exp(s.SeaLiceLevel) for s in state_hists[i])
@@ -272,7 +335,7 @@ function plot_belief_distribution(s, b, o, a, step, sim_pomdp, policy)
     p = plot(
         x_range, y_values,
         title="$solver_type with λ=$(sim_pomdp.lambda) (Step $step)",
-        xlabel="Sea Lice Level",
+        xlabel="Sea Lice Level ($action_text)",
         ylabel="Probability Density",
         label="Belief Distribution",
         linewidth=2,
@@ -283,7 +346,7 @@ function plot_belief_distribution(s, b, o, a, step, sim_pomdp, policy)
     )
     
     # Add action as subtitle using annotation
-    annotate!(mean(x_range), maximum(y_values) * 1.05, text("Action: $action_text", 12, :black, :center))
+    # annotate!(mean(x_range), maximum(y_values) * 1.05, text("Action: $action_text", 12, :black, :center))
     
     # Add vertical lines for key values
     vline!([current_state], label="True State", color=:red, linestyle=:dash, linewidth=2)
@@ -302,7 +365,7 @@ function plot_belief_distribution(s, b, o, a, step, sim_pomdp, policy)
     plot!([ci_95_lower, ci_95_upper], [maximum(y_values), maximum(y_values)], fillrange=0, fillalpha=0.1, color=:blue, label="95% CI")
     
     # Set y-axis to start from 0
-    ylims!(0, 0.5)
+    ylims!(0, 1.0)
     
     # Create directory for plots if it doesn't exist
     plot_dir = "debug_plots"

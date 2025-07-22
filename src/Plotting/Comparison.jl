@@ -5,9 +5,9 @@ plotlyjs()  # Set the backend to PlotlyJS
 # ----------------------------
 # Plot 2: Cost vs Sea Lice for one policy
 # ----------------------------
-function plot_policy_cost_vs_sealice(results, title, config)
+function plot_policy_cost_vs_sealice(histories, avg_results, title, config)
     # Calculate confidence intervals for each lambda
-    lambda_values = results.lambda
+    lambda_values = histories.lambda
     mean_costs = Float64[]
     mean_sealice = Float64[]
     cost_ci_lower = Float64[]
@@ -17,8 +17,8 @@ function plot_policy_cost_vs_sealice(results, title, config)
     
     for i in 1:length(lambda_values)
         # Get episode-level data
-        action_hists = results.action_hists[i]
-        state_hists = results.state_hists[i]
+        action_hists = histories.action_hists[i]
+        state_hists = histories.state_hists[i]
         
         # Calculate treatment costs for each episode
         episode_costs = Float64[]
@@ -59,11 +59,11 @@ function plot_policy_cost_vs_sealice(results, title, config)
         push!(sealice_ci_upper, mean_lice + lice_ci_margin)
         
         # Verify our calculation matches the stored average
-        if abs(mean_cost - results.avg_treatment_cost[i]) > 1e-10
-            @warn "Calculated mean cost ($mean_cost) doesn't match stored average ($(results.avg_treatment_cost[i])) for λ=$(lambda_values[i])"
+        if abs(mean_cost - avg_results.avg_treatment_cost[i]) > 1e-10
+            @warn "Calculated mean cost ($mean_cost) doesn't match stored average ($(avg_results.avg_treatment_cost[i])) for λ=$(lambda_values[i])"
         end
-        if abs(mean_lice - results.avg_sealice[i]) > 1e-10
-            @warn "Calculated mean sea lice ($mean_lice) doesn't match stored average ($(results.avg_sealice[i])) for λ=$(lambda_values[i])"
+        if abs(mean_lice - avg_results.avg_sealice[i]) > 1e-10
+            @warn "Calculated mean sea lice ($mean_lice) doesn't match stored average ($(avg_results.avg_sealice[i])) for λ=$(lambda_values[i])"
         end
     end
 
@@ -141,17 +141,19 @@ function plot_all_cost_vs_sealice(config)
         "QMDP_Policy" => :purple,
         "Heuristic_Policy" => :blue,
         "Random_Policy" => :orange,
-        "NoTreatment_Policy" => :black
+        # "NeverTreat_Policy" => :black,
+        "AlwaysTreat_Policy" => :brown
     )
     
     # Load and plot each policy's results
     for (policy_name, color) in policy_colors
         try
-            # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
+            # Load the results from the JLD2 files
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate confidence intervals for each lambda
-            lambda_values = results.lambda
+            lambda_values = avg_results.lambda
             mean_costs = Float64[]
             mean_sealice = Float64[]
             cost_ci_lower = Float64[]
@@ -161,8 +163,8 @@ function plot_all_cost_vs_sealice(config)
             
             for i in 1:length(lambda_values)
                 # Get episode-level data
-                action_hists = results.action_hists[i]
-                state_hists = results.state_hists[i]
+                action_hists = histories.action_hists[i]
+                state_hists = histories.state_hists[i]
                 
                 # Calculate treatment costs for each episode
                 episode_costs = Float64[]
@@ -279,23 +281,25 @@ function plot_policy_sealice_levels_over_lambdas(config)
         "SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
-        "NoTreatment_Policy" => (color=:black, marker=:star)
+        # "NeverTreat_Policy" => (color=:black, marker=:star),
+        "AlwaysTreat_Policy" => (color=:brown, marker=:dtriangle)
     )
     
     # Load and plot results for each policy
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate per-episode sea lice levels and 95% CI for each lambda
-            lambda_values = results.lambda
+            lambda_values = avg_results.lambda
             mean_sealice = Float64[]
             ci_lower = Float64[]
             ci_upper = Float64[]
             
             for i in 1:length(lambda_values)
-                state_hists = results.state_hists[i]
+                state_hists = histories.state_hists[i]
                 
                 # Calculate sea lice level for each episode
                 episode_sealice = Float64[]
@@ -321,7 +325,7 @@ function plot_policy_sealice_levels_over_lambdas(config)
                 push!(ci_upper, mean_level + ci_margin)
                 
                 # Verify our calculation matches the stored average
-                stored_avg = results.avg_sealice[i]
+                stored_avg = avg_results.avg_sealice[i]
                 if abs(mean_level - stored_avg) > 1e-10
                     @warn "Calculated mean ($mean_level) doesn't match stored average ($stored_avg) for λ=$(lambda_values[i])"
                 end
@@ -368,23 +372,25 @@ function plot_policy_treatment_cost_over_lambdas(config)
         "SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
-        "NoTreatment_Policy" => (color=:black, marker=:star)
+        # "NeverTreat_Policy" => (color=:black, marker=:star),
+        "AlwaysTreat_Policy" => (color=:brown, marker=:dtriangle)
     )
     
     # Load and plot results for each policy
     for (policy_name, style) in policy_styles
         try
             # Load the results from the JLD2 file
-            @load joinpath(config.data_dir, "avg_results", "$(policy_name)_avg_results.jld2") results
+            @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+            @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate per-episode treatment costs and 95% CI for each lambda
-            lambda_values = results.lambda
+            lambda_values = avg_results.lambda
             mean_costs = Float64[]
             ci_lower = Float64[]
             ci_upper = Float64[]
             
             for i in 1:length(lambda_values)
-                action_hists = results.action_hists[i]
+                action_hists = histories.action_hists[i]
                 
                 # Calculate treatment cost for each episode
                 episode_costs = Float64[]
@@ -406,7 +412,7 @@ function plot_policy_treatment_cost_over_lambdas(config)
                 push!(ci_upper, mean_cost + ci_margin)
                 
                 # Verify our calculation matches the stored average
-                stored_avg = results.avg_treatment_cost[i]
+                stored_avg = avg_results.avg_treatment_cost[i]
                 if abs(mean_cost - stored_avg) > 1e-10
                     @warn "Calculated mean ($mean_cost) doesn't match stored average ($stored_avg) for λ=$(lambda_values[i])"
                 end
@@ -453,14 +459,18 @@ function plot_policy_reward_over_lambdas(config)
         "SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
-        "NoTreatment_Policy" => (color=:black, marker=:star)
+        # "NeverTreat_Policy" => (color=:black, marker=:star),
+        "AlwaysTreat_Policy" => (color=:brown, marker=:dtriangle)
     )
     
     # Load and plot results for each policy
     for (policy_name, style) in policy_styles
         try
             # Load the simulation histories from the JLD2 file
-            histories_dir = joinpath(config.data_dir, "simulation_histories", policy_name)
+            histories_dir = joinpath(config.simulations_dir, "$(policy_name)")
+            histories_filename = "$(policy_name)_histories"
+            @load joinpath(histories_dir, "$(histories_filename).jld2") histories
+
             lambda_values = config.lambda_values
             mean_rewards = Float64[]
             ci_lower = Float64[]
@@ -469,21 +479,17 @@ function plot_policy_reward_over_lambdas(config)
             for λ in lambda_values
                 try
                     # Load simulation histories for this lambda
-                    history_filename = "hists_$(λ)_lambda.jld2"
-                    history_file_path = joinpath(histories_dir, history_filename)
-                    
-                    if !isfile(history_file_path)
-                        @warn "History file not found at $history_file_path for λ=$λ"
+                    histories_lambda = histories[histories.lambda .== λ, :]
+                    if isempty(histories_lambda)
+                        @warn "No histories found for λ=$λ"
                         push!(mean_rewards, NaN)
                         push!(ci_lower, NaN)
                         push!(ci_upper, NaN)
                         continue
                     end
                     
-                    @load history_file_path histories
-                    
                     # Extract total rewards for all episodes
-                    r_total_hists = histories["r_total_hists"]
+                    r_total_hists = histories_lambda.r_total_hists[1]
                     
                     # Calculate mean and 95% CI
                     mean_reward = mean(r_total_hists)
@@ -536,14 +542,7 @@ end
 
 # Pareto Frontier Plot
 function plot_pareto_frontier(config)
-    # Load all results
-    results_file_path = joinpath(config.data_dir, "avg_results", "All_policies_all_results.jld2")
-    if !isfile(results_file_path)
-        @warn "Results file not found at $results_file_path"
-        return nothing
-    end
-    @load results_file_path all_results
-
+   
     p = plot(
         title="Pareto Frontier: Treatment Cost vs Sea Lice Levels",
         xlabel="Average Treatment Cost (MNOK / year)",
@@ -563,18 +562,16 @@ function plot_pareto_frontier(config)
 
     # Plot each policy's results
     for (policy_name, style) in policy_styles
-        if haskey(all_results, policy_name)
-            results = all_results[policy_name]
-            scatter!(
-                p,
-                results.avg_treatment_cost,
-                results.avg_sealice,
-                label=policy_name,
-                color=style.color,
-                marker=style.marker,
-                alpha=0.7
-            )
-        end
+        @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
+        scatter!(
+            p,
+            avg_results.avg_treatment_cost,
+            avg_results.avg_sealice,
+            label=policy_name,
+            color=style.color,
+            marker=style.marker,
+            alpha=0.7
+        )
     end
 
     # Save plot

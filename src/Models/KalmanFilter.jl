@@ -1,11 +1,11 @@
+include("SimulationPOMDP.jl")
+include("SimulationLogPOMDP.jl")
+
 using POMDPs
 using GaussianFilters
 using Distributions
 using LinearAlgebra
 using Random
-
-include("SimulationPOMDP.jl")
-include("SimulationLogPOMDP.jl")
 
 struct KFUpdaterStruct
     ekf::ExtendedKalmanFilter
@@ -15,8 +15,8 @@ end
 
 # x is state, u is action
 function step(x, u)
-    growth_rate = 1.2
-    rho = 0.7
+    growth_rate = 0.3
+    rho = 0.95
     xp = copy(x)
     xp[1] = (1 - (u[1] == 1.0 ? rho : 0.0)) * exp(growth_rate) * x[1]
     return xp
@@ -24,8 +24,8 @@ end
 
 # x is state, u is action
 function step_log(x, u)
-    growth_rate = 1.2
-    rho = 0.7
+    growth_rate = 0.3
+    rho = 0.95
     xp = copy(x)
     xp[1] = log(1 - (u[1] == 1.0 ? rho : 0.0)) + growth_rate + x[1]
     return xp

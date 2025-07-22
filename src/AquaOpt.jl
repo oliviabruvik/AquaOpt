@@ -7,6 +7,7 @@ include("Plotting/Heatmaps.jl")
 include("Plotting/Timeseries.jl")
 include("Plotting/Comparison.jl")
 include("Utils/Config.jl")
+include("Utils/ExperimentTracking.jl")
 
 # Environment variables
 ENV["PLOTS_BROWSER"] = "true"
@@ -16,10 +17,11 @@ ENV["PLOTS_BACKEND"] = "plotlyjs"
 using Logging
 using DiscreteValueIteration
 using GridInterpolations
-# using NativeSARSOP: SARSOPSolver
+using NativeSARSOP
 using SARSOP
 using POMDPs
 using POMDPTools
+using POMDPXFiles
 using Plots: plot, plot!, scatter, scatter!, heatmap, heatmap!, histogram, histogram!, savefig
 using LocalFunctionApproximation
 using LocalApproximationValueIteration
@@ -28,131 +30,150 @@ using Dates
 plotlyjs()  # Activate Plotly backend
 
 # ----------------------------
-# Main function
+# Solve policies
 # ----------------------------
-function main(;run_algorithms=true, log_space=true, experiment_name="exp", skew=false, mode="light")
-
-    EXPERIMENT_CONFIG, HEURISTIC_CONFIG = setup_configs(
-        experiment_name,
-        log_space,
-        skew,
-        mode
-    )
-
-    # Define algorithms
-    algorithms = [
-        Algorithm(solver_name="NoTreatment_Policy"),
-        Algorithm(solver_name="Random_Policy"),
-        Algorithm(solver_name="Heuristic_Policy", heuristic_config=HEURISTIC_CONFIG),
-        Algorithm(solver=ValueIterationSolver(max_iterations=EXPERIMENT_CONFIG.VI_max_iterations), solver_name="VI_Policy"),
-        Algorithm(solver=QMDPSolver(max_iterations=EXPERIMENT_CONFIG.QMDP_max_iterations), solver_name="QMDP_Policy"),
-        # Algorithm(solver=SARSOPSolver(max_time=EXPERIMENT_CONFIG.sarsop_max_time, verbose=true), solver_name="SARSOP_Policy"),
-        Algorithm(solver=SARSOPSolver(timeout=EXPERIMENT_CONFIG.sarsop_max_time, verbose=true), solver_name="SARSOP_Policy")
-    ]
-
-    # Solve POMDPs and simulate policies
-    if run_algorithms
-        all_results = solve_and_simulate_algorithms(algorithms, EXPERIMENT_CONFIG)
-    else
-        @info "Skipping algorithms"
-        all_results = nothing
+function solve_policies(algorithms, config)
+    @info "Solving policies"
+    for algo in algorithms
+        println("Solving $(algo.solver_name)")
+        generate_mdp_pomdp_policies(algo, config)
     end
-
-    # Plot results
-    plot_results(all_results, algorithms, EXPERIMENT_CONFIG)
-
 end
 
 # ----------------------------
-# Solve and simulate algorithms
+# Simulate policies
 # ----------------------------
-function solve_and_simulate_algorithms(algorithms, EXPERIMENT_CONFIG)
-
-    all_results = Dict{String, DataFrame}()
+function simulate_policies(algorithms, config)
+    @info "Simulating policies"
     for algo in algorithms
-        @info "Running $(algo.solver_name)"
-        results = test_optimizer(algo, EXPERIMENT_CONFIG)
-        all_results[algo.solver_name] = results
+        println("Simulating $(algo.solver_name)")
+        histories = simulate_policy(algo, config)
+        avg_results = evaluate_simulation_results(config, algo, histories)
     end
-
-    # Save all results
-    mkpath(joinpath(EXPERIMENT_CONFIG.data_dir, "avg_results"))
-    @save joinpath(EXPERIMENT_CONFIG.data_dir, "avg_results", "All_policies_all_results.jld2") all_results
-
-    return all_results
-
 end
 
 # ----------------------------
 # Plot results
 # ----------------------------
-function plot_results(all_results, algorithms, EXPERIMENT_CONFIG)
+function plot_results(algorithms, config)
 
-    @info "Generating result plots"
-
-    if all_results == nothing
-        all_results = load_results(EXPERIMENT_CONFIG)
-    end
-
-    # Plot individual policy plots
+    @info "Plotting results"
     for algo in algorithms
-        results = all_results[algo.solver_name]
+
+        # Load histories
+        histories_dir = joinpath(config.simulations_dir, "$(algo.solver_name)")
+        histories_path = joinpath(histories_dir, "$(algo.solver_name)_histories.jld2")
+        if !isfile(histories_path)
+            @error "Histories file not found at $histories_path. Run simulation first. with --simulate"
+            continue
+        end
+        @load histories_path histories
+
+        # Load avg results
+        avg_results_path = joinpath(config.results_dir, "$(algo.solver_name)_avg_results.jld2")
+        if !isfile(avg_results_path)
+            @error "Avg results file not found at $avg_results_path. Run simulation first. with --simulate"
+            continue
+        end
+        @load avg_results_path avg_results
 
         # Plot policy cost vs sealice
-        plot_policy_cost_vs_sealice(results, algo.solver_name, EXPERIMENT_CONFIG)
+        plot_policy_cost_vs_sealice(histories, avg_results, algo.solver_name, config)
 
         # Plot policy belief levels
-        plot_policy_belief_levels(results, algo.solver_name, EXPERIMENT_CONFIG, 0.6)
+        plot_policy_belief_levels(histories, algo.solver_name, config, 0.6)
 
         # Plot treatment heatmap
-        plot_treatment_heatmap(algo, EXPERIMENT_CONFIG)
+        plot_treatment_heatmap(algo, config)
 
         # Plot simulation treatment heatmap
-        plot_simulation_treatment_heatmap(algo, EXPERIMENT_CONFIG; use_observations=false, n_bins=50)
+        plot_simulation_treatment_heatmap(algo, config; use_observations=false, n_bins=50)
 
     end
     
     # Plot comparison plots
-    plot_all_cost_vs_sealice(EXPERIMENT_CONFIG)
-    plot_policy_sealice_levels_over_lambdas(EXPERIMENT_CONFIG)
-    plot_policy_treatment_cost_over_lambdas(EXPERIMENT_CONFIG)
-    plot_policy_sealice_levels_over_time(EXPERIMENT_CONFIG, 0.6)
-    plot_policy_treatment_cost_over_time(EXPERIMENT_CONFIG, 0.6)
-    plot_policy_reward_over_lambdas(EXPERIMENT_CONFIG)
+    plot_all_cost_vs_sealice(config)
+    plot_policy_sealice_levels_over_lambdas(config)
+    plot_policy_treatment_cost_over_lambdas(config)
+    plot_policy_sealice_levels_over_time(config, 0.6)
+    plot_policy_treatment_cost_over_time(config, 0.6)
+    plot_policy_reward_over_lambdas(config)
 
     # Generate Pareto frontier
-    plot_pareto_frontier(EXPERIMENT_CONFIG)
+    plot_pareto_frontier(config)
 
+    @info "Saved all plots to $(config.figures_dir)"
 end
 
-# ----------------------------
-# Load all results from file
-# ----------------------------
-function load_results(EXPERIMENT_CONFIG)
 
-    results_file_path = joinpath(EXPERIMENT_CONFIG.data_dir, "avg_results", "All_policies_all_results.jld2")
+# ----------------------------
+# Main function
+# ----------------------------
+function main(;first_step_flag="solve", log_space=true, experiment_name="exp", skew=false, mode="light")
 
-    if isfile(results_file_path)
-        @load results_file_path all_results
-    else
-        @info "Results file not found at $results_file_path, running algorithms and simulations"
-        solve_and_simulate_algorithms(algorithms, EXPERIMENT_CONFIG)
-        @load results_file_path all_results
+    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, skew, mode)
+    algorithms = define_algorithms(config, heuristic_config)
+
+    if first_step_flag == "solve"
+        solve_policies(algorithms, config)
+        simulate_policies(algorithms, config)
     end
 
-    return all_results
+    if first_step_flag == "simulate"
+        @info "Skipping policy solving"
+        # If we skip solving but want to simulate, we need to find the latest 
+        # experiment with the same policy parameters and use that experiment's policies_dir
+        latest_experiment_config = get_latest_matching_config(config, heuristic_config, false)
+
+        # Change policies_dir to the latest experiment's policies_dir
+        config.policies_dir = latest_experiment_config.policies_dir
+
+        simulate_policies(algorithms, config)
+    end
+
+    if first_step_flag == "plot"
+        @info "Skipping policy solving and simulation"
+        # If we skip solving and simulation but want to plot, we need to find the latest 
+        # experiment with the same policy and simulation parameters and use that experiment's config
+        latest_experiment_config = get_latest_matching_config(config, heuristic_config, true)
+        @info "Latest experiment: $latest_experiment_config"
+        config.policies_dir = latest_experiment_config.policies_dir
+        config.simulations_dir = latest_experiment_config.simulations_dir
+        config.results_dir = latest_experiment_config.results_dir
+    end
+
+    # Plot the results
+    plot_results(algorithms, config)
+
+    # Log experiment configuration in experiments.csv file with all experiments
+    @info "Saved experiment configuration to $(config.experiment_dir)/config/experiment_config.jld2"
+    save_experiment_config(config, heuristic_config, first_step_flag)
+
+    # Save config to file in current directory for easy access
+    mkpath(joinpath(config.experiment_dir, "config"))
+    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
+    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
+        for field in fieldnames(typeof(config))
+            value = getfield(config, field)
+            println(io, "$field: $value")
+        end
+    end
+
 end
+
 
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_configs(experiment_name, log_space, skew=false, mode="light")
+function setup_experiment_configs(experiment_name, log_space, skew=false, mode="light")
 
     # Define experiment configuration
-    exp_name = string(Dates.now()) * "_" * experiment_name * "_mode_" * string(mode)
+    exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_mode_", mode)
+
+    @info "Setting up experiment configuration for experiment: $exp_name"
 
     if mode == "light"
-        EXPERIMENT_CONFIG = ExperimentConfig(
+        config = ExperimentConfig(
             num_episodes=10,
             steps_per_episode=52,
             log_space=log_space,
@@ -160,9 +181,13 @@ function setup_configs(experiment_name, log_space, skew=false, mode="light")
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
+            lambda_values=[0.4, 0.6],
+            sarsop_max_time=5.0,
+            VI_max_iterations=10,
+            QMDP_max_iterations=10,
         )
     elseif mode == "debug"
-        EXPERIMENT_CONFIG = ExperimentConfig(
+        config = ExperimentConfig(
             num_episodes=1,
             steps_per_episode=20,
             log_space=log_space,
@@ -176,7 +201,7 @@ function setup_configs(experiment_name, log_space, skew=false, mode="light")
             QMDP_max_iterations=10,
         )
     elseif mode == "full"
-        EXPERIMENT_CONFIG = ExperimentConfig(
+        config = ExperimentConfig(
             num_episodes=10,
             steps_per_episode=52,
             log_space=log_space,
@@ -187,32 +212,52 @@ function setup_configs(experiment_name, log_space, skew=false, mode="light")
         )
     end
         
-
-    # Define heuristic configuration
-    HEURISTIC_CONFIG = HeuristicConfig(
-        raw_space_threshold=EXPERIMENT_CONFIG.heuristic_threshold,
-        belief_threshold=EXPERIMENT_CONFIG.heuristic_belief_threshold,
-        rho=EXPERIMENT_CONFIG.heuristic_rho
+    heuristic_config = HeuristicConfig(
+        raw_space_threshold=config.heuristic_threshold,
+        belief_threshold=config.heuristic_belief_threshold,
+        rho=config.heuristic_rho
     )
 
-    # Write EXPERIMENT_CONFIG to file
-    mkpath(joinpath(EXPERIMENT_CONFIG.data_dir, "config"))
-    @save joinpath(EXPERIMENT_CONFIG.data_dir, "config", "experiment_config.jld2") EXPERIMENT_CONFIG
-    open(joinpath(EXPERIMENT_CONFIG.data_dir, "config", "experiment_config.txt"), "w") do io
-        for field in fieldnames(typeof(EXPERIMENT_CONFIG))
-            value = getfield(EXPERIMENT_CONFIG, field)
-            println(io, "$field: $value")
-        end
-    end
-
-    return EXPERIMENT_CONFIG, HEURISTIC_CONFIG
+    return config, heuristic_config
 
 end
 
+# ----------------------------
+# Define algorithms
+# ----------------------------
+function define_algorithms(config, heuristic_config)
+
+    @info "Defining solvers"
+    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.sarsop_max_time, verbose=false)
+    nus_sarsop_solver = SARSOP.SARSOPSolver(
+        timeout=config.sarsop_max_time,
+        verbose=false,
+        policy_filename=joinpath(config.policies_dir, "NUS_SARSOP_Policy/policy.out"),
+        pomdp_filename=joinpath(config.experiment_dir, "pomdp_mdp/pomdp.pomdpx")
+    )
+    vi_solver = ValueIterationSolver(max_iterations=config.VI_max_iterations)
+    qmdp_solver = QMDPSolver(max_iterations=config.QMDP_max_iterations)
+
+    @info "Defining algorithms"
+    algorithms = [
+        Algorithm(solver_name="NeverTreat_Policy"),
+        Algorithm(solver_name="AlwaysTreat_Policy"),
+        Algorithm(solver_name="Random_Policy"),
+        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
+        Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
+        Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
+        Algorithm(solver=vi_solver, solver_name="VI_Policy"),
+        Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
+    ]
+    return algorithms
+end
+
+
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    run_algorithms_flag = true
+    first_step_flag = "solve" # "solve", "simulate", "plot"
     log_space_flag = true
+    skew_flag = false
     experiment_name_flag = "exp"
     mode_flag = "light"
 
@@ -221,14 +266,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
             global experiment_name_flag = split(arg, "=")[2]
         elseif occursin("--mode=", arg)
             global mode_flag = split(arg, "=")[2]
-        elseif arg == "--no-run_algorithms"
-            global run_algorithms_flag = false
-        elseif arg == "--no-log_space"
+        elseif occursin("--first_step=", arg)
+            global first_step_flag = String(split(arg, "=")[2])
+        elseif arg == "--raw_space"
             global log_space_flag = false
         end
     end
 
-    println("Running with mode: $mode_flag")
+    @info "Running with mode: $mode_flag, log_space: $log_space_flag, skew: $skew_flag, experiment_name: $experiment_name_flag"
 
-    main(run_algorithms=run_algorithms_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, skew=skew_flag)
 end
