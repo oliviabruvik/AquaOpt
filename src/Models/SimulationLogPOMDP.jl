@@ -78,11 +78,12 @@ end
 function POMDPs.reward(pomdp::SeaLiceLogSimMDP, s::SeaLiceLogState, a::Action)
     # Convert log lice level back to actual lice level for penalty calculation
     lice_level = exp(s.SeaLiceLevel)
-    if lice_level > 0.5
-        lice_penalty = 1000.0
-    else
-        lice_penalty = pomdp.lambda * lice_level
-    end
+    # if lice_level > 0.5
+    #     lice_penalty = 1000.0
+    # else
+    #     lice_penalty = pomdp.lambda * lice_level
+    # end
+    lice_penalty = pomdp.lambda * lice_level
     treatment_penalty = a == Treatment ? (1 - pomdp.lambda) * pomdp.costOfTreatment : 0.0
     return - (lice_penalty + treatment_penalty)
 end

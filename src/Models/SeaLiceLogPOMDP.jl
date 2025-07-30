@@ -1,7 +1,7 @@
-using DataFrames
-import Distributions: Normal, Uniform, SkewNormal
-using JLD2
+include("../Utils/Utils.jl")
 
+using DataFrames
+using JLD2
 using POMDPs
 using QuickPOMDPs
 using POMDPTools
@@ -12,8 +12,6 @@ using POMDPLinter
 using Distributions
 using Parameters
 using Discretizers
-
-include("../Utils/Utils.jl")
 
 # -------------------------
 # State, Observation, Action
@@ -53,7 +51,7 @@ end
     # Log space
     min_log_lice_level::Float64 = log(min_lice_level)
     max_log_lice_level::Float64 = log(max_lice_level)
-    log_discretization_step::Float64 = 0.005  # Reduced from 0.01 for finer granularity
+    log_discretization_step::Float64 = 0.1 # 0.005  # Reduced from 0.01 for finer granularity
     initial_range::Vector{Float64} = collect(range(min_log_initial_level, stop=max_log_initial_level, step=log_discretization_step))
     log_sea_lice_range::Vector{Float64} = collect(range(min_log_lice_level, stop=max_log_lice_level, step=log_discretization_step))
 end
@@ -98,6 +96,8 @@ end
 # -------------------------
 function POMDPs.transition(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action)
 
+    # @info "Transition"
+
     # Calculate the mean of the transition distribution
     μ = log(1 - (a == Treatment ? mdp.rho : 0.0)) + mdp.growthRate + s.SeaLiceLevel
 
@@ -136,11 +136,12 @@ end
 function POMDPs.reward(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action)
     # Convert log lice level back to actual lice level for penalty calculation
     lice_level = exp(s.SeaLiceLevel)
-    if lice_level > 0.5
-        lice_penalty = 1000.0
-    else
-        lice_penalty = mdp.lambda * lice_level
-    end 
+    # if lice_level > 0.5
+    #     lice_penalty = 1000.0
+    # else
+    #     lice_penalty = mdp.lambda * lice_level
+    # end 
+    lice_penalty = mdp.lambda * lice_level
     treatment_penalty = a == Treatment ? (1 - mdp.lambda) * mdp.costOfTreatment : 0.0
     return -(lice_penalty + treatment_penalty)
 end

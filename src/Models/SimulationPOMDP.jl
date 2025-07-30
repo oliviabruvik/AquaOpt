@@ -40,9 +40,9 @@ end
 	rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
     skew::Bool = false
-    sea_lice_bounds::Tuple{Float64, Float64} = (0.0, 10.0)
-    initial_bounds::Tuple{Float64, Float64} = (0.0, 1.0)
-    sea_lice_initial_mean::Float64 = 1.0
+    sea_lice_bounds::Tuple{Float64, Float64} = (0.0, 30.0)
+    initial_bounds::Tuple{Float64, Float64} = (0.0, 0.25)
+    sea_lice_initial_mean::Float64 = 0.125
     sampling_sd::Float64 = 0.5
     rng::AbstractRNG = Random.GLOBAL_RNG
     normal_dist::Distribution = Normal(0, sampling_sd)
@@ -73,6 +73,11 @@ function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::SeaLiceState)
 end
 
 function POMDPs.reward(pomdp::SeaLiceSimMDP, s::SeaLiceState, a::Action)
+    # if s.SeaLiceLevel > 0.5
+    #     lice_penalty = 1000.0
+    # else
+    #     lice_penalty = pomdp.lambda * s.SeaLiceLevel
+    # end
     lice_penalty = pomdp.lambda * s.SeaLiceLevel
     treatment_penalty = a == Treatment ? (1 - pomdp.lambda) * pomdp.costOfTreatment : 0.0
     return - (lice_penalty + treatment_penalty)
