@@ -45,6 +45,7 @@ end
 # ----------------------------
 function simulate_policies(algorithms, config)
     @info "Simulating policies"
+    simulate_all_policies(algorithms, config)
     for algo in algorithms
         println("Simulating $(algo.solver_name)")
         histories = simulate_policy(algo, config)
@@ -87,7 +88,12 @@ function plot_results(algorithms, config)
         plot_treatment_heatmap(algo, config)
 
         # Plot simulation treatment heatmap
-        plot_simulation_treatment_heatmap(algo, config; use_observations=false, n_bins=50)
+        # plot_simulation_treatment_heatmap(algo, config; use_observations=false, n_bins=50)
+
+        if algo.solver_name == "NUS_SARSOP_Policy"
+            plot_nus_sarsop_sealice_levels_over_time(config, 0.6)
+            plot_nus_sarsop_adult_predicted_over_time(config, 0.6)
+        end
 
     end
     
@@ -100,7 +106,7 @@ function plot_results(algorithms, config)
     plot_policy_reward_over_lambdas(config)
 
     # Generate Pareto frontier
-    plot_pareto_frontier(config)
+    # plot_pareto_frontier(config)
 
     @info "Saved all plots to $(config.figures_dir)"
 end
@@ -244,7 +250,7 @@ function define_algorithms(config, heuristic_config)
         Algorithm(solver_name="AlwaysTreat_Policy"),
         Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
-        Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
+        # Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),

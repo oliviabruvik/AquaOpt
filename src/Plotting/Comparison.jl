@@ -6,35 +6,45 @@ plotlyjs()  # Set the backend to PlotlyJS
 # Plot 2: Cost vs Sea Lice for one policy
 # ----------------------------
 function plot_policy_cost_vs_sealice(histories, avg_results, title, config)
+
     # Calculate confidence intervals for each lambda
-    lambda_values = histories.lambda
+    lambda_values = collect(keys(histories))
     mean_costs = Float64[]
     mean_sealice = Float64[]
     cost_ci_lower = Float64[]
     cost_ci_upper = Float64[]
     sealice_ci_lower = Float64[]
     sealice_ci_upper = Float64[]
-    
-    for i in 1:length(lambda_values)
+    plotted_lambdas = Float64[]
+
+    for λ in config.lambda_values
+
         # Get episode-level data
-        action_hists = histories.action_hists[i]
-        state_hists = histories.state_hists[i]
+        histories_lambda = histories[λ]
         
         # Calculate treatment costs for each episode
         episode_costs = Float64[]
         episode_sealice = Float64[]
         
-        for j in 1:length(action_hists)
+        for episode in 1:config.num_episodes
+
+            # Get episode history
+            episode_history = histories_lambda[episode]
+
+            # Get action, state, and reward histories
+            actions = collect(action_hist(episode_history))
+            states = collect(state_hist(episode_history))
+            rewards = collect(reward_hist(episode_history))
+            
             # Episode treatment cost
-            episode_cost = sum(a == Treatment for a in action_hists[j]) * config.costOfTreatment
-            episode_cost_per_step = episode_cost / config.steps_per_episode
-            push!(episode_costs, episode_cost_per_step)
+            episode_cost = sum(a == Treatment for a in actions) * config.costOfTreatment
+            push!(episode_costs, episode_cost)
             
             # Episode sea lice level
             if config.log_space
-                episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in state_hists[j])
+                episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in states)
             else
-                episode_avg_sealice = mean(s.SeaLiceLevel for s in state_hists[j])
+                episode_avg_sealice = mean(s.SeaLiceLevel for s in states)
             end
             push!(episode_sealice, episode_avg_sealice)
         end
@@ -57,13 +67,21 @@ function plot_policy_cost_vs_sealice(histories, avg_results, title, config)
         push!(cost_ci_upper, mean_cost + cost_ci_margin)
         push!(sealice_ci_lower, mean_lice - lice_ci_margin)
         push!(sealice_ci_upper, mean_lice + lice_ci_margin)
+        push!(plotted_lambdas, λ)
         
-        # Verify our calculation matches the stored average
-        if abs(mean_cost - avg_results.avg_treatment_cost[i]) > 1e-10
-            @warn "Calculated mean cost ($mean_cost) doesn't match stored average ($(avg_results.avg_treatment_cost[i])) for λ=$(lambda_values[i])"
-        end
-        if abs(mean_lice - avg_results.avg_sealice[i]) > 1e-10
-            @warn "Calculated mean sea lice ($mean_lice) doesn't match stored average ($(avg_results.avg_sealice[i])) for λ=$(lambda_values[i])"
+        # Find the corresponding row in avg_results for this lambda
+        avg_row = avg_results[avg_results.lambda .== λ, :]
+        if !isempty(avg_row)
+            stored_cost = avg_row.avg_treatment_cost[1]
+            stored_lice = avg_row.avg_sealice[1]
+            
+            # Verify our calculation matches the stored average
+            if abs(mean_cost - stored_cost) > 1e-10
+                @warn "Calculated mean cost ($mean_cost) doesn't match stored average ($stored_cost) for λ=$λ"
+            end
+            if abs(mean_lice - stored_lice) > 1e-10
+                @warn "Calculated mean sea lice ($mean_lice) doesn't match stored average ($stored_lice) for λ=$λ"
+            end
         end
     end
 
@@ -81,7 +99,7 @@ function plot_policy_cost_vs_sealice(histories, avg_results, title, config)
         p,
         mean_costs,
         mean_sealice,
-        marker_z=lambda_values,
+        marker_z=plotted_lambdas,
         marker=:circle,
         markersize=8,
         c=:viridis,
@@ -137,7 +155,7 @@ function plot_all_cost_vs_sealice(config)
     # Define colors for each policy
     policy_colors = Dict(
         "VI_Policy" => :red,
-        "SARSOP_Policy" => :green,
+        "NUS_SARSOP_Policy" => :green,
         "QMDP_Policy" => :purple,
         "Heuristic_Policy" => :blue,
         "Random_Policy" => :orange,
@@ -153,7 +171,7 @@ function plot_all_cost_vs_sealice(config)
             @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
             
             # Calculate confidence intervals for each lambda
-            lambda_values = avg_results.lambda
+            lambda_values = config.lambda_values
             mean_costs = Float64[]
             mean_sealice = Float64[]
             cost_ci_lower = Float64[]
@@ -161,26 +179,31 @@ function plot_all_cost_vs_sealice(config)
             sealice_ci_lower = Float64[]
             sealice_ci_upper = Float64[]
             
-            for i in 1:length(lambda_values)
+            for λ in config.lambda_values
                 # Get episode-level data
-                action_hists = histories.action_hists[i]
-                state_hists = histories.state_hists[i]
+                histories_lambda = histories[λ]
                 
                 # Calculate treatment costs for each episode
                 episode_costs = Float64[]
                 episode_sealice = Float64[]
                 
-                for j in 1:length(action_hists)
+                for episode in 1:config.num_episodes
+                    # Get episode history
+                    episode_history = histories_lambda[episode]
+
+                    # Get action, state, and reward histories
+                    actions = collect(action_hist(episode_history))
+                    states = collect(state_hist(episode_history))
+
                     # Episode treatment cost
-                    episode_cost = sum(a == Treatment for a in action_hists[j]) * config.costOfTreatment
-                    episode_cost_per_step = episode_cost / config.steps_per_episode
-                    push!(episode_costs, episode_cost_per_step)
+                    episode_cost = sum(a == Treatment for a in actions) * config.costOfTreatment
+                    push!(episode_costs, episode_cost)
                     
                     # Episode sea lice level
                     if config.log_space
-                        episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in state_hists[j])
+                        episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in states)
                     else
-                        episode_avg_sealice = mean(s.SeaLiceLevel for s in state_hists[j])
+                        episode_avg_sealice = mean(s.SeaLiceLevel for s in states)
                     end
                     push!(episode_sealice, episode_avg_sealice)
                 end
@@ -278,7 +301,7 @@ function plot_policy_sealice_levels_over_lambdas(config)
     policy_styles = Dict(
         "Heuristic_Policy" => (color=:blue, marker=:circle),
         "VI_Policy" => (color=:red, marker=:square),
-        "SARSOP_Policy" => (color=:green, marker=:diamond),
+        "NUS_SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
         # "NeverTreat_Policy" => (color=:black, marker=:star),
@@ -298,17 +321,18 @@ function plot_policy_sealice_levels_over_lambdas(config)
             ci_lower = Float64[]
             ci_upper = Float64[]
             
-            for i in 1:length(lambda_values)
-                state_hists = histories.state_hists[i]
-                
+            for (i, λ) in enumerate(config.lambda_values)
+                histories_lambda = histories[λ]
+
                 # Calculate sea lice level for each episode
                 episode_sealice = Float64[]
-                for episode_states in state_hists
-                    # Handle both regular and log space states
+                for episode in 1:config.num_episodes
+                    episode_history = histories_lambda[episode]
+                    states = collect(state_hist(episode_history))
                     if config.log_space
-                        episode_avg = mean(exp(s.SeaLiceLevel) for s in episode_states)
+                        episode_avg = mean(exp(s.SeaLiceLevel) for s in states)
                     else
-                        episode_avg = mean(s.SeaLiceLevel for s in episode_states)
+                        episode_avg = mean(s.SeaLiceLevel for s in states)
                     end
                     push!(episode_sealice, episode_avg)
                 end
@@ -369,7 +393,7 @@ function plot_policy_treatment_cost_over_lambdas(config)
     policy_styles = Dict(
         "Heuristic_Policy" => (color=:blue, marker=:circle),
         "VI_Policy" => (color=:red, marker=:square),
-        "SARSOP_Policy" => (color=:green, marker=:diamond),
+        "NUS_SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
         # "NeverTreat_Policy" => (color=:black, marker=:star),
@@ -389,15 +413,16 @@ function plot_policy_treatment_cost_over_lambdas(config)
             ci_lower = Float64[]
             ci_upper = Float64[]
             
-            for i in 1:length(lambda_values)
-                action_hists = histories.action_hists[i]
+            for (i, λ) in enumerate(config.lambda_values)
+                histories_lambda = histories[λ]
                 
                 # Calculate treatment cost for each episode
                 episode_costs = Float64[]
-                for episode_actions in action_hists
-                    episode_cost = sum(a == Treatment for a in episode_actions) * config.costOfTreatment
-                    episode_cost_per_step = episode_cost / config.steps_per_episode
-                    push!(episode_costs, episode_cost_per_step)
+                for episode in 1:config.num_episodes
+                    episode_history = histories_lambda[episode]
+                    actions = collect(action_hist(episode_history))
+                    episode_cost = sum(a == Treatment for a in actions) * config.costOfTreatment
+                    push!(episode_costs, episode_cost)
                 end
                 
                 # Calculate mean and 95% CI
@@ -456,7 +481,7 @@ function plot_policy_reward_over_lambdas(config)
     policy_styles = Dict(
         "Heuristic_Policy" => (color=:blue, marker=:circle),
         "VI_Policy" => (color=:red, marker=:square),
-        "SARSOP_Policy" => (color=:green, marker=:diamond),
+        "NUS_SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle),
         "Random_Policy" => (color=:orange, marker=:rect),
         # "NeverTreat_Policy" => (color=:black, marker=:star),
@@ -471,15 +496,15 @@ function plot_policy_reward_over_lambdas(config)
             histories_filename = "$(policy_name)_histories"
             @load joinpath(histories_dir, "$(histories_filename).jld2") histories
 
-            lambda_values = config.lambda_values
             mean_rewards = Float64[]
             ci_lower = Float64[]
             ci_upper = Float64[]
+            lambda_values = config.lambda_values
             
-            for λ in lambda_values
+            for λ in config.lambda_values
                 try
                     # Load simulation histories for this lambda
-                    histories_lambda = histories[histories.lambda .== λ, :]
+                    histories_lambda = histories[λ]
                     if isempty(histories_lambda)
                         @warn "No histories found for λ=$λ"
                         push!(mean_rewards, NaN)
@@ -487,14 +512,20 @@ function plot_policy_reward_over_lambdas(config)
                         push!(ci_upper, NaN)
                         continue
                     end
-                    
-                    # Extract total rewards for all episodes
-                    r_total_hists = histories_lambda.r_total_hists[1]
+
+                    episode_rewards = Float64[]
+
+                    for episode in 1:config.num_episodes
+                        episode_history = histories_lambda[episode]
+                        rewards = collect(reward_hist(episode_history))
+                        episode_reward = mean(rewards)
+                        push!(episode_rewards, episode_reward)
+                    end
                     
                     # Calculate mean and 95% CI
-                    mean_reward = mean(r_total_hists)
-                    std_reward = std(r_total_hists)
-                    n_episodes = length(r_total_hists)
+                    mean_reward = mean(episode_rewards)
+                    std_reward = std(episode_rewards)
+                    n_episodes = length(episode_rewards)
                     se_reward = std_reward / sqrt(n_episodes)  # Standard error
                     ci_margin = 1.96 * se_reward  # 95% CI margin
                     
@@ -556,7 +587,7 @@ function plot_pareto_frontier(config)
     policy_styles = Dict(
         "Heuristic_Policy" => (color=:blue, marker=:circle),
         "VI_Policy" => (color=:red, marker=:square),
-        "SARSOP_Policy" => (color=:green, marker=:diamond),
+        "NUS_SARSOP_Policy" => (color=:green, marker=:diamond),
         "QMDP_Policy" => (color=:purple, marker=:dtriangle)
     )
 
