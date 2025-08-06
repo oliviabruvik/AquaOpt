@@ -222,7 +222,7 @@ end
 function POMDPs.action(policy::AdaptorPolicy, b)
 
     # Predict the next state
-    pred_sessile, pred_motile, pred_adult = predict_next_lice(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1])
+    pred_adult, pred_motile, pred_sessile = predict_next_lice(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1])
     adult_sd = sqrt(b.Σ[1,1])
 
     # Get next action from policy

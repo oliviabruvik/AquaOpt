@@ -23,9 +23,9 @@ end
 # ----------------------------
 # Plot 2: Time series of belief means and variances
 # Creates 6 plots:
-# 1. Belief means with ribbon and true values for each observation variable (Adult, Sessile, Motile, Temperature) *4 plots*
+# 1. Belief means with ribbon and true values for each observation variable (Adult, Motile, Sessile, Temperature) *4 plots*
 # 2. Belief variances over time, overlay of all observation variables *1 plot*
-# 3. Side-by-side plot of belief means and variances for each observation variable (Adult, Sessile, Motile) *1 plot*
+# 3. Side-by-side plot of belief means and variances for each observation variable (Adult, Motile, Sessile) *1 plot*
 # Inputs:
 # - data: DataFrame with simulation data
 # - algo_name: String, name of the algorithm
@@ -60,19 +60,19 @@ function plot_beliefs_over_time(data, algo_name, config, lambda)
     states = state_hist(history)
     states_df = DataFrame(
         Adult = [s.Adult for s in states],
-        Sessile = [s.Sessile for s in states],
         Motile = [s.Motile for s in states],
+        Sessile = [s.Sessile for s in states],
         Temperature = [s.Temperature for s in states]
     )
     actions = action_hist(history)
     actions = [a == Treatment ? "T" : "N" for a in actions]
 
-    labels = ["Adult", "Sessile", "Motile", "Temperature"]
+    labels = ["Adult", "Motile", "Sessile", "Temperature"]
     colors = [:blue, :green, :orange, :purple]
 
     belief_plots = []
 
-    # Plot 1–3: Adult, Sessile, Motile
+    # Plot 1–3: Adult, Motile, Sessile
     for i in 1:3
         belief_plot = plot(
             belief_means[:, i],

@@ -30,15 +30,15 @@ function initialize_belief(sim_pomdp, config)
         return (
             # TODO: fix this for log space
             Normal(sim_pomdp.log_lice_initial_mean, sim_pomdp.sampling_sd), # adult
-            Normal(sim_pomdp.sessile_mean, sim_pomdp.sessile_sd), # sessile
             Normal(sim_pomdp.motile_mean, sim_pomdp.motile_sd), # motile
+            Normal(sim_pomdp.sessile_mean, sim_pomdp.sessile_sd), # sessile
             Normal(temperature_model(sim_pomdp.production_start_week), sim_pomdp.sampling_sd) # temperature
         )
     else
         return (
             sim_pomdp.adult_mean + sim_pomdp.adult_dist,
-            sim_pomdp.sessile_mean + sim_pomdp.sessile_dist,
             sim_pomdp.motile_mean + sim_pomdp.motile_dist,
+            sim_pomdp.sessile_mean + sim_pomdp.sessile_dist,
             temperature_model(sim_pomdp.production_start_week) + sim_pomdp.temp_dist,
         )
     end
@@ -76,11 +76,11 @@ function create_sim_pomdp(config, λ)    # TODO: fix this for log space
             skew=config.skew,
             # SimPOMDP parameters
             adult_mean=config.adult_mean,
-            sessile_mean=config.sessile_mean,
             motile_mean=config.motile_mean,
+            sessile_mean=config.sessile_mean,
             adult_sd=config.adult_sd,
-            sessile_sd=config.sessile_sd,
             motile_sd=config.motile_sd,
+            sessile_sd=config.sessile_sd,
             temp_sd=config.temp_sd,
         )
     end
@@ -146,8 +146,6 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
 
     # Run simulation for each episode
     for episode in 1:config.num_episodes
-
-        # println("\n Running episode $(episode) of $(algorithm) with process_noise $(sim_pomdp.adult_sd), $(sim_pomdp.sessile_sd), $(sim_pomdp.motile_sd), $(sim_pomdp.temp_sd)")
 
         # Get initial belief from initial mean and sampling sd
         initial_belief = initialize_belief(sim_pomdp, config)

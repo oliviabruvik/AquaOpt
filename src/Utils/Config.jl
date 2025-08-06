@@ -25,11 +25,11 @@ using Parameters
 
     # SimPOMDP parameters
     adult_mean::Float64 = 0.125
-    sessile_mean::Float64 = 0.5
     motile_mean::Float64 = 0.5
+    sessile_mean::Float64 = 0.5
     adult_sd::Float64 = 0.05
-    sessile_sd::Float64 = 0.1
     motile_sd::Float64 = 0.1
+    sessile_sd::Float64 = 0.1
     temp_sd::Float64 = 0.3
 
     # Algorithm parameters

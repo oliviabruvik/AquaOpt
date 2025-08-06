@@ -20,8 +20,8 @@ using Random
 struct EvaluationState
 	SeaLiceLevel::Float64 # The predicted adult sea lice level the following week (without treatment)
     Adult::Float64 # The adult sea lice level this week
-    Sessile::Float64 # The sessile sea lice level this week
     Motile::Float64 # The motile sea lice level this week
+    Sessile::Float64 # The sessile sea lice level this week
     Temperature::Float64 # The mean temperature (°C) over the last 7 days at the farm (based on approximately daily measurements)
     ProductionWeek::Int64 # The number of weeks since production start
     AnnualWeek::Int64 # The week of the year
@@ -31,8 +31,8 @@ end
 struct EvaluationObservation
 	SeaLiceLevel::Float64 # The observed predicted adult sea lice level the following week (without treatment)
     Adult::Float64 # The observed adult sea lice level this week
-    Sessile::Float64 # The observed sessile sea lice level this week
     Motile::Float64 # The observed motile sea lice level this week
+    Sessile::Float64 # The observed sessile sea lice level this week
     Temperature::Float64 # The observed mean temperature (°C) over the last 7 days at the farm (based on approximately daily measurements)
     ProductionWeek::Int64 # The number of weeks since production start
     AnnualWeek::Int64 # The week of the year
@@ -63,15 +63,15 @@ end
     motile_mean::Float64 = 0.1
 
     # Transition and Observation Noise
-    sessile_sd::Float64 = 0.1
-    motile_sd::Float64 = 0.1
     adult_sd::Float64 = 0.1
+    motile_sd::Float64 = 0.1
+    sessile_sd::Float64 = 0.1
     temp_sd::Float64 = 0.1
 
     # Distributions
-    sessile_dist::Distribution = Normal(0, sessile_sd)
-    motile_dist::Distribution = Normal(0, motile_sd)
     adult_dist::Distribution = Normal(0, adult_sd)
+    motile_dist::Distribution = Normal(0, motile_sd)
+    sessile_dist::Distribution = Normal(0, sessile_sd)
     temp_dist::Distribution = Normal(0, temp_sd)
     skew_adult_dist::Distribution = SkewNormal(0, adult_sd, 2.0)
 
@@ -131,7 +131,7 @@ function predict_next_lice(adult::Float64, motile::Float64, sessile::Float64, te
     pred_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
     pred_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
 
-    return pred_sessile, pred_motile, pred_adult
+    return pred_adult, pred_motile, pred_sessile
 end
 
 # -------------------------
@@ -147,7 +147,7 @@ function POMDPs.transition(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
         next_temp = temperature_model(s.AnnualWeek)
 
         # Predict the next adult sea lice level based on the current state and temperature
-        next_sessile, next_motile, next_adult = predict_next_lice(s.Adult, s.Motile, s.Sessile, next_temp)
+        next_adult, next_motile, next_sessile = predict_next_lice(s.Adult, s.Motile, s.Sessile, next_temp)
 
         # Apply treatment
         if a == Treatment
@@ -155,16 +155,16 @@ function POMDPs.transition(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
         end
 
         # Add noise
-        next_sessile = clamp(next_sessile + rand(rng, pomdp.sessile_dist), pomdp.sea_lice_bounds...)
-        next_motile = clamp(next_motile + rand(rng, pomdp.motile_dist), pomdp.sea_lice_bounds...)
         next_adult = clamp(next_adult + rand(rng, pomdp.adult_dist), pomdp.sea_lice_bounds...)
+        next_motile = clamp(next_motile + rand(rng, pomdp.motile_dist), pomdp.sea_lice_bounds...)
+        next_sessile = clamp(next_sessile + rand(rng, pomdp.sessile_dist), pomdp.sea_lice_bounds...)
         next_temp = next_temp + rand(rng, pomdp.temp_dist)
 
         return EvaluationState(
             next_adult, # SeaLiceLevel
             next_adult, # Adult
-            next_sessile, # Sessile
             next_motile, # Motile
+            next_sessile, # Sessile
             next_temp, # Temperature
             s.ProductionWeek + 1, # ProductionWeek
             (s.AnnualWeek + 1) % 52, # AnnualWeek
@@ -183,18 +183,18 @@ function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::EvaluationState)
         # Get observations of temperature and abundances
         observed_temperature = s.Temperature + rand(rng, pomdp.temp_dist)
         observed_adult = clamp(s.SeaLiceLevel + rand(rng, pomdp.adult_dist), pomdp.sea_lice_bounds...)
-        observed_sessile = clamp(s.Sessile + rand(rng, pomdp.sessile_dist), pomdp.sea_lice_bounds...)
         observed_motile = clamp(s.Motile + rand(rng, pomdp.motile_dist), pomdp.sea_lice_bounds...)
+        observed_sessile = clamp(s.Sessile + rand(rng, pomdp.sessile_dist), pomdp.sea_lice_bounds...)
 
         # Predict the next adult sea lice level based on the current state and temperature
-        pred_sessile, pred_motile, pred_adult = predict_next_lice(observed_adult, observed_motile, observed_sessile, observed_temperature)
+        pred_adult, pred_motile, pred_sessile = predict_next_lice(observed_adult, observed_motile, observed_sessile, observed_temperature)
         pred_adult = clamp(pred_adult, pomdp.sea_lice_bounds...)
 
         return EvaluationObservation(
             pred_adult, # SeaLiceLevel
             observed_adult, # Adult
-            observed_sessile, # Sessile
             observed_motile, # Motile
+            observed_sessile, # Sessile
             observed_temperature, # Temperature
             s.ProductionWeek, # ProductionWeek is fully observable
             s.AnnualWeek # AnnualWeek is fully observable
@@ -222,18 +222,18 @@ function POMDPs.initialstate(pomdp::SeaLiceSimMDP)
 
         # Initial sea lice level upon production start
         adult = clamp(pomdp.adult_mean + rand(rng, pomdp.adult_dist), pomdp.initial_bounds...)
-        sessile = clamp(pomdp.sessile_mean + rand(rng, pomdp.sessile_dist), pomdp.initial_bounds...)
         motile  = clamp(pomdp.motile_mean + rand(rng, pomdp.motile_dist), pomdp.initial_bounds...)
+        sessile = clamp(pomdp.sessile_mean + rand(rng, pomdp.sessile_dist), pomdp.initial_bounds...)
 
         # Next week's predicted adult sea lice level
-        pred_sessile, pred_motile, pred_adult = predict_next_lice(adult, motile, sessile, temperature)
+        pred_adult, pred_motile, pred_sessile = predict_next_lice(adult, motile, sessile, temperature)
         pred_adult = clamp(pred_adult, pomdp.sea_lice_bounds...)
 
         return EvaluationState(
             pred_adult, # Predicted adult sea lice level the following week
             adult, # Adult
-            sessile, # Sessile
             motile, # Motile
+            sessile, # Sessile
             temperature, # Temperature
             1, # ProductionWeek
             pomdp.production_start_week, # AnnualWeek
