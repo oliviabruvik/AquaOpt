@@ -90,19 +90,6 @@ POMDPs.discount(mdp::SeaLiceSimMDP) = mdp.discount_factor
 POMDPs.isterminal(mdp::SeaLiceSimMDP, s::EvaluationState) = false
 
 # -------------------------
-# Development rate model: Return the expected development rate based on the temperature.
-# Based on A salmon lice prediction model, Stige et al. 2025.
-# https://www.sciencedirect.com/science/article/pii/S0167587724002915
-# -------------------------
-function d1(temperature::Float64)
-    return 1 / (1 + exp(-(-2.4 + 0.37 * (temperature - 9))))
-end
-
-function d2(temperature::Float64)
-    return 1 / (1 + exp(-(-2.1 + 0.037 * (temperature - 9))))
-end
-
-# -------------------------
 # Transition function: the current sea lice level and the predicted sea lice level the following week
 # are affected by the treatment and growth rate. The predicted sea lice level the following week will 
 # have an additional e^r term because it is a week later.
@@ -123,13 +110,19 @@ function POMDPs.transition(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
         end
 
         # Add noise
-        next_adult = clamp(next_adult + rand(rng, pomdp.adult_dist), pomdp.sea_lice_bounds...)
-        next_motile = clamp(next_motile + rand(rng, pomdp.motile_dist), pomdp.sea_lice_bounds...)
-        next_sessile = clamp(next_sessile + rand(rng, pomdp.sessile_dist), pomdp.sea_lice_bounds...)
+        next_adult = next_adult + rand(rng, pomdp.adult_dist)
+        next_motile = next_motile + rand(rng, pomdp.motile_dist)
+        next_sessile = next_sessile + rand(rng, pomdp.sessile_dist)
         next_temp = next_temp + rand(rng, pomdp.temp_dist)
 
+        # Clamp the sea lice levels to be positive and within the bounds of the SeaLicePOMDP
+        next_adult = max(next_adult, 0.0)
+        next_motile = max(next_motile, 0.0)
+        next_sessile = max(next_sessile, 0.0)
+        next_pred = clamp(next_adult, pomdp.sea_lice_bounds...)
+
         return EvaluationState(
-            next_adult, # SeaLiceLevel
+            next_pred, # SeaLiceLevel
             next_adult, # Adult
             next_motile, # Motile
             next_sessile, # Sessile
@@ -149,10 +142,10 @@ function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::EvaluationState)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
 
         # Get observations of temperature and abundances
+        observed_adult = s.Adult + rand(rng, pomdp.adult_dist)
+        observed_motile = s.Motile + rand(rng, pomdp.motile_dist)
+        observed_sessile = s.Sessile + rand(rng, pomdp.sessile_dist)
         observed_temperature = s.Temperature + rand(rng, pomdp.temp_dist)
-        observed_adult = clamp(s.SeaLiceLevel + rand(rng, pomdp.adult_dist), pomdp.sea_lice_bounds...)
-        observed_motile = clamp(s.Motile + rand(rng, pomdp.motile_dist), pomdp.sea_lice_bounds...)
-        observed_sessile = clamp(s.Sessile + rand(rng, pomdp.sessile_dist), pomdp.sea_lice_bounds...)
 
         # Predict the next adult sea lice level based on the current state and temperature
         pred_adult, pred_motile, pred_sessile = predict_next_abundances(observed_adult, observed_motile, observed_sessile, observed_temperature)
@@ -189,12 +182,17 @@ function POMDPs.initialstate(pomdp::SeaLiceSimMDP)
         temperature = get_temperature(pomdp.production_start_week) + rand(rng, pomdp.temp_dist)
 
         # Initial sea lice level upon production start
-        adult = clamp(pomdp.adult_mean + rand(rng, pomdp.adult_dist), pomdp.initial_bounds...)
-        motile  = clamp(pomdp.motile_mean + rand(rng, pomdp.motile_dist), pomdp.initial_bounds...)
-        sessile = clamp(pomdp.sessile_mean + rand(rng, pomdp.sessile_dist), pomdp.initial_bounds...)
+        adult = pomdp.adult_mean + rand(rng, pomdp.adult_dist)
+        motile  = pomdp.motile_mean + rand(rng, pomdp.motile_dist)
+        sessile = pomdp.sessile_mean + rand(rng, pomdp.sessile_dist)
 
         # Next week's predicted adult sea lice level
         pred_adult, pred_motile, pred_sessile = predict_next_abundances(adult, motile, sessile, temperature)
+
+        # Clamp the sea lice levels to be positive
+        adult = max(adult, 0.0)
+        motile = max(motile, 0.0)
+        sessile = max(sessile, 0.0)
         pred_adult = clamp(pred_adult, pomdp.sea_lice_bounds...)
 
         return EvaluationState(

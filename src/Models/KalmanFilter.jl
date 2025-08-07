@@ -33,20 +33,26 @@ function step(x, u)
     # Get the temperature
     temp = get_temperature(Int64(annual_week))
 
+    # Predict the next adult sea lice level based on the current state and temperature
+    # next_adult, next_motile, next_sessile = predict_next_abundances(adult, motile, sessile, temp)
+
     # Weekly survival probabilities from Table 1 of Stige et al. 2025.
     s1 = 0.49  # sessile
     s2 = 2.3   # sessile → motile scaling
     s3 = 0.88  # motile
     s4 = 0.61  # adult
 
-    # Development fractions
     d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))
     d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))
 
-    # Stage transitions
     next_sessile = s1 * sessile
     next_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
     next_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
+
+    # Clamp the sea lice levels to be positive
+    next_adult = max(next_adult, 0.0)
+    next_motile = max(next_motile, 0.0)
+    next_sessile = max(next_sessile, 0.0)
 
     # Apply treatment
     if treatment == 1.0
@@ -83,20 +89,24 @@ function step_log(x, u)
     motile = x_raw[2]
     sessile = x_raw[3]
 
+    # Predict the next adult sea lice level based on the current state and temperature
     # Weekly survival probabilities from Table 1 of Stige et al. 2025.
     s1 = 0.49  # sessile
     s2 = 2.3   # sessile → motile scaling
     s3 = 0.88  # motile
     s4 = 0.61  # adult
 
-    # Development fractions
     d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))
     d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))
 
-    # Stage transitions
     next_sessile = s1 * sessile
     next_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
     next_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
+
+    # Clamp the sea lice levels to be positive
+    next_adult = max(next_adult, 0.0)
+    next_motile = max(next_motile, 0.0)
+    next_sessile = max(next_sessile, 0.0)
 
     # Apply treatment
     if treatment == 1.0

@@ -20,6 +20,8 @@ include("../../src/Algorithms/Policies.jl")
 
 # ----------------------------
 # Initialize belief function
+# We need an initial belief for the simulation because our state
+# and observation variables are different.
 # ----------------------------
 function initialize_belief(sim_pomdp, config)
     """
@@ -36,10 +38,10 @@ function initialize_belief(sim_pomdp, config)
         )
     else
         return (
-            sim_pomdp.adult_mean + sim_pomdp.adult_dist,
-            sim_pomdp.motile_mean + sim_pomdp.motile_dist,
-            sim_pomdp.sessile_mean + sim_pomdp.sessile_dist,
-            get_temperature(sim_pomdp.production_start_week) + sim_pomdp.temp_dist,
+            sim_pomdp.adult_mean + sim_pomdp.adult_dist, # adult
+            sim_pomdp.motile_mean + sim_pomdp.motile_dist, # motile
+            sim_pomdp.sessile_mean + sim_pomdp.sessile_dist, # sessile
+            get_temperature(sim_pomdp.production_start_week) + sim_pomdp.temp_dist, # temperature
         )
     end
 end
@@ -147,10 +149,11 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     # Run simulation for each episode
     for episode in 1:config.num_episodes
 
-        # Get initial belief from initial mean and sampling sd
+        # Get initial belief and state
         initial_belief = initialize_belief(sim_pomdp, config)
+        initial_state = rand(initialstate(sim_pomdp))
 
-        hist = simulate(hr, sim_pomdp, policy, updater, initial_belief, rand(initialstate(sim_pomdp)))
+        hist = simulate(hr, sim_pomdp, policy, updater, initial_belief, initial_state)
         push!(histories, hist)
     end
 
@@ -175,9 +178,6 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
     kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
     updater = KalmanUpdater(kf)
 
-    # Get initial belief from initial mean and sampling sd
-    initial_belief = initialize_belief(sim_pomdp, config)
-
     # Create the list of Sim objects
     sim_list = []
 
@@ -185,13 +185,17 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
     for sim_number in 1:config.num_episodes
         seed = starting_seed + sim_number
 
+        # Get initial belief and state
+        initial_belief = initialize_belief(sim_pomdp, config)
+        initial_state = rand(initialstate(sim_pomdp))
+
         # Create Sim object following POMDPs.jl documentation format with custom updater
         push!(sim_list, Sim(
             sim_pomdp,           # POMDP
             policy,              # Policy
             updater,             # Custom updater
             initial_belief,      # Initial belief
-            rand(initialstate(sim_pomdp));  # Initial state
+            initial_state;       # Initial state
             rng=MersenneTwister(seed),
             max_steps=config.steps_per_episode,
             metadata=Dict(:policy => algorithm.solver_name, :lambda => pomdp.lambda, :seed => sim_number)
@@ -240,9 +244,6 @@ function simulate_all_policies(algorithms, config)
         kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
         updater = KalmanUpdater(kf)
 
-        # Get initial belief from initial mean and sampling sd
-        initial_belief = initialize_belief(sim_pomdp, config)
-
         # Load policy, pomdp, and mdp
         for algo in algorithms
             policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
@@ -255,13 +256,17 @@ function simulate_all_policies(algorithms, config)
             for sim_number in 1:config.num_episodes
                 seed = starting_seed + sim_number
 
+                # Get initial belief and state
+                initial_belief = initialize_belief(sim_pomdp, config)
+                initial_state = rand(initialstate(sim_pomdp))
+
                 # Create Sim object following POMDPs.jl documentation format with custom updater
                 push!(sim_list, Sim(
-                    sim_pomdp,           # POMDP
-                    adaptor_policy,              # Policy
-                    updater,             # Custom updater
-                    initial_belief,      # Initial belief
-                    rand(initialstate(sim_pomdp));  # Initial state
+                    sim_pomdp,                      # POMDP
+                    adaptor_policy,                 # Policy
+                    updater,                        # Custom updater
+                    initial_belief,                 # Initial belief
+                    initial_state;                  # Initial state
                     rng=MersenneTwister(seed),
                     max_steps=config.steps_per_episode,
                     metadata=Dict(:policy => algo.solver_name, :lambda => pomdp.lambda, :seed => sim_number)
