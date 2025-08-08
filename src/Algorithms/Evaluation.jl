@@ -50,7 +50,7 @@ function evaluate_simulation_results(config, algorithm, histories)
             episode_cost = sum(a == Treatment for a in actions) * config.costOfTreatment
             
             # Get mean abundance
-            episode_abundance = config.log_space ? mean(exp(s.SeaLiceLevel) for s in states) : mean(s.SeaLiceLevel for s in states)
+            episode_abundance = mean(s.SeaLiceLevel for s in states)
 
             # Get mean reward
             episode_reward = mean(rewards)
@@ -116,8 +116,6 @@ function print_histories(data, config)
 
                 # Get histories for this seed
                 data_seed = filter(row -> row.seed == seed, data_lambda)
-
-                println("Policy: $policy, Lambda: $lambda, Seed: $seed")
                 h = data_seed.history[1]
                 episode = 1
 

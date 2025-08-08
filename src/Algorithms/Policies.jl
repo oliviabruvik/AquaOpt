@@ -216,6 +216,7 @@ end
 # ----------------------------
 struct AdaptorPolicy <: Policy
     lofi_policy::Policy
+    pomdp::POMDP
 end
 
 # Adaptor action
@@ -225,10 +226,23 @@ function POMDPs.action(policy::AdaptorPolicy, b)
     pred_adult, pred_motile, pred_sessile = predict_next_abundances(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1])
     adult_sd = sqrt(b.Σ[1,1])
 
+    # Clamp predictions to be positive
+    pred_adult = max(pred_adult, 1e-3)
+
+    if policy.pomdp isa SeaLiceLogMDP
+        pred_adult = log(pred_adult)
+        adult_sd = abs(log(adult_sd))
+    end
+
     # Get next action from policy
     # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
     if policy.lofi_policy isa ValueIterationPolicy
-        return action(policy.lofi_policy, SeaLiceState(pred_adult))
+        if policy.pomdp isa SeaLiceLogMDP
+            pred_adult = SeaLiceLogState(pred_adult)
+        else
+            pred_adult = SeaLiceState(pred_adult)
+        end
+        return action(policy.lofi_policy, pred_adult)
     end
 
     # Discretize alpha vectors (representation of utility over belief states per action)

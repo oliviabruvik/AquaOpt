@@ -40,6 +40,7 @@ function plot_treatment_heatmap(algorithm, config)
                 y_vals = [s.SeaLiceLevel for s in states]
             end
         end
+        
 
         function getAction(s, policy)
             if typeof(policy) <: ValueIterationPolicy
@@ -144,18 +145,10 @@ function plot_simulation_treatment_heatmap(algorithm, config; use_observations=f
                 # Convert states to sea lice levels
                 if use_observations
                     # Use measurements instead of states if requested
-                    sea_lice_levels = if config.log_space
-                        [exp(o.SeaLiceLevel) for o in observations]
-                    else
-                        [o.SeaLiceLevel for o in observations]
-                    end
+                    sea_lice_levels = [o.SeaLiceLevel for o in observations]
                 else
                     # Use actual states
-                    sea_lice_levels = if config.log_space
-                        [exp(s.SeaLiceLevel) for s in states]
-                    else
-                        [s.SeaLiceLevel for s in states]
-                    end
+                    sea_lice_levels = [s.SeaLiceLevel for s in states]
                 end
                 
                 append!(all_states, sea_lice_levels)

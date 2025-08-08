@@ -1,5 +1,4 @@
 include("SimulationPOMDP.jl")
-include("SimulationLogPOMDP.jl")
 include("../Utils/Utils.jl")
 
 using POMDPs
@@ -33,9 +32,6 @@ function step(x, u)
     # Get the temperature
     temp = get_temperature(Int64(annual_week))
 
-    # Predict the next adult sea lice level based on the current state and temperature
-    # next_adult, next_motile, next_sessile = predict_next_abundances(adult, motile, sessile, temp)
-
     # Weekly survival probabilities from Table 1 of Stige et al. 2025.
     s1 = 0.49  # sessile
     s2 = 2.3   # sessile → motile scaling
@@ -68,60 +64,6 @@ function step(x, u)
     return xp
 end
 
-# x is state, u is action
-function step_log(x, u)
-
-    # Copy the state
-    xp = copy(x)
-
-    # Convert the state to raw space
-    x_raw = exp.(x)
-
-    # Unpack the action
-    treatment = u[1]
-    annual_week = u[2]
-
-    # Get the temperature
-    temp = get_temperature(Int64(annual_week))
-
-    # Unpack the state
-    adult = x_raw[1]
-    motile = x_raw[2]
-    sessile = x_raw[3]
-
-    # Predict the next adult sea lice level based on the current state and temperature
-    # Weekly survival probabilities from Table 1 of Stige et al. 2025.
-    s1 = 0.49  # sessile
-    s2 = 2.3   # sessile → motile scaling
-    s3 = 0.88  # motile
-    s4 = 0.61  # adult
-
-    d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))
-    d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))
-
-    next_sessile = s1 * sessile
-    next_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
-    next_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
-
-    # Clamp the sea lice levels to be positive
-    next_adult = max(next_adult, 0.0)
-    next_motile = max(next_motile, 0.0)
-    next_sessile = max(next_sessile, 0.0)
-
-    # Apply treatment
-    if treatment == 1.0
-        next_adult *= (1 - 0.95)
-    end
-
-    # Update the state
-    xp[1] = log(next_adult)
-    xp[2] = log(next_motile)
-    xp[3] = log(next_sessile)
-    xp[4] = temp
-
-    return xp
-end
-
 # --------------------------------------------
 # Observation model (fully observed)
 # --------------------------------------------
@@ -130,7 +72,7 @@ observe(x, u) = x  # noise handled by V
 # --------------------------------------------
 # Build EKF or UKF filter
 # --------------------------------------------
-function build_kf(pomdp::Union{SeaLiceSimMDP, SeaLiceLogSimMDP}; ekf_filter=ekf_filter)
+function build_kf(pomdp::SeaLiceSimMDP; ekf_filter=ekf_filter)
     
     # Create noise matrices with the diagonal elements being adult, sessile, motile, temperature
     # The W matrix stores the process noise for each state variable
@@ -139,8 +81,7 @@ function build_kf(pomdp::Union{SeaLiceSimMDP, SeaLiceLogSimMDP}; ekf_filter=ekf_
     V = Diagonal([pomdp.adult_sd^2, pomdp.motile_sd^2, pomdp.sessile_sd^2, pomdp.temp_sd^2])
 
     # Create dynamics and observation models
-    step_func = typeof(pomdp) <: SeaLiceLogSimMDP ? step_log : step
-    dmodel = NonlinearDynamicsModel(step_func, W)
+    dmodel = NonlinearDynamicsModel(step, W)
     omodel = NonlinearObservationModel(observe, V)
 
     # Create and return the KF
@@ -165,7 +106,7 @@ end
 # --------------------------------------------
 # Kalman update
 # --------------------------------------------
-function POMDPs.update(updater::KalmanUpdater, b0::GaussianBelief, a::Action, o::Union{SeaLiceObservation, SeaLiceLogObservation, EvaluationObservation})
+function POMDPs.update(updater::KalmanUpdater, b0::GaussianBelief, a::Action, o::Union{SeaLiceObservation, EvaluationObservation})
     
     @assert (a == NoTreatment || a == Treatment)
     # We're passing in the annual week to the action because the dynamics model depends on it for the temperature model

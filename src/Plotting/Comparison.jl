@@ -41,11 +41,11 @@ function plot_policy_cost_vs_sealice(histories, avg_results, title, config)
             push!(episode_costs, episode_cost)
             
             # Episode sea lice level
-            if config.log_space
-                episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in states)
-            else
-                episode_avg_sealice = mean(s.SeaLiceLevel for s in states)
-            end
+            # if config.log_space
+            #     episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in states)
+            # else
+            episode_avg_sealice = mean(s.SeaLiceLevel for s in states)
+            # end
             push!(episode_sealice, episode_avg_sealice)
         end
         
@@ -200,11 +200,11 @@ function plot_all_cost_vs_sealice(config)
                     push!(episode_costs, episode_cost)
                     
                     # Episode sea lice level
-                    if config.log_space
-                        episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in states)
-                    else
-                        episode_avg_sealice = mean(s.SeaLiceLevel for s in states)
-                    end
+                    # if config.log_space
+                    #     episode_avg_sealice = mean(exp(s.SeaLiceLevel) for s in states)
+                    # else
+                    episode_avg_sealice = mean(s.SeaLiceLevel for s in states)
+                    # end
                     push!(episode_sealice, episode_avg_sealice)
                 end
                 
@@ -329,11 +329,12 @@ function plot_policy_sealice_levels_over_lambdas(config)
                 for episode in 1:config.num_episodes
                     episode_history = histories_lambda[episode]
                     states = collect(state_hist(episode_history))
-                    if config.log_space
-                        episode_avg = mean(exp(s.SeaLiceLevel) for s in states)
-                    else
-                        episode_avg = mean(s.SeaLiceLevel for s in states)
-                    end
+                    # if config.log_space
+                    #     episode_avg = mean(exp(s.SeaLiceLevel) for s in states)
+                    # else
+                    #     episode_avg = mean(s.SeaLiceLevel for s in states)
+                    # end
+                    episode_avg = mean(s.SeaLiceLevel for s in states)
                     push!(episode_sealice, episode_avg)
                 end
                 

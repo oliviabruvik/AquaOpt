@@ -22,28 +22,15 @@ include("../../src/Algorithms/Policies.jl")
 # Initialize belief function
 # We need an initial belief for the simulation because our state
 # and observation variables are different.
+# Returns a tuple of Normal distributions for each state component.
 # ----------------------------
 function initialize_belief(sim_pomdp, config)
-    """
-    Create initial belief state based on POMDP type and configuration.
-    Returns a tuple of Normal distributions for each state component.
-    """
-    if typeof(sim_pomdp) <: SeaLiceLogSimMDP
-        return (
-            # TODO: fix this for log space
-            Normal(sim_pomdp.log_lice_initial_mean, sim_pomdp.sampling_sd), # adult
-            Normal(sim_pomdp.motile_mean, sim_pomdp.motile_sd), # motile
-            Normal(sim_pomdp.sessile_mean, sim_pomdp.sessile_sd), # sessile
-            Normal(get_temperature(sim_pomdp.production_start_week), sim_pomdp.sampling_sd) # temperature
-        )
-    else
-        return (
-            sim_pomdp.adult_mean + sim_pomdp.adult_dist, # adult
-            sim_pomdp.motile_mean + sim_pomdp.motile_dist, # motile
-            sim_pomdp.sessile_mean + sim_pomdp.sessile_dist, # sessile
-            get_temperature(sim_pomdp.production_start_week) + sim_pomdp.temp_dist, # temperature
-        )
-    end
+    return (
+        sim_pomdp.adult_mean + sim_pomdp.adult_dist, # adult
+        sim_pomdp.motile_mean + sim_pomdp.motile_dist, # motile
+        sim_pomdp.sessile_mean + sim_pomdp.sessile_dist, # sessile
+        get_temperature(sim_pomdp.production_start_week) + sim_pomdp.temp_dist, # temperature
+    )
 end
 
 # ----------------------------
@@ -56,36 +43,24 @@ function mean_and_ci(x)
 end
 
 # ----------------------------
-# Create Sim POMDP based on whether we're in log space
+# Create Sim POMDP
 # ----------------------------
-function create_sim_pomdp(config, λ)    # TODO: fix this for log space
-
-   if config.log_space
-        return SeaLiceLogSimMDP(
-            lambda=λ,
-            costOfTreatment=config.costOfTreatment,
-            rho=config.rho,
-            discount_factor=config.discount_factor,
-            skew=config.skew,
-            sampling_sd=abs(log(config.raw_space_sampling_sd))
-        )
-    else
-        return SeaLiceSimMDP(
-            lambda=λ,
-            costOfTreatment=config.costOfTreatment,
-            rho=config.rho,
-            discount_factor=config.discount_factor,
-            skew=config.skew,
-            # SimPOMDP parameters
-            adult_mean=config.adult_mean,
-            motile_mean=config.motile_mean,
-            sessile_mean=config.sessile_mean,
-            adult_sd=config.adult_sd,
-            motile_sd=config.motile_sd,
-            sessile_sd=config.sessile_sd,
-            temp_sd=config.temp_sd,
-        )
-    end
+function create_sim_pomdp(config, λ)
+   return SeaLiceSimMDP(
+        lambda=λ,
+        costOfTreatment=config.costOfTreatment,
+        rho=config.rho,
+        discount_factor=config.discount_factor,
+        skew=config.skew,
+        # SimPOMDP parameters
+        adult_mean=config.adult_mean,
+        motile_mean=config.motile_mean,
+        sessile_mean=config.sessile_mean,
+        adult_sd=config.adult_sd,
+        motile_sd=config.motile_sd,
+        sessile_sd=config.sessile_sd,
+        temp_sd=config.temp_sd,
+    )
 end
 
 # ----------------------------
@@ -111,7 +86,7 @@ function simulate_policy(algorithm, config)
         @load joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
 
         # Create adaptor policy
-        adaptor_policy = AdaptorPolicy(policy)
+        adaptor_policy = AdaptorPolicy(policy, pomdp)
 
         # Simulate policy
         histories[λ] = run_simulation(adaptor_policy, mdp, pomdp, config, algorithm)
@@ -137,7 +112,7 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     # Store all histories
     histories = []
 
-    # Create simulator POMDP based on whether we're in log space
+    # Create simulator POMDP
     sim_pomdp = create_sim_pomdp(config, pomdp.lambda)
 
     # Create simulator
@@ -169,7 +144,7 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
     # Defining parameters for parallel simulation
     starting_seed = 1
 
-    # Create simulator POMDP based on whether we're in log space
+    # Create simulator POMDP
     sim_pomdp = create_sim_pomdp(config, pomdp.lambda)
 
     # Create simulator
@@ -235,7 +210,7 @@ function simulate_all_policies(algorithms, config)
     # Simulate policy
     for λ in config.lambda_values
 
-        # Create simulator POMDP based on whether we're in log space
+        # Create simulator POMDP
         sim_pomdp = create_sim_pomdp(config, λ)
 
         # Create simulator
@@ -250,7 +225,7 @@ function simulate_all_policies(algorithms, config)
             @load joinpath(config.policies_dir, "$(algo.solver_name)", "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
 
             # Create adaptor policy
-            adaptor_policy = AdaptorPolicy(policy)
+            adaptor_policy = AdaptorPolicy(policy, pomdp)
 
             # Add Sim objects for each episode
             for sim_number in 1:config.num_episodes
@@ -269,7 +244,7 @@ function simulate_all_policies(algorithms, config)
                     initial_state;                  # Initial state
                     rng=MersenneTwister(seed),
                     max_steps=config.steps_per_episode,
-                    metadata=Dict(:policy => algo.solver_name, :lambda => pomdp.lambda, :seed => sim_number)
+                    metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => sim_number)
                 ))
             end
         end

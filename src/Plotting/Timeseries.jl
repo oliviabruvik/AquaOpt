@@ -127,7 +127,6 @@ end
 
 # ----------------------------
 # Plot 6: Time-series of belief for each policy
-# NOTE: RESULTS ARE IN LOG SPACE
 # ----------------------------
 function plot_policy_belief_levels(histories, title, config, lambda; show_actual_states=true)
 
@@ -141,15 +140,9 @@ function plot_policy_belief_levels(histories, title, config, lambda; show_actual
     actions = collect(action_hist(first_episode_history))
 
     # Convert Gaussian belief to mean and variance
-    if config.log_space
-        belief_means = [exp(belief.μ[1]) for belief in beliefs]
-        belief_stds = [sqrt(exp(belief.Σ[1,1])) for belief in beliefs]
-        actual_states = [exp(s.SeaLiceLevel) for s in states]
-    else
-        belief_means = [belief.μ[1] for belief in beliefs]
-        belief_stds = [sqrt(belief.Σ[1,1]) for belief in beliefs]
-        actual_states = [s.SeaLiceLevel for s in states]
-    end
+    belief_means = [belief.μ[1] for belief in beliefs]
+    belief_stds = [sqrt(belief.Σ[1,1]) for belief in beliefs]
+    actual_states = [s.SeaLiceLevel for s in states]
 
     y_lim = max(maximum(belief_means), maximum(actual_states)) * 1.1
 
@@ -254,12 +247,7 @@ function plot_policy_sealice_levels_over_time(config, lambda_value)
                 for episode_history in histories_lambda
                     states = collect(state_hist(episode_history))
                     if t <= length(states)
-                        # Handle both regular and log space states
-                        if config.log_space
-                            sealice_level = exp(states[t].SeaLiceLevel)
-                        else
-                            sealice_level = states[t].SeaLiceLevel
-                        end
+                        sealice_level = states[t].SeaLiceLevel
                         push!(step_sealice, sealice_level)
                     end
                 end
@@ -361,22 +349,10 @@ function plot_nus_sarsop_sealice_levels_over_time(config, lambda_value)
                 observations = collect(observation_hist(episode_history))
                 
                 if t <= length(states) && t <= length(observations)
-                    # Handle both regular and log space states
-                    if config.log_space
-                        adult_level = exp(states[t].Adult)
-                        sessile_level = exp(states[t].Sessile)
-                        motile_level = exp(states[t].Motile)
-                        predicted_level = exp(observations[t].SeaLiceLevel)
-                    else
-                        adult_level = states[t].Adult
-                        sessile_level = states[t].Sessile
-                        motile_level = states[t].Motile
-                        predicted_level = observations[t].SeaLiceLevel
-                    end
-                    push!(step_adult, adult_level)
-                    push!(step_sessile, sessile_level)
-                    push!(step_motile, motile_level)
-                    push!(step_predicted, predicted_level)
+                    push!(step_adult, states[t].Adult)
+                    push!(step_sessile, states[t].Sessile)
+                    push!(step_motile, states[t].Motile)
+                    push!(step_predicted, observations[t].SeaLiceLevel)
                 end
             end
             
@@ -487,16 +463,8 @@ function plot_nus_sarsop_adult_predicted_over_time(config, lambda_value)
                 observations = collect(observation_hist(episode_history))
                 
                 if t <= length(states) && t <= length(observations)
-                    # Handle both regular and log space states/observations
-                    if config.log_space
-                        adult_level = exp(states[t].Adult)
-                        predicted_level = exp(observations[t].SeaLiceLevel)
-                    else
-                        adult_level = states[t].Adult
-                        predicted_level = observations[t].SeaLiceLevel
-                    end
-                    push!(step_adult, adult_level)
-                    push!(step_predicted, predicted_level)
+                    push!(step_adult, states[t].Adult)
+                    push!(step_predicted, observations[t].SeaLiceLevel)
                 end
             end
             
