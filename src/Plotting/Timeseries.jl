@@ -299,19 +299,19 @@ function plot_policy_sealice_levels_over_time(config, lambda_value)
 end
 
 # ----------------------------
-# Plot 7b: Time-series of sea lice levels for NUS_SARSOP policy only at specific lambda
+# Plot 7b: Time-series of sea lice levels for specific policy only at specific lambda
 # ----------------------------
-function plot_nus_sarsop_sealice_levels_over_time(config, lambda_value)
+function plot_algo_sealice_levels_over_time(config, algo_name, lambda_value)
     # Initialize the plot
     p = plot(
-        title="NUS_SARSOP Policy: Sea Lice Levels Over Time (λ = $lambda_value)",
+        title="$algo_name Policy: Sea Lice Levels Over Time (λ = $lambda_value)",
         xlabel="Time Step",
         ylabel="Average Sea Lice Level (Avg. Adult Female Lice per Fish)",
         legend=:bottomright,
         grid=true
     )
     
-    policy_name = "NUS_SARSOP_Policy"
+    policy_name = algo_name
     
     try
         # Load the results from the JLD2 file
@@ -416,24 +416,24 @@ function plot_nus_sarsop_sealice_levels_over_time(config, lambda_value)
     end
     
     mkpath(joinpath(config.figures_dir, "sealice_time_plots"))
-    savefig(p, joinpath(config.figures_dir, "sealice_time_plots/NUS_SARSOP_sealice_time_lambda_$(lambda_value).png"))
+    savefig(p, joinpath(config.figures_dir, "sealice_time_plots/$(algo_name)_sealice_time_lambda_$(lambda_value).png"))
     return p
 end
 
 # ----------------------------
 # Plot 7c: Time-series of adult and predicted sea lice levels for NUS_SARSOP policy only at specific lambda
 # ----------------------------
-function plot_nus_sarsop_adult_predicted_over_time(config, lambda_value)
+function plot_algo_adult_predicted_over_time(config, algo_name, lambda_value)
     # Initialize the plot
     p = plot(
-        title="NUS_SARSOP Policy: Adult vs Predicted Sea Lice Levels Over Time (λ = $lambda_value)",
+        title="$algo_name Policy: Adult vs Predicted Sea Lice Levels Over Time (λ = $lambda_value)",
         xlabel="Time Step",
         ylabel="Average Sea Lice Level (Avg. Adult Female Lice per Fish)",
         legend=:bottomright,
         grid=true
     )
     
-    policy_name = "NUS_SARSOP_Policy"
+    policy_name = algo_name
     
     try
         # Load the results from the JLD2 file
@@ -524,7 +524,7 @@ function plot_nus_sarsop_adult_predicted_over_time(config, lambda_value)
     end
     
     mkpath(joinpath(config.figures_dir, "sealice_time_plots"))
-    savefig(p, joinpath(config.figures_dir, "sealice_time_plots/NUS_SARSOP_adult_predicted_lambda_$(lambda_value).png"))
+    savefig(p, joinpath(config.figures_dir, "sealice_time_plots/$(algo_name)_adult_predicted_lambda_$(lambda_value).png"))
     return p
 end
 
