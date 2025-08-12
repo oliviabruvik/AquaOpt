@@ -27,6 +27,8 @@ struct EvaluationState
     Temperature::Float64 # The mean temperature (°C) over the last 7 days at the farm (based on approximately daily measurements)
     ProductionWeek::Int64 # The number of weeks since production start
     AnnualWeek::Int64 # The week of the year
+    NumberOfFish::Int64 # The number of fish in the pen
+    Salinity::Float64 # The salinity of the water (psu)
 end
 
 "Observation representing the predicted observed sea lice level the following week and the current observed sea lice level."
@@ -38,6 +40,8 @@ struct EvaluationObservation
     Temperature::Float64 # The observed mean temperature (°C) over the last 7 days at the farm (based on approximately daily measurements)
     ProductionWeek::Int64 # The number of weeks since production start
     AnnualWeek::Int64 # The week of the year
+    NumberOfFish::Int64 # The number of fish in the pen
+    Salinity::Float64 # The salinity of the water (psu)
 end
 
 "Available actions: NoTreatment or Treatment."
@@ -106,8 +110,28 @@ function POMDPs.transition(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
 
         # Apply treatment
         if a == Treatment
-            next_adult *= (1 - pomdp.rho)
+            # Relative reduction in adult sea lice abundances
+            # https://ars.els-cdn.com/content/image/1-s2.0-S0044848623005239-mmc1.pdf Table 5
+            reduction_factor_sessile = 0.74
+            reduction_factor_motile = 0.84
+            reduction_factor_adult = 0.75
+
+            # Sample reduction factors from a normal distribution
+            sampled_reduction_factor_adult = rand(rng, Normal(reduction_factor_adult, 0.1))
+            sampled_reduction_factor_motile = rand(rng, Normal(reduction_factor_motile, 0.1))
+            sampled_reduction_factor_sessile = rand(rng, Normal(reduction_factor_sessile, 0.1))
+
+            # Apply treatment to the predicted sea lice levels
+            next_adult *= (1 - sampled_reduction_factor_adult)
+            next_motile *= (1 - sampled_reduction_factor_motile)
+            next_sessile *= (1 - sampled_reduction_factor_sessile)
         end
+
+        # Biomass loss
+        # TODO: add a function to calculate the biomass loss
+        # https://ars.els-cdn.com/content/image/1-s2.0-S0044848623005239-mmc1.pdf
+        lambda_mech = 1.210
+
 
         # Add noise
         next_adult = next_adult + rand(rng, pomdp.adult_dist)
@@ -129,6 +153,8 @@ function POMDPs.transition(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
             next_temp, # Temperature
             s.ProductionWeek + 1, # ProductionWeek
             (s.AnnualWeek + 1) % 52, # AnnualWeek
+            s.NumberOfFish, # NumberOfFish is constant
+            s.Salinity, # Salinity is constant
         )
     end
 end
@@ -158,18 +184,34 @@ function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::EvaluationState)
             observed_sessile, # Sessile
             observed_temperature, # Temperature
             s.ProductionWeek, # ProductionWeek is fully observable
-            s.AnnualWeek # AnnualWeek is fully observable
+            s.AnnualWeek, # AnnualWeek is fully observable
+            s.NumberOfFish, # NumberOfFish is fully observable
+            s.Salinity, # Salinity is fully observable
         )
     end
 end
 
 # -------------------------
 # Reward function: for now, we only penalize the current sea lice level
+# Penalize the following:
+# - Regulatory non-compliance: exceeding the bounds of the sea lice level
+# - Treatment cost
+# - Fish mortality
+# - Fish health
 # -------------------------
-function POMDPs.reward(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
-    lice_penalty = pomdp.lambda * s.SeaLiceLevel
-    treatment_penalty = a == Treatment ? (1 - pomdp.lambda) * pomdp.costOfTreatment : 0.0
-    return - (lice_penalty + treatment_penalty)
+function POMDPs.reward(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action, sp::EvaluationState)
+
+    alpha_1 = pomdp.lambda
+    alpha_2 = 1
+    alpha_3 = 1
+    alpha_4 = 1
+
+    lice_penalty = alpha_1 * s.SeaLiceLevel
+    regulatory_penalty = alpha_2 * (s.Adult > 0.5)
+    lost_biomass_penalty = alpha_3 * (s.NumberOfFish - sp.NumberOfFish)
+    treatment_penalty = alpha_4 * get_cost(pomdp, a)
+
+    return - (lice_penalty + treatment_penalty + lost_biomass_penalty + regulatory_penalty)
 end
 
 # -------------------------
@@ -203,6 +245,26 @@ function POMDPs.initialstate(pomdp::SeaLiceSimMDP)
             temperature, # Temperature
             1, # ProductionWeek
             pomdp.production_start_week, # AnnualWeek
+            200000, # NumberOfFish at the start of production
+            30.0, # Salinity at the start of production
         )
     end
+end
+
+# -------------------------
+# Cost function
+# -------------------------
+function get_cost(pomdp::SeaLiceSimMDP, a::Action)
+    if a == Treatment
+        return pomdp.costOfTreatment
+    else
+        return 0.0
+    end
+end
+
+# -------------------------
+# Fish mortality function
+# -------------------------
+function get_fish_mortality(pomdp::SeaLiceSimMDP, s::EvaluationState)
+    return pomdp.fish_mortality_rate * s.Adult
 end
