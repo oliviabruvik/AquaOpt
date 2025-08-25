@@ -46,7 +46,6 @@ end
 	growthRate::Float64 = 0.3
 	rho::Float64 = 0.95
     discount_factor::Float64 = 0.95
-    skew::Bool = false
 
     # Regulation parameters
     regulation_limit::Float64 = 0.5
@@ -112,7 +111,7 @@ function POMDPs.transition(mdp::SeaLiceMDP, s::SeaLiceState, a::Action)
     states = POMDPs.states(mdp)
 
     # Calculate the probs using the cdf
-    probs = discretize_distribution(dist, states, mdp.skew)
+    probs = discretize_distribution(dist, states)
 
     return SparseCat(states, probs)
 end
@@ -220,7 +219,7 @@ function POMDPs.initialstate(mdp::SeaLiceMDP)
     states = POMDPs.states(mdp)
 
     # Calculate the probs using the cdf
-    probs = discretize_distribution(dist, states, mdp.skew)
+    probs = discretize_distribution(dist, states)
 
     return SparseCat(states, probs)
 end

@@ -62,7 +62,6 @@ end
 	growthRate::Float64 = 0.3
 	rho::Float64 = 0.95
     discount_factor::Float64 = 0.95
-    skew::Bool = false
 
     # Regulation parameters
     regulation_limit::Float64 = 0.5

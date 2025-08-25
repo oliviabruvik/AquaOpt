@@ -52,7 +52,6 @@ function create_sim_pomdp(config, λ)
         costOfTreatment=config.costOfTreatment,
         rho=config.rho,
         discount_factor=config.discount_factor,
-        skew=config.skew,
         # SimPOMDP parameters
         adult_mean=config.adult_mean,
         motile_mean=config.motile_mean,

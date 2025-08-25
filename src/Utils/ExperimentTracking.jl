@@ -22,7 +22,6 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
         rho = config.rho,
         discount_factor = config.discount_factor,
         log_space = config.log_space,
-        skew = config.skew,
 
         # Algorithm parameters
         lambda_values = string(config.lambda_values),  # store as string
@@ -59,7 +58,6 @@ function get_latest_matching_config(config::ExperimentConfig, heuristic_config::
             (df.rho .== config.rho) .&
             (df.discount_factor .== config.discount_factor) .&
             (df.log_space .== config.log_space) .&
-            (df.skew .== config.skew) .&
 
         # Algorithm parameters
             (df.lambda_values .== string(config.lambda_values)) .&

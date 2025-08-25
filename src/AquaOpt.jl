@@ -133,9 +133,9 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;first_step_flag="solve", log_space=true, experiment_name="exp", skew=false, mode="light")
+function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light")
 
-    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, skew, mode)
+    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, mode)
     algorithms = define_algorithms(config, heuristic_config)
 
     if first_step_flag == "solve"
@@ -189,7 +189,7 @@ end
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_experiment_configs(experiment_name, log_space, skew=false, mode="light")
+function setup_experiment_configs(experiment_name, log_space, mode="light")
 
     # Define experiment configuration
     exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_mode_", mode)
@@ -201,11 +201,10 @@ function setup_experiment_configs(experiment_name, log_space, skew=false, mode="
             num_episodes=10,
             steps_per_episode=52,
             log_space=log_space,
-            skew=skew,
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
-            lambda_values=[0.4, 0.6],
+            lambda_values=[0.6],
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -215,7 +214,6 @@ function setup_experiment_configs(experiment_name, log_space, skew=false, mode="
             num_episodes=1,
             steps_per_episode=20,
             log_space=log_space,
-            skew=skew,
             experiment_name=exp_name,
             verbose=true,
             step_through=true,
@@ -229,7 +227,6 @@ function setup_experiment_configs(experiment_name, log_space, skew=false, mode="
             num_episodes=10,
             steps_per_episode=52,
             log_space=log_space,
-            skew=skew,
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
@@ -281,7 +278,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     first_step_flag = "solve" # "solve", "simulate", "plot"
     log_space_flag = true
-    skew_flag = false
     experiment_name_flag = "exp"
     mode_flag = "light"
 
@@ -297,7 +293,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
     end
 
-    @info "Running with mode: $mode_flag, log_space: $log_space_flag, skew: $skew_flag, experiment_name: $experiment_name_flag"
+    @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
 
-    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, skew=skew_flag)
+    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
 end

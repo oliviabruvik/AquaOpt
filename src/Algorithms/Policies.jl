@@ -29,7 +29,6 @@ function create_pomdp_mdp(λ, config)
             rho=config.rho,
             discount_factor=config.discount_factor,
             adult_sd=abs(log(config.raw_space_sampling_sd)),
-            skew=config.skew
         )
     else
         pomdp = SeaLiceMDP(
@@ -39,7 +38,6 @@ function create_pomdp_mdp(λ, config)
             rho=config.rho,
             discount_factor=config.discount_factor,
             adult_sd=config.raw_space_sampling_sd,
-            skew=config.skew
         )
     end
 
@@ -247,6 +245,6 @@ function POMDPs.action(policy::AdaptorPolicy, b)
 
     # Discretize alpha vectors (representation of utility over belief states per action)
     state_space = states(policy.lofi_policy.pomdp)
-    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space, policy.lofi_policy.pomdp.skew)
+    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
     return action(policy.lofi_policy, bvec)
 end

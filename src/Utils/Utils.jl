@@ -8,7 +8,7 @@ include("SharedTypes.jl")
 # -------------------------
 # Utility functions for discretizing distributions
 # -------------------------
-function discretize_distribution(dist::Distribution, space::Any, skew::Bool=false)
+function discretize_distribution(dist::Distribution, space::Any)
 
     probs = zeros(length(space))
     past_cdf = 0.0
