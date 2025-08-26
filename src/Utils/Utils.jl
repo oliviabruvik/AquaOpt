@@ -58,8 +58,8 @@ end
 # Temperature model: Return estimated weekly sea surface temperature (°C) for Norwegian salmon farms.
 # -------------------------
 function get_temperature(annual_week)
-    return 9.0
-    T_mean = 9.0      # average annual temperature (°C)
+    # return 9.0
+    T_mean = 12.0 #9.0      # average annual temperature (°C)
     T_amp = 4.5       # amplitude (°C)
     peak_week = 27      # aligns peak with July (week ~27)
     return T_mean + T_amp * cos(2π * (annual_week - peak_week) / 52)

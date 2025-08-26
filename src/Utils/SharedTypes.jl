@@ -30,6 +30,7 @@ using Parameters
     fish_disease::Float64         # Penalty for fish health
     mortality_rate::Float64       # Mortality rate
     weight_loss::Float64          # Weight loss
+    regulatory_penalty::Float64   # Regulatory penalty
 end
 
 # Treatment effectiveness based on results from Table 5 of 
@@ -48,7 +49,8 @@ if !isdefined(Main, :ACTION_CONFIGS)
             frequency_limit = 0,
             fish_disease = 0.0,
             mortality_rate = 0.0,
-            weight_loss = 0.0
+            weight_loss = 0.0,
+            regulatory_penalty = 1.0
         ),
         
         Treatment => ActionConfig(
@@ -63,7 +65,8 @@ if !isdefined(Main, :ACTION_CONFIGS)
             frequency_limit = 4,  # Maximum 4 treatments per year
             fish_disease = 10.0,
             mortality_rate = 0.0,
-            weight_loss = 0.0
+            weight_loss = 0.0,
+            regulatory_penalty = 1.0
         ),
         
         ThermalTreatment => ActionConfig(
@@ -78,7 +81,8 @@ if !isdefined(Main, :ACTION_CONFIGS)
             frequency_limit = 6,  # Maximum 6 treatments per year
             fish_disease = 15.0,
             mortality_rate = 0.2,
-            weight_loss = 0.0
+            weight_loss = 0.0,
+            regulatory_penalty = 1.0
         )
     )
 end
@@ -90,6 +94,10 @@ end
 
 function get_treatment_cost(action::Action)
     return get_action_config(action).cost
+end
+
+function get_regulatory_penalty(action::Action)
+    return get_action_config(NoTreatment).regulatory_penalty
 end
 
 function get_fish_disease(action::Action)
@@ -150,4 +158,4 @@ end
 # Export the Action enum and related functions
 export Action, NoTreatment, Treatment, ThermalTreatment
 export ActionConfig, ACTION_CONFIGS
-export get_action_config, get_treatment_cost, get_treatment_effectiveness, get_stochastic_treatment_effectiveness
+export get_action_config, get_treatment_cost, get_treatment_effectiveness, get_stochastic_treatment_effectiveness, get_regulatory_penalty, get_fish_disease, get_treatment_mortality_rate, get_weight_loss

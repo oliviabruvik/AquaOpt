@@ -35,15 +35,6 @@ function initialize_belief(sim_pomdp, config)
 end
 
 # ----------------------------
-# Mean and confidence interval function
-# ----------------------------
-function mean_and_ci(x)
-    m = mean(x)
-    ci = 1.96 * std(x) / sqrt(length(x))  # 95% confidence interval
-    return (mean = m, ci = ci)
-end
-
-# ----------------------------
 # Create Sim POMDP
 # ----------------------------
 function create_sim_pomdp(config, λ)
@@ -137,7 +128,7 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
 end
 
 # ----------------------------
-# Simulate all policies in parallel
+# Simulate one policy in parallel
 # ----------------------------
 function run_all_episodes(policy, mdp, pomdp, config, algorithm)
 
@@ -197,7 +188,7 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
 end
 
 # ----------------------------
-# Simulate policy
+# Simulate all policies in parallel
 # ----------------------------
 function simulate_all_policies(algorithms, config)
 
@@ -214,7 +205,6 @@ function simulate_all_policies(algorithms, config)
         sim_pomdp = create_sim_pomdp(config, λ)
 
         # Create simulator
-        # sim = RolloutSimulator(max_steps=config.steps_per_episode)
         hr = HistoryRecorder(max_steps=config.steps_per_episode)
         kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
         updater = KalmanUpdater(kf)
@@ -260,35 +250,6 @@ function simulate_all_policies(algorithms, config)
             lambda = sim.metadata[:lambda],
             seed = sim.metadata[:seed]
         )
-    end
-
-    # Calculate the mean and confidence interval for each lambda and each policy
-    for λ in config.lambda_values
-
-        println("Lambda: $(λ)")
-
-        # Filter data for current lambda
-        data_filtered = filter(row -> row.lambda == λ, data)
-        data_grouped_by_policy = groupby(data_filtered, :policy)
-        result = combine(data_grouped_by_policy, :reward => mean_and_ci => AsTable)
-
-        # Order by mean reward
-        result = sort(result, :mean, rev=true)
-        println(result)
-    
-    end
-
-    # Show the best lambda for each policy
-    for algo in algorithms
-
-        println("Policy: $(algo.solver_name)")
-
-        # Filter data for current policy
-        data_filtered = filter(row -> row.policy == algo.solver_name, data)
-        data_grouped_by_lambda = groupby(data_filtered, :lambda)
-        result = combine(data_grouped_by_lambda, :reward => mean_and_ci => AsTable)
-        println(result)
-    
     end
 
     # Save data

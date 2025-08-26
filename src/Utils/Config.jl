@@ -21,6 +21,7 @@ using Parameters
     discount_factor::Float64 = 0.95
     raw_space_sampling_sd::Float64 = 0.5
     log_space::Bool = false
+    regulation_limit::Float64 = 0.5
 
     # SimPOMDP parameters
     adult_mean::Float64 = 0.125

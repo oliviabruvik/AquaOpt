@@ -53,8 +53,12 @@ end
 # ----------------------------
 function simulate_policies(algorithms, config)
     @info "Simulating policies"
-    data = simulate_all_policies(algorithms, config)
-    print_histories(data, config)
+    parallel_data = simulate_all_policies(algorithms, config)
+    display_rewards_across_policies(parallel_data, config)
+    display_best_lambda_for_each_policy(parallel_data, algorithms)
+    processed_data = extract_reward_metrics(parallel_data, config)
+    display_reward_metrics(processed_data, config)
+    print_histories(parallel_data, config)
     for algo in algorithms
         println("Simulating $(algo.solver_name)")
         histories = simulate_policy(algo, config)
@@ -199,7 +203,7 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
     if mode == "light"
         config = ExperimentConfig(
             num_episodes=10,
-            steps_per_episode=52,
+            steps_per_episode=100,
             log_space=log_space,
             experiment_name=exp_name,
             verbose=false,

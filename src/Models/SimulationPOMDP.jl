@@ -57,7 +57,7 @@ end
 
     # Parameters
 	lambda::Float64 = 0.5
-    reward_lambdas::Vector{Float64} = [0.05, 0.8, 0.1, 0.05] # [treatment, regulatory, biomass, health]
+    reward_lambdas::Vector{Float64} = [0.8, 0.1, 0.05, 0.05] # [treatment, regulatory, biomass, health]
 	costOfTreatment::Float64 = 10.0
 	growthRate::Float64 = 0.3
 	rho::Float64 = 0.95
@@ -115,7 +115,6 @@ end
     motile_dist::Distribution = Normal(0, motile_sd)
     sessile_dist::Distribution = Normal(0, sessile_sd)
     temp_dist::Distribution = Normal(0, temp_sd)
-    skew_adult_dist::Distribution = SkewNormal(0, adult_sd, 2.0)
 
     # Sampling parameters
     rng::AbstractRNG = Random.GLOBAL_RNG
@@ -285,15 +284,16 @@ function POMDPs.reward(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action, sp::
     treatment_cost = λ_trt * get_treatment_cost(a)
 
     # Regulatory penalty
-    regulatory_penalty = λ_reg * (s.Adult > pomdp.regulation_limit)
+    regulatory_penalty = λ_reg * get_regulatory_penalty(a) * (s.Adult > pomdp.regulation_limit ? 1.0 : 0.0)
 
     # Lost biomass
     Bt = s.AvgFishWeight * s.NumberOfFish
     Btp = sp.AvgFishWeight * sp.NumberOfFish
     lost_biomass = λ_bio * max(Bt - Btp, 0.0)
+    @assert lost_biomass >= 0.0
 
     # Fish disease
-    fish_disease = λ_health * (s.SeaLiceLevel + get_fish_disease(a))
+    fish_disease = λ_health * get_fish_disease(a) * s.SeaLiceLevel
 
     return - (fish_disease + treatment_cost + lost_biomass + regulatory_penalty)
 end

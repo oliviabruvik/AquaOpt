@@ -29,6 +29,7 @@ function create_pomdp_mdp(λ, config)
             rho=config.rho,
             discount_factor=config.discount_factor,
             adult_sd=abs(log(config.raw_space_sampling_sd)),
+            regulation_limit=config.regulation_limit,
         )
     else
         pomdp = SeaLiceMDP(
@@ -38,6 +39,7 @@ function create_pomdp_mdp(λ, config)
             rho=config.rho,
             discount_factor=config.discount_factor,
             adult_sd=config.raw_space_sampling_sd,
+            regulation_limit=config.regulation_limit,
         )
     end
 

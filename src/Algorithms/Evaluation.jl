@@ -10,6 +10,16 @@ using JLD2
 using Plots
 using Distributions
 using Parameters
+using Statistics
+
+# ----------------------------
+# Mean and confidence interval function
+# ----------------------------
+function mean_and_ci(x)
+    m = mean(x)
+    ci = 1.96 * std(x) / sqrt(length(x))  # 95% confidence interval
+    return (mean = m, ci = ci)
+end
 
 # ----------------------------
 # Calculate averages
@@ -75,18 +85,165 @@ function evaluate_simulation_results(config, algorithm, histories)
 end
 
 # ----------------------------
+# Display the mean and confidence interval for each lambda and each policy
+# ----------------------------
+function display_rewards_across_policies(parallel_data, config)
+
+    # Display the mean and confidence interval for each lambda and each policy
+    for λ in config.lambda_values
+
+        println("Lambda: $(λ)")
+
+        # Filter data for current lambda
+        data_filtered = filter(row -> row.lambda == λ, parallel_data)
+        data_grouped_by_policy = groupby(data_filtered, :policy)
+        result = combine(data_grouped_by_policy, :reward => mean_and_ci => AsTable)
+
+        # Order by mean reward
+        result = sort(result, :mean, rev=true)
+        println(result)
+    
+    end
+end
+
+# ----------------------------
+# Display the best lambda for each policy
+# ----------------------------
+function display_best_lambda_for_each_policy(parallel_data, algorithms)
+
+    # Get all unique policies
+    policies = unique(parallel_data.policy)
+
+    for algo in algorithms
+
+        println("Policy: $(algo.solver_name)")
+
+        # Filter data for current policy
+        data_filtered = filter(row -> row.policy == algo.solver_name, parallel_data)
+        data_grouped_by_lambda = groupby(data_filtered, :lambda)
+        result = combine(data_grouped_by_lambda, :reward => mean_and_ci => AsTable)
+        println(result)
+    
+    end
+end
+
+# ----------------------------
+# Extract the number of treatments, regulatory penalties, lost biomass, and fish disease for each policy from the histories and add as columns to the parallel_data dataframe
+# ----------------------------
+function extract_reward_metrics(data, config)
+
+    # Add new columns to the DataFrame
+    data.treatment_cost = zeros(Float64, nrow(data))
+    data.treatments = Vector{Dict{Action, Int}}(undef, nrow(data))
+    data.num_regulatory_penalties = zeros(Float64, nrow(data))
+    data.fish_disease = zeros(Float64, nrow(data))
+    data.lost_biomass = zeros(Float64, nrow(data))
+
+    # For each episode, extract the number of treatments, regulatory penalties, lost biomass, and fish disease
+    for (i, row) in enumerate(eachrow(data))
+
+        # Get the history
+        h = row.history
+        states = collect(h[:s])
+        actions = collect(h[:a])
+
+        # Get total treatment cost
+        treatment_cost = sum(get_treatment_cost(a) for a in actions)
+
+        # Get distribution of treatments
+        treatments = Dict{Action, Int}()
+        for a in actions
+            treatments[a] = get(treatments, a, 0) + 1
+        end
+
+        # Get total regulatory penalties
+        num_regulatory_penalties = sum(s.Adult > config.regulation_limit ? 1.0 : 0.0 for s in states)
+
+        # Get total lost biomass
+        num_steps = length(states)
+        lost_biomass = states[num_steps].AvgFishWeight * states[num_steps].NumberOfFish - states[1].AvgFishWeight * states[1].NumberOfFish
+
+        # Get total fish disease
+        fish_disease = sum(get_fish_disease(a) * s.SeaLiceLevel for (s, a) in zip(states, actions))
+
+        # Add to dataframe
+        data.treatment_cost[i] = treatment_cost
+        data.treatments[i] = treatments
+        data.num_regulatory_penalties[i] = num_regulatory_penalties
+        data.lost_biomass[i] = lost_biomass
+        data.fish_disease[i] = fish_disease
+
+    end
+
+    return data
+
+end
+
+# ----------------------------
+# Display the mean and confidence interval for each lambda and each policy
+# ----------------------------
+function display_reward_metrics(parallel_data, config)
+
+    # Display the mean and confidence interval for each lambda and each policy
+    for λ in config.lambda_values
+
+        println("Lambda: $(λ)")
+
+        # Filter data for current lambda
+        data_filtered = filter(row -> row.lambda == λ, parallel_data)
+        data_grouped_by_policy = groupby(data_filtered, :policy)
+
+        # Check if treatments column exists in the data
+        if :treatments in names(data_filtered)
+            # Process each column separately to avoid duplicate column names
+            result = combine(
+                data_grouped_by_policy,
+                :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
+                :reward => (x -> mean_and_ci(x).ci) => :ci_reward,
+                :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
+                :treatment_cost => (x -> mean_and_ci(x).ci) => :ci_treatment_cost,
+                :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
+                :num_regulatory_penalties => (x -> mean_and_ci(x).ci) => :ci_num_regulatory_penalties,
+                :lost_biomass => (x -> mean_and_ci(x).mean) => :mean_lost_biomass,
+                :lost_biomass => (x -> mean_and_ci(x).ci) => :ci_lost_biomass,
+                :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
+                :fish_disease => (x -> mean_and_ci(x).ci) => :ci_fish_disease,
+                :treatments => (x -> mean_and_ci([get(t, NoTreatment, 0) for t in x]).mean) => :mean_num_NoTreatment,
+                :treatments => (x -> mean_and_ci([get(t, NoTreatment, 0) for t in x]).ci) => :ci_num_NoTreatment,
+                :treatments => (x -> mean_and_ci([get(t, Treatment, 0) for t in x]).mean) => :mean_num_Treatment,
+                :treatments => (x -> mean_and_ci([get(t, Treatment, 0) for t in x]).ci) => :ci_num_Treatment,
+                :treatments => (x -> mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).mean) => :mean_num_ThermalTreatment,
+                :treatments => (x -> mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).ci) => :ci_num_ThermalTreatment)
+        else
+            # Process without treatments column
+            result = combine(
+                data_grouped_by_policy,
+                :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
+                :reward => (x -> mean_and_ci(x).ci) => :ci_reward,
+                :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
+                :treatment_cost => (x -> mean_and_ci(x).ci) => :ci_treatment_cost,
+                :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
+                :num_regulatory_penalties => (x -> mean_and_ci(x).ci) => :ci_num_regulatory_penalties,
+                :lost_biomass => (x -> mean_and_ci(x).mean) => :mean_lost_biomass,
+                :lost_biomass => (x -> mean_and_ci(x).ci) => :ci_lost_biomass,
+                :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
+                :fish_disease => (x -> mean_and_ci(x).ci) => :ci_fish_disease)
+        end
+
+        # Order by mean reward
+        result = sort(result, :mean_reward, rev=true)
+        println(result)
+    
+    end
+end
+
+# ----------------------------
 # Print all histories to a text file
 # Data stores the histories in a dataframe with the following columns:
 # reward, n_steps, history, policy, lambda, seed
 # Creates a simulation_steps folder with a text file for each episode.
 # The text file contains the history for each step in the episode.
 # The text file is named lambda_<lambda>_seed_<seed>_simulation_history.txt
-# The history is a tuple with the following elements:
-# - action
-# - state
-# - reward
-# - observation
-# - belief
 # ----------------------------
 function print_histories(data, config)
 
