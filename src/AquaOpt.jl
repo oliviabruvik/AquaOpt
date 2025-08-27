@@ -14,6 +14,7 @@ include("Models/SeaLicePOMDP.jl")
 include("Plotting/Heatmaps.jl")
 include("Plotting/Timeseries.jl")
 include("Plotting/Comparison.jl")
+include("Plotting/ParallelPlots.jl")
 include("Utils/Config.jl")
 include("Utils/ExperimentTracking.jl")
 
@@ -54,11 +55,14 @@ end
 function simulate_policies(algorithms, config)
     @info "Simulating policies"
     parallel_data = simulate_all_policies(algorithms, config)
-    display_rewards_across_policies(parallel_data, config)
-    display_best_lambda_for_each_policy(parallel_data, algorithms)
+    # display_rewards_across_policies(parallel_data, config)
+    # display_best_lambda_for_each_policy(parallel_data, algorithms)
     processed_data = extract_reward_metrics(parallel_data, config)
     display_reward_metrics(processed_data, config)
+    print_treatment_frequency(parallel_data, config)
     print_histories(parallel_data, config)
+    plot_heuristic_vs_sarsop_sealice_levels_over_time(parallel_data, config)
+    plot_treatment_distribution_comparison(parallel_data, config)
     for algo in algorithms
         println("Simulating $(algo.solver_name)")
         histories = simulate_policy(algo, config)
@@ -208,7 +212,7 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
-            lambda_values=[0.6],
+            reward_lambdas=[0.25, 0.25, 0.0, 0.25, 100.0], # [treatment, regulatory, biomass, health, sea lice level]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -221,7 +225,7 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
             experiment_name=exp_name,
             verbose=true,
             step_through=true,
-            lambda_values=[0.2, 0.4, 0.6, 0.8],
+            reward_lambdas=[0.5, 0.3, 0.1, 0.1, 0.0], # [treatment, regulatory, biomass, health, sea lice]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -229,11 +233,15 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
     elseif mode == "full"
         config = ExperimentConfig(
             num_episodes=10,
-            steps_per_episode=52,
+            steps_per_episode=100,
             log_space=log_space,
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
+            reward_lambdas=[0.5, 0.5, 0.0, 0.0, 0.0], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=30.0,
+            VI_max_iterations=50,
+            QMDP_max_iterations=50,
         )
     end
         
@@ -265,14 +273,14 @@ function define_algorithms(config, heuristic_config)
 
     @info "Defining algorithms"
     algorithms = [
-        Algorithm(solver_name="NeverTreat_Policy"),
-        Algorithm(solver_name="AlwaysTreat_Policy"),
-        Algorithm(solver_name="Random_Policy"),
+        # Algorithm(solver_name="NeverTreat_Policy"),
+        # Algorithm(solver_name="AlwaysTreat_Policy"),
+        # Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
         ## Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
-        Algorithm(solver=vi_solver, solver_name="VI_Policy"),
-        Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
+        # Algorithm(solver=vi_solver, solver_name="VI_Policy"),
+        # Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
     ]
     return algorithms
 end

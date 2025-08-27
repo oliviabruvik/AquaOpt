@@ -24,6 +24,7 @@ function create_pomdp_mdp(λ, config)
     if config.log_space
         pomdp = SeaLiceLogMDP(
             lambda=λ,
+            reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
             growthRate=config.growthRate,
             rho=config.rho,
@@ -34,6 +35,7 @@ function create_pomdp_mdp(λ, config)
     else
         pomdp = SeaLiceMDP(
             lambda=λ,
+            reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
             growthRate=config.growthRate,
             rho=config.rho,

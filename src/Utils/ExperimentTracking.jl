@@ -25,6 +25,7 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
 
         # Algorithm parameters
         lambda_values = string(config.lambda_values),  # store as string
+        reward_lambdas = string(config.reward_lambdas),
         sarsop_max_time = config.sarsop_max_time,
         VI_max_iterations = config.VI_max_iterations,
         QMDP_max_iterations = config.QMDP_max_iterations,
@@ -58,7 +59,8 @@ function get_latest_matching_config(config::ExperimentConfig, heuristic_config::
             (df.rho .== config.rho) .&
             (df.discount_factor .== config.discount_factor) .&
             (df.log_space .== config.log_space) .&
-
+            (df.reward_lambdas .== string(config.reward_lambdas)) .&
+            (df.regulation_limit .== config.regulation_limit) .&
         # Algorithm parameters
             (df.lambda_values .== string(config.lambda_values)) .&
             (df.sarsop_max_time .== config.sarsop_max_time) .&

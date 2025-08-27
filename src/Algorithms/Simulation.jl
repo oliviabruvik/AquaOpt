@@ -40,6 +40,7 @@ end
 function create_sim_pomdp(config, λ)
    return SeaLiceSimMDP(
         lambda=λ,
+        reward_lambdas=config.reward_lambdas,
         costOfTreatment=config.costOfTreatment,
         rho=config.rho,
         discount_factor=config.discount_factor,

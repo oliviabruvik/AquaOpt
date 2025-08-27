@@ -50,7 +50,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 0.0,
             mortality_rate = 0.0,
             weight_loss = 0.0,
-            regulatory_penalty = 1.0
+            regulatory_penalty = 100.0
         ),
         
         Treatment => ActionConfig(
@@ -66,7 +66,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 10.0,
             mortality_rate = 0.0,
             weight_loss = 0.0,
-            regulatory_penalty = 1.0
+            regulatory_penalty = 100.0
         ),
         
         ThermalTreatment => ActionConfig(
@@ -82,7 +82,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 15.0,
             mortality_rate = 0.2,
             weight_loss = 0.0,
-            regulatory_penalty = 1.0
+            regulatory_penalty = 100.0
         )
     )
 end

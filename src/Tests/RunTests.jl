@@ -78,6 +78,7 @@ function run_test(;log_space=true, test_name="test", algo=nothing)
         experiment_name=exp_name,
         verbose=false,
         step_through=false,
+        reward_lambdas=[0.25, 0.25, 0.25, 0.25, 0.25], # [treatment, regulatory, biomass, health, sea lice]
         lambda_values=[0.4, 0.6],
         sarsop_max_time=5.0,
         VI_max_iterations=10,

@@ -16,7 +16,7 @@ using Parameters
     
     # POMDP parameters
     costOfTreatment::Float64 = 10.0
-    growthRate::Float64 = 0.3 #1.26 # "The growth rate of sea lice is 0.3 per day." Costello (2006)
+    growthRate::Float64 = 0.15 # 0.3 #1.26 # "The growth rate of sea lice is 0.3 per day." Costello (2006)
     rho::Float64 = 0.95 # "The treatment kills off 95% on all stages." DOI: 10.1016/j.aquaculture.2019.734329
     discount_factor::Float64 = 0.95
     raw_space_sampling_sd::Float64 = 0.5
@@ -25,8 +25,8 @@ using Parameters
 
     # SimPOMDP parameters
     adult_mean::Float64 = 0.125
-    motile_mean::Float64 = 0.5
-    sessile_mean::Float64 = 0.5
+    motile_mean::Float64 = 0.25
+    sessile_mean::Float64 = 0.25
     adult_sd::Float64 = 0.05
     motile_sd::Float64 = 0.1
     sessile_sd::Float64 = 0.1
@@ -46,7 +46,8 @@ using Parameters
     W0::Float64 = 0.1                       # weight centering (kg)
 
     # Algorithm parameters
-    lambda_values::Vector{Float64} = collect(0.0:0.2:1.0)
+    lambda_values::Vector{Float64} = [0.6] # collect(0.0:0.2:1.0)
+    reward_lambdas::Vector{Float64} = [0.5, 0.5, 0.0, 0.0, 0.0] # [treatment, regulatory, biomass, health, sea lice]
     sarsop_max_time::Float64 = 150.0
     VI_max_iterations::Int = 30
     QMDP_max_iterations::Int = 30
