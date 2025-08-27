@@ -38,7 +38,7 @@ end
 
     # Parameters
 	lambda::Float64 = 0.5
-    reward_lambdas::Vector{Float64} = [0.5, 0.5, 0.0, 0.0] # [treatment, regulatory, biomass, health]
+    reward_lambdas::Vector{Float64} = [0.5, 0.5, 0.0, 0.0, 0.0] # [treatment, regulatory, biomass, health, sea lice]
 	costOfTreatment::Float64 = 10.0
 	growthRate::Float64 = 1.2
 	rho::Float64 = 0.7
@@ -200,7 +200,8 @@ end
 # -------------------------
 function POMDPs.reward(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action, sp::SeaLiceLogState)
 
-    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = mdp.reward_lambdas
+    # λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = mdp.reward_lambdas
+    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = [0.6, 0.2, 0.0, 0.1, 0.1]
 
     # Treatment cost
     treatment_cost = get_treatment_cost(a)
@@ -212,9 +213,9 @@ function POMDPs.reward(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action, sp::Se
     lost_biomass = 0
 
     # Fish disease
-    fish_disease = get_fish_disease(a) + 100.0 * exp(s.SeaLiceLevel)
+    fish_disease = get_fish_disease(a) + 10.0 * exp(s.SeaLiceLevel)
 
-    return - (λ_health * fish_disease + λ_trt * treatment_cost + λ_bio * lost_biomass + λ_reg * regulatory_penalty + λ_sea_lice * exp(s.SeaLiceLevel))
+    return - (λ_trt * treatment_cost + λ_reg * regulatory_penalty + λ_bio * lost_biomass + λ_health * fish_disease + λ_sea_lice * exp(s.SeaLiceLevel))
 end
 
 # -------------------------

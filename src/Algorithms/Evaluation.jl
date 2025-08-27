@@ -133,11 +133,12 @@ end
 function extract_reward_metrics(data, config)
 
     # Add new columns to the DataFrame
+    data.mean_rewards_across_sims = zeros(Float64, nrow(data))
     data.treatment_cost = zeros(Float64, nrow(data))
     data.treatments = Vector{Dict{Action, Int}}(undef, nrow(data))
     data.num_regulatory_penalties = zeros(Float64, nrow(data))
     data.fish_disease = zeros(Float64, nrow(data))
-    data.lost_biomass = zeros(Float64, nrow(data))
+    data.lost_biomass_1000kg = zeros(Float64, nrow(data))
     data.mean_adult_sea_lice_level = zeros(Float64, nrow(data))
 
     # For each episode, extract the number of treatments, regulatory penalties, lost biomass, and fish disease
@@ -147,12 +148,7 @@ function extract_reward_metrics(data, config)
         h = row.history
         states = collect(h[:s])
         actions = collect(h[:a])
-
-        # Get mean adult sea lice level
-        mean_adult_sea_lice_level = mean(s.Adult for s in states)
-
-        # Get total treatment cost
-        treatment_cost = sum(get_treatment_cost(a) for a in actions)
+        rewards = collect(h[:r])
 
         # Get distribution of treatments
         treatments = Dict{Action, Int}()
@@ -160,24 +156,21 @@ function extract_reward_metrics(data, config)
             treatments[a] = get(treatments, a, 0) + 1
         end
 
-        # Get total regulatory penalties
-        num_regulatory_penalties = sum(s.Adult > config.regulation_limit ? 1.0 : 0.0 for s in states)
-
         # Get total lost biomass
         num_steps = length(states)
-        lost_biomass = states[num_steps].AvgFishWeight * states[num_steps].NumberOfFish - states[1].AvgFishWeight * states[1].NumberOfFish
+        lost_biomass_1000kg = (states[num_steps].AvgFishWeight * states[1].NumberOfFish - states[1].AvgFishWeight * states[1].NumberOfFish) / 1000.0
 
         # Get total fish disease
-        fish_disease = sum(get_fish_disease(a) * s.SeaLiceLevel for (s, a) in zip(states, actions))
+        fish_disease = sum(get_fish_disease(a) + 100.0 * s.SeaLiceLevel for (s, a) in zip(states, actions))
 
         # Add to dataframe
-        data.treatment_cost[i] = treatment_cost
+        data.treatment_cost[i] = sum(get_treatment_cost(a) for a in actions)
         data.treatments[i] = treatments
-        data.num_regulatory_penalties[i] = num_regulatory_penalties
-        data.lost_biomass[i] = lost_biomass
+        data.num_regulatory_penalties[i] = sum(s.Adult > config.regulation_limit ? 1.0 : 0.0 for s in states)
+        data.lost_biomass_1000kg[i] = lost_biomass_1000kg
         data.fish_disease[i] = fish_disease
-        data.mean_adult_sea_lice_level[i] = mean_adult_sea_lice_level
-
+        data.mean_adult_sea_lice_level[i] = mean(s.Adult for s in states)
+        data.mean_rewards_across_sims[i] = mean(rewards)
     end
 
     return data
@@ -187,7 +180,7 @@ end
 # ----------------------------
 # Display the mean and confidence interval for each lambda and each policy
 # ----------------------------
-function display_reward_metrics(parallel_data, config)
+function display_reward_metrics(parallel_data, config, display_ci=false)
 
     # Display the mean and confidence interval for each lambda and each policy
     for λ in config.lambda_values
@@ -201,42 +194,77 @@ function display_reward_metrics(parallel_data, config)
         # Check if treatments column exists in the data
         if :treatments in names(data_filtered)
             # Process each column separately to avoid duplicate column names
-            result = combine(
-                data_grouped_by_policy,
-                :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
-                :reward => (x -> mean_and_ci(x).ci) => :ci_reward,
-                :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
-                :treatment_cost => (x -> mean_and_ci(x).ci) => :ci_treatment_cost,
-                :mean_adult_sea_lice_level => (x -> mean_and_ci(x).mean) => :mean_mean_adult_sea_lice_level,
-                :mean_adult_sea_lice_level => (x -> mean_and_ci(x).ci) => :ci_mean_adult_sea_lice_level,
-                :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
-                :num_regulatory_penalties => (x -> mean_and_ci(x).ci) => :ci_num_regulatory_penalties,
-                :lost_biomass => (x -> mean_and_ci(x).mean) => :mean_lost_biomass,
-                :lost_biomass => (x -> mean_and_ci(x).ci) => :ci_lost_biomass,
-                :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
-                :fish_disease => (x -> mean_and_ci(x).ci) => :ci_fish_disease,
-                :treatments => (x -> mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean) => :mean_num_NoTreatment,
-                :treatments => (x -> mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).ci) => :ci_num_NoTreatment,
-                :treatments => (x -> mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean) => :mean_num_Treatment,
-                :treatments => (x -> mean_and_ci([get(t[1], Treatment, 0) for t in x]).ci) => :ci_num_Treatment,
-                :treatments => (x -> mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean) => :mean_num_ThermalTreatment,
-                :treatments => (x -> mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).ci) => :ci_num_ThermalTreatment)
+            if display_ci
+                result = combine(
+                    data_grouped_by_policy,
+                    :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
+                    :reward => (x -> mean_and_ci(x).ci) => :ci_reward,
+                    :mean_rewards_across_sims => (x -> mean_and_ci(x).mean) => :mean_mean_rewards_across_sims,
+                    :mean_rewards_across_sims => (x -> mean_and_ci(x).ci) => :ci_mean_rewards_across_sims,
+                    :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
+                    :treatment_cost => (x -> mean_and_ci(x).ci) => :ci_treatment_cost,
+                    :mean_adult_sea_lice_level => (x -> mean_and_ci(x).mean) => :mean_mean_adult_sea_lice_level,
+                    :mean_adult_sea_lice_level => (x -> mean_and_ci(x).ci) => :ci_mean_adult_sea_lice_level,
+                    :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
+                    :num_regulatory_penalties => (x -> mean_and_ci(x).ci) => :ci_num_regulatory_penalties,
+                    :lost_biomass_1000kg => (x -> mean_and_ci(x).mean) => :mean_lost_biomass_1000kg,
+                    :lost_biomass_1000kg => (x -> mean_and_ci(x).ci) => :ci_lost_biomass_1000kg,
+                    :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
+                    :fish_disease => (x -> mean_and_ci(x).ci) => :ci_fish_disease,
+                    :treatments => (x -> mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean) => :mean_num_NoTreatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).ci) => :ci_num_NoTreatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean) => :mean_num_Treatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], Treatment, 0) for t in x]).ci) => :ci_num_Treatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean) => :mean_num_ThermalTreatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).ci) => :ci_num_ThermalTreatment
+                )
+            else
+                result = combine(
+                    data_grouped_by_policy,
+                    :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
+                    :mean_rewards_across_sims => (x -> mean_and_ci(x).mean) => :mean_mean_rewards_across_sims,
+                    :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
+                    :mean_adult_sea_lice_level => (x -> mean_and_ci(x).mean) => :mean_mean_adult_sea_lice_level,
+                    :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
+                    :lost_biomass_1000kg => (x -> mean_and_ci(x).mean) => :mean_lost_biomass_1000kg,
+                    :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
+                    :treatments => (x -> mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean) => :mean_num_NoTreatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean) => :mean_num_Treatment,
+                    :treatments => (x -> mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean) => :mean_num_ThermalTreatment
+                )
+            end
         else
             # Process without treatments column
-            result = combine(
-                data_grouped_by_policy,
-                :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
-                :reward => (x -> mean_and_ci(x).ci) => :ci_reward,
-                :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
-                :treatment_cost => (x -> mean_and_ci(x).ci) => :ci_treatment_cost,
-                :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
-                :num_regulatory_penalties => (x -> mean_and_ci(x).ci) => :ci_num_regulatory_penalties,
-                :mean_adult_sea_lice_level => (x -> mean_and_ci(x).mean) => :mean_mean_adult_sea_lice_level,
-                :mean_adult_sea_lice_level => (x -> mean_and_ci(x).ci) => :ci_mean_adult_sea_lice_level,
-                :lost_biomass => (x -> mean_and_ci(x).mean) => :mean_lost_biomass,
-                :lost_biomass => (x -> mean_and_ci(x).ci) => :ci_lost_biomass,
-                :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
-                :fish_disease => (x -> mean_and_ci(x).ci) => :ci_fish_disease)
+            if display_ci
+                result = combine(
+                    data_grouped_by_policy,
+                    :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
+                    :reward => (x -> mean_and_ci(x).ci) => :ci_reward,
+                    :mean_rewards_across_sims => (x -> mean_and_ci(x).mean) => :mean_mean_rewards_across_sims,
+                    :mean_rewards_across_sims => (x -> mean_and_ci(x).ci) => :ci_mean_rewards_across_sims,
+                    :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
+                    :treatment_cost => (x -> mean_and_ci(x).ci) => :ci_treatment_cost,
+                    :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
+                    :num_regulatory_penalties => (x -> mean_and_ci(x).ci) => :ci_num_regulatory_penalties,
+                    :mean_adult_sea_lice_level => (x -> mean_and_ci(x).mean) => :mean_mean_adult_sea_lice_level,
+                    :mean_adult_sea_lice_level => (x -> mean_and_ci(x).ci) => :ci_mean_adult_sea_lice_level,
+                    :lost_biomass_1000kg => (x -> mean_and_ci(x).mean) => :mean_lost_biomass_1000kg,
+                    :lost_biomass_1000kg => (x -> mean_and_ci(x).ci) => :ci_lost_biomass_1000kg,
+                    :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease,
+                    :fish_disease => (x -> mean_and_ci(x).ci) => :ci_fish_disease
+                )
+            else
+                result = combine(
+                    data_grouped_by_policy,
+                    :reward => (x -> mean_and_ci(x).mean) => :mean_reward,
+                    :mean_rewards_across_sims => (x -> mean_and_ci(x).mean) => :mean_mean_rewards_across_sims,
+                    :treatment_cost => (x -> mean_and_ci(x).mean) => :mean_treatment_cost,
+                    :num_regulatory_penalties => (x -> mean_and_ci(x).mean) => :mean_num_regulatory_penalties,
+                    :mean_adult_sea_lice_level => (x -> mean_and_ci(x).mean) => :mean_mean_adult_sea_lice_level,
+                    :lost_biomass_1000kg => (x -> mean_and_ci(x).mean) => :mean_lost_biomass_1000kg,
+                    :fish_disease => (x -> mean_and_ci(x).mean) => :mean_fish_disease
+                )
+            end
         end
 
         # Order by mean reward
@@ -300,11 +328,11 @@ function print_treatment_frequency(data, config)
             push!(treatment_data, (
                 policy = policy,
                 NoTreatment = mean_and_ci(counts["NoTreatment"]).mean,
-                NoTreatment_ci = mean_and_ci(counts["NoTreatment"]).ci,
+                # NoTreatment_ci = mean_and_ci(counts["NoTreatment"]).ci,
                 Treatment = mean_and_ci(counts["Treatment"]).mean,
-                Treatment_ci = mean_and_ci(counts["Treatment"]).ci,
+                # Treatment_ci = mean_and_ci(counts["Treatment"]).ci,
                 ThermalTreatment = mean_and_ci(counts["ThermalTreatment"]).mean,
-                ThermalTreatment_ci = mean_and_ci(counts["ThermalTreatment"]).ci
+                # ThermalTreatment_ci = mean_and_ci(counts["ThermalTreatment"]).ci
             ))
         end
         

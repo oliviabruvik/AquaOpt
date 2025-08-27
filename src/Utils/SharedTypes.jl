@@ -50,7 +50,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 0.0,
             mortality_rate = 0.0,
             weight_loss = 0.0,
-            regulatory_penalty = 100.0
+            regulatory_penalty = 10.0
         ),
         
         Treatment => ActionConfig(
@@ -66,7 +66,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 10.0,
             mortality_rate = 0.0,
             weight_loss = 0.0,
-            regulatory_penalty = 100.0
+            regulatory_penalty = 10.0
         ),
         
         ThermalTreatment => ActionConfig(
@@ -82,7 +82,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 15.0,
             mortality_rate = 0.2,
             weight_loss = 0.0,
-            regulatory_penalty = 100.0
+            regulatory_penalty = 10.0
         )
     )
 end
@@ -93,31 +93,38 @@ function get_action_config(action::Action)
 end
 
 function get_treatment_cost(action::Action)
+    @assert action in keys(ACTION_CONFIGS)
     return get_action_config(action).cost
 end
 
 function get_regulatory_penalty(action::Action)
+    @assert action in keys(ACTION_CONFIGS)
     return get_action_config(NoTreatment).regulatory_penalty
 end
 
 function get_fish_disease(action::Action)
+    @assert action in keys(ACTION_CONFIGS)
     return get_action_config(action).fish_disease
 end
 
 function get_treatment_mortality_rate(action::Action)
+    @assert action in keys(ACTION_CONFIGS)
     return get_action_config(action).mortality_rate
 end
 
 function get_weight_loss(action::Action)
+    @assert action in keys(ACTION_CONFIGS)
     return get_action_config(action).weight_loss
 end
 
 function get_treatment_effectiveness(action::Action)
+    @assert action in keys(ACTION_CONFIGS)
     config = get_action_config(action)
     return (config.adult_reduction, config.motile_reduction, config.sessile_reduction)
 end
 
 function get_stochastic_treatment_effectiveness(action::Action, rng::AbstractRNG=Random.GLOBAL_RNG)
+    @assert action in keys(ACTION_CONFIGS)
     config = get_action_config(action)
     
     # Add some variability to the treatment effectiveness

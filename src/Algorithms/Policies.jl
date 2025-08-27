@@ -177,7 +177,7 @@ function POMDPs.action(policy::HeuristicPolicy, b)
         # Choose Treatment with probability heuristic_rho, otherwise NoTreatment
         return rand() < policy.heuristic_config.rho ? Treatment : NoTreatment
     else
-        return rand((Treatment, NoTreatment))
+        return rand((Treatment, NoTreatment, ThermalTreatment))
     end
 end
 

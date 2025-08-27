@@ -287,7 +287,7 @@ function POMDPs.reward(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action, sp::
     regulatory_penalty = get_regulatory_penalty(a) * (s.Adult > pomdp.regulation_limit ? 1.0 : 0.0)
 
     # Lost biomass
-    Bt = s.AvgFishWeight * s.NumberOfFish
+    Bt = sp.AvgFishWeight * s.NumberOfFish # Using sp.AvgFishWeight because it is the projected average weight of the fish in the pen
     Btp = sp.AvgFishWeight * sp.NumberOfFish
     lost_biomass = max(Bt - Btp, 0.0)
     @assert lost_biomass >= 0.0

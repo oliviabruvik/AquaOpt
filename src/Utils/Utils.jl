@@ -79,14 +79,19 @@ function predict_next_abundances(adult, motile, sessile, temp)
     s3 = 0.88  # motile
     s4 = 0.61  # adult
 
-    # Get the development rates
-    d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))
-    d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))
+    # TODO: Remember to change this back to the original values
+    # Original: d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))
+    # Original: d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))
+    d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 9))))  # Faster sessile to motile
+    d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 9))))  # Faster motile to adult
 
     # Get the predicted sea lice levels
     pred_sessile = s1 * sessile
     pred_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
     pred_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
+
+    # Add an influx of sessiles from the sea
+    pred_sessile += 0.01
 
     # Clamp the sea lice levels to be positive
     pred_adult = max(pred_adult, zero(pred_adult))

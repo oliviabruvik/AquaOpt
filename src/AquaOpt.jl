@@ -57,12 +57,30 @@ function simulate_policies(algorithms, config)
     parallel_data = simulate_all_policies(algorithms, config)
     # display_rewards_across_policies(parallel_data, config)
     # display_best_lambda_for_each_policy(parallel_data, algorithms)
+
+    # Extract reward metrics
     processed_data = extract_reward_metrics(parallel_data, config)
+
+    # Display reward metrics
     display_reward_metrics(processed_data, config)
+
+    # Print treatment frequency
     print_treatment_frequency(parallel_data, config)
+
+    # Print histories
     print_histories(parallel_data, config)
-    plot_heuristic_vs_sarsop_sealice_levels_over_time(parallel_data, config)
-    plot_treatment_distribution_comparison(parallel_data, config)
+
+    # Plot heuristic vs sarsop sealice levels over time
+    plot_heuristic_vs_sarsop_sealice_levels_over_time_latex(parallel_data, config)
+
+    # Plot one simulation with all state variables over time
+    plot_one_simulation_with_all_state_variables_over_time(parallel_data, config, "NUS_SARSOP_Policy")
+    plot_one_simulation_with_all_state_variables_over_time(parallel_data, config, "Heuristic_Policy")
+
+    # Plot treatment distribution comparison
+    plot_treatment_distribution_comparison_latex(parallel_data, config)
+
+    # Simulate policies
     for algo in algorithms
         println("Simulating $(algo.solver_name)")
         histories = simulate_policy(algo, config)
@@ -212,7 +230,7 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
-            reward_lambdas=[0.25, 0.25, 0.0, 0.25, 100.0], # [treatment, regulatory, biomass, health, sea lice level]
+            reward_lambdas=[0.7, 0.2, 0.0, 0.1, 0.1], # [treatment, regulatory, biomass, health, sea lice level]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -273,14 +291,14 @@ function define_algorithms(config, heuristic_config)
 
     @info "Defining algorithms"
     algorithms = [
-        # Algorithm(solver_name="NeverTreat_Policy"),
-        # Algorithm(solver_name="AlwaysTreat_Policy"),
-        # Algorithm(solver_name="Random_Policy"),
+        Algorithm(solver_name="NeverTreat_Policy"),
+        Algorithm(solver_name="AlwaysTreat_Policy"),
+        Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
-        ## Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
+        # Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
-        # Algorithm(solver=vi_solver, solver_name="VI_Policy"),
-        # Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
+        Algorithm(solver=vi_solver, solver_name="VI_Policy"),
+        Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
     ]
     return algorithms
 end
