@@ -72,7 +72,7 @@ function plot_beliefs_over_time(data, algo_name, config, lambda)
         Temperature = [o.Temperature for o in observations]
     )
     actions = action_hist(history)
-    actions = [a == Treatment ? "T" : "N" for a in actions]
+    actions = [a == Treatment ? "M" : a == ThermalTreatment ? "Th" : "" for a in actions]
 
     labels = ["Adult", "Motile", "Sessile", "Temperature"]
     colors = [:blue, :green, :orange, :purple]

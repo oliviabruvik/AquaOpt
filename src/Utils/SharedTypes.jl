@@ -50,7 +50,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             fish_disease = 0.0,
             mortality_rate = 0.0,
             weight_loss = 0.0,
-            regulatory_penalty = 10.0
+            regulatory_penalty = 100.0
         ),
         
         Treatment => ActionConfig(
@@ -64,14 +64,14 @@ if !isdefined(Main, :ACTION_CONFIGS)
             duration_days = 7,
             frequency_limit = 4,  # Maximum 4 treatments per year
             fish_disease = 10.0,
-            mortality_rate = 0.0,
+            mortality_rate = 0.1,
             weight_loss = 0.0,
-            regulatory_penalty = 10.0
+            regulatory_penalty = 100.0
         ),
         
         ThermalTreatment => ActionConfig(
             action = ThermalTreatment,
-            cost = 15.0,  # MNOK per treatment (higher cost)
+            cost = 12.0,  # MNOK per treatment (higher cost)
             adult_reduction = 0.88,   # 88% reduction
             motile_reduction = 0.87,  # 87% reduction
             sessile_reduction = 0.70, # 70% reduction
@@ -80,9 +80,9 @@ if !isdefined(Main, :ACTION_CONFIGS)
             duration_days = 5,
             frequency_limit = 6,  # Maximum 6 treatments per year
             fish_disease = 15.0,
-            mortality_rate = 0.2,
+            mortality_rate = 0.1,
             weight_loss = 0.0,
-            regulatory_penalty = 10.0
+            regulatory_penalty = 100.0
         )
     )
 end

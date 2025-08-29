@@ -32,7 +32,8 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
 
         # Heuristic parameters
         heuristic_threshold = heuristic_config.raw_space_threshold,
-        heuristic_belief_threshold = heuristic_config.belief_threshold,
+        heuristic_belief_threshold_mechanical = heuristic_config.belief_threshold_mechanical,
+        heuristic_belief_threshold_thermal = heuristic_config.belief_threshold_thermal,
         heuristic_rho = heuristic_config.rho,
 
         # Run management
@@ -69,7 +70,8 @@ function get_latest_matching_config(config::ExperimentConfig, heuristic_config::
 
         # Heuristic parameters
             (df.heuristic_threshold .== heuristic_config.raw_space_threshold) .&
-            (df.heuristic_belief_threshold .== heuristic_config.belief_threshold) .&
+            (df.heuristic_belief_threshold_mechanical .== heuristic_config.belief_threshold_mechanical) .&
+            (df.heuristic_belief_threshold_thermal .== heuristic_config.belief_threshold_thermal) .&
             (df.heuristic_rho .== heuristic_config.rho) .&
 
         # Run management

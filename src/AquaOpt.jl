@@ -62,7 +62,7 @@ function simulate_policies(algorithms, config)
     processed_data = extract_reward_metrics(parallel_data, config)
 
     # Display reward metrics
-    display_reward_metrics(processed_data, config)
+    display_reward_metrics(processed_data, config, true)
 
     # Print treatment frequency
     print_treatment_frequency(parallel_data, config)
@@ -79,6 +79,21 @@ function simulate_policies(algorithms, config)
 
     # Plot treatment distribution comparison
     plot_treatment_distribution_comparison_latex(parallel_data, config)
+    
+    # Plot SARSOP policy action heatmap
+    plot_sarsop_policy_action_heatmap(config, 0.6)
+    
+    # Plot Heuristic policy action heatmap
+    plot_heuristic_policy_action_heatmap(config, 0.6)
+    
+    # Plot combined policy action heatmaps side by side
+    plot_combined_policy_action_heatmaps(config, 0.6)
+
+    plot_beliefs_over_time(parallel_data, "NUS_SARSOP_Policy", config, 0.6)
+    plot_beliefs_over_time(parallel_data, "Heuristic_Policy", config, 0.6)
+
+    # Plot combined treatment probability over time
+    plot_combined_treatment_probability_over_time(parallel_data, config)
 
     # Simulate policies
     for algo in algorithms
@@ -230,7 +245,8 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
-            reward_lambdas=[0.7, 0.2, 0.0, 0.1, 0.1], # [treatment, regulatory, biomass, health, sea lice level]
+            # reward_lambdas=[0.7, 0.2, 0.1, 0.05, 0.1], # [treatment, regulatory, biomass, health, sea lice level]
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice level]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -250,13 +266,13 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
         )
     elseif mode == "full"
         config = ExperimentConfig(
-            num_episodes=10,
-            steps_per_episode=100,
+            num_episodes=20,
+            steps_per_episode=104,
             log_space=log_space,
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
-            reward_lambdas=[0.5, 0.5, 0.0, 0.0, 0.0], # [treatment, regulatory, biomass, health, sea lice]
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
             sarsop_max_time=30.0,
             VI_max_iterations=50,
             QMDP_max_iterations=50,
@@ -265,7 +281,8 @@ function setup_experiment_configs(experiment_name, log_space, mode="light")
         
     heuristic_config = HeuristicConfig(
         raw_space_threshold=config.heuristic_threshold,
-        belief_threshold=config.heuristic_belief_threshold,
+        belief_threshold_mechanical=config.heuristic_belief_threshold_mechanical,
+        belief_threshold_thermal=config.heuristic_belief_threshold_thermal,
         rho=config.heuristic_rho
     )
 

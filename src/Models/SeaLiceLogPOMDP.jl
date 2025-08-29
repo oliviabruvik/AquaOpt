@@ -201,7 +201,8 @@ end
 function POMDPs.reward(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action, sp::SeaLiceLogState)
 
     # λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = mdp.reward_lambdas
-    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = [0.6, 0.2, 0.0, 0.1, 0.1]
+    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = [0.8, 0.1, 0.0, 0.3, 0.1]
+    # λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = [0.7, 0.2, 0.0, 0.5, 0.5]
 
     # Treatment cost
     treatment_cost = get_treatment_cost(a)
@@ -213,9 +214,12 @@ function POMDPs.reward(mdp::SeaLiceLogMDP, s::SeaLiceLogState, a::Action, sp::Se
     lost_biomass = 0
 
     # Fish disease
-    fish_disease = get_fish_disease(a) + 10.0 * exp(s.SeaLiceLevel)
+    fish_disease = get_fish_disease(a)
 
-    return - (λ_trt * treatment_cost + λ_reg * regulatory_penalty + λ_bio * lost_biomass + λ_health * fish_disease + λ_sea_lice * exp(s.SeaLiceLevel))
+    # Sea lice level
+    sea_lice_level = exp(s.SeaLiceLevel)
+
+    return - (λ_trt * treatment_cost + λ_reg * regulatory_penalty + λ_bio * lost_biomass + λ_health * fish_disease + λ_sea_lice * sea_lice_level)
 end
 
 # -------------------------

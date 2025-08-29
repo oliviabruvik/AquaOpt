@@ -34,7 +34,8 @@ random_algo = Algorithm(solver_name="Random_Policy")
 # Heuristic policy
 heuristic_algo = Algorithm(solver_name="Heuristic_Policy", heuristic_config=HeuristicConfig(
     raw_space_threshold=5.0,
-    belief_threshold=0.5,
+    belief_threshold_mechanical=0.3,
+    belief_threshold_thermal=0.5,
     rho=0.8
 ))
 
@@ -88,7 +89,8 @@ function run_test(;log_space=true, test_name="test", algo=nothing)
     # Define heuristic configuration
     HEURISTIC_CONFIG = HeuristicConfig(
         raw_space_threshold=EXPERIMENT_CONFIG.heuristic_threshold,
-        belief_threshold=EXPERIMENT_CONFIG.heuristic_belief_threshold,
+        belief_threshold_mechanical=EXPERIMENT_CONFIG.heuristic_belief_threshold_mechanical,
+        belief_threshold_thermal=EXPERIMENT_CONFIG.heuristic_belief_threshold_thermal,
         rho=EXPERIMENT_CONFIG.heuristic_rho
     )
 

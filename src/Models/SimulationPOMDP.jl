@@ -290,12 +290,13 @@ function POMDPs.reward(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action, sp::
     Bt = sp.AvgFishWeight * s.NumberOfFish # Using sp.AvgFishWeight because it is the projected average weight of the fish in the pen
     Btp = sp.AvgFishWeight * sp.NumberOfFish
     lost_biomass = max(Bt - Btp, 0.0)
+    lost_biomass_1000kg = lost_biomass / 1000.0
     @assert lost_biomass >= 0.0
 
     # Fish disease
-    fish_disease = get_fish_disease(a) + 100.0 * s.Adult
+    fish_disease = get_fish_disease(a)
 
-    return - (λ_health * fish_disease + λ_trt * treatment_cost + λ_bio * lost_biomass + λ_reg * regulatory_penalty + λ_sea_lice * s.Adult)
+    return - (λ_health * fish_disease + λ_trt * treatment_cost + λ_bio * lost_biomass_1000kg + λ_reg * regulatory_penalty + λ_sea_lice * s.Adult)
 end
 
 # -------------------------

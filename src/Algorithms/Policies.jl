@@ -172,12 +172,26 @@ struct HeuristicPolicy{P<:POMDP} <: Policy
 end
 
 # Heuristic action
+# TODO: add some stochasticity
 function POMDPs.action(policy::HeuristicPolicy, b)
-    if heuristicChooseAction(policy, b, true)
-        # Choose Treatment with probability heuristic_rho, otherwise NoTreatment
-        return rand() < policy.heuristic_config.rho ? Treatment : NoTreatment
+
+    # Get the probability of the current sea lice level being above the threshold
+    state_space = states(policy.pomdp)
+    threshold = policy.heuristic_config.raw_space_threshold
+    if policy.pomdp isa SeaLiceLogMDP
+        threshold = log(threshold)
+    end
+    prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
+
+    # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
+    if prob_above_threshold > policy.heuristic_config.belief_threshold_thermal
+        return ThermalTreatment
+    # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose Treatment
+    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
+        return Treatment
+    # Otherwise, choose NoTreatment
     else
-        return rand((Treatment, NoTreatment, ThermalTreatment))
+        return NoTreatment
     end
 end
 

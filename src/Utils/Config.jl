@@ -53,8 +53,9 @@ using Parameters
     QMDP_max_iterations::Int = 30
 
     # Heuristic parameters
-    heuristic_threshold::Float64 = 5.0  # In absolute space
-    heuristic_belief_threshold::Float64 = 0.5
+    heuristic_threshold::Float64 = 0.5  # In absolute space
+    heuristic_belief_threshold_mechanical::Float64 = 0.3
+    heuristic_belief_threshold_thermal::Float64 = 0.4
     heuristic_rho::Float64 = 0.8
 
     # File management
@@ -70,8 +71,9 @@ end
 # Heuristic config struct
 # ----------------------------
 @with_kw struct HeuristicConfig
-    raw_space_threshold::Float64 = 5.0
-    belief_threshold::Float64 = 0.5
+    raw_space_threshold::Float64 = 0.4
+    belief_threshold_mechanical::Float64 = 0.3
+    belief_threshold_thermal::Float64 = 0.4
     rho::Float64 = 0.8
 end
 
