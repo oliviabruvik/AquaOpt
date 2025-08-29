@@ -12,8 +12,8 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
         # Simulation parameters
         num_episodes = config.num_episodes,
         steps_per_episode = config.steps_per_episode,
-        process_noise = config.process_noise,
-        observation_noise = config.observation_noise,
+        process_noise = 0.0,
+        observation_noise = 0.0,
         ekf_filter = config.ekf_filter,
 
         # POMDP parameters
@@ -22,17 +22,18 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
         rho = config.rho,
         discount_factor = config.discount_factor,
         log_space = config.log_space,
-        skew = config.skew,
 
         # Algorithm parameters
         lambda_values = string(config.lambda_values),  # store as string
+        reward_lambdas = string(config.reward_lambdas),
         sarsop_max_time = config.sarsop_max_time,
         VI_max_iterations = config.VI_max_iterations,
         QMDP_max_iterations = config.QMDP_max_iterations,
 
         # Heuristic parameters
         heuristic_threshold = heuristic_config.raw_space_threshold,
-        heuristic_belief_threshold = heuristic_config.belief_threshold,
+        heuristic_belief_threshold_mechanical = heuristic_config.belief_threshold_mechanical,
+        heuristic_belief_threshold_thermal = heuristic_config.belief_threshold_thermal,
         heuristic_rho = heuristic_config.rho,
 
         # Run management
@@ -59,8 +60,8 @@ function get_latest_matching_config(config::ExperimentConfig, heuristic_config::
             (df.rho .== config.rho) .&
             (df.discount_factor .== config.discount_factor) .&
             (df.log_space .== config.log_space) .&
-            (df.skew .== config.skew) .&
-
+            (df.reward_lambdas .== string(config.reward_lambdas)) .&
+            (df.regulation_limit .== config.regulation_limit) .&
         # Algorithm parameters
             (df.lambda_values .== string(config.lambda_values)) .&
             (df.sarsop_max_time .== config.sarsop_max_time) .&
@@ -69,7 +70,8 @@ function get_latest_matching_config(config::ExperimentConfig, heuristic_config::
 
         # Heuristic parameters
             (df.heuristic_threshold .== heuristic_config.raw_space_threshold) .&
-            (df.heuristic_belief_threshold .== heuristic_config.belief_threshold) .&
+            (df.heuristic_belief_threshold_mechanical .== heuristic_config.belief_threshold_mechanical) .&
+            (df.heuristic_belief_threshold_thermal .== heuristic_config.belief_threshold_thermal) .&
             (df.heuristic_rho .== heuristic_config.rho) .&
 
         # Run management

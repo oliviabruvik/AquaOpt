@@ -40,6 +40,7 @@ function plot_treatment_heatmap(algorithm, config)
                 y_vals = [s.SeaLiceLevel for s in states]
             end
         end
+        
 
         function getAction(s, policy)
             if typeof(policy) <: ValueIterationPolicy
@@ -127,47 +128,35 @@ function plot_simulation_treatment_heatmap(algorithm, config; use_observations=f
     
     for (i, λ) in enumerate(lambda_values)
         try
-            # Load simulation histories for this lambda
-            histories_lambda = histories[histories.lambda .== λ, :]
-
+            histories_lambda = histories[λ]
             if isempty(histories_lambda)
-                @warn "No histories found for λ=$λ"
+                @warn "No episode histories for λ=$λ"
                 continue
             end
-
-            # Get action, state, and reward histories
-            action_hists = histories_lambda.action_hists[1]
-            state_hists = histories_lambda.state_hists[1]
-            measurement_hists = histories_lambda.measurement_hists[1]
-            
             # Extract data from all episodes
             all_states = []
             all_actions = []
 
-            for episode in 1:length(state_hists)
-                state_hist = state_hists[episode]
-                action_hist = action_hists[episode]
+            for episode_history in histories_lambda
+                actions = collect(action_hist(episode_history))
+                states = collect(state_hist(episode_history))
+                observations = collect(observation_hist(episode_history))
                 
                 # Convert states to sea lice levels
                 if use_observations
                     # Use measurements instead of states if requested
-                    measurement_hist = measurement_hists[episode]
-                    sea_lice_levels = if config.log_space
-                        [exp(o.SeaLiceLevel) for o in measurement_hist]
-                    else
-                        [o.SeaLiceLevel for o in measurement_hist]
-                    end
+                    sea_lice_levels = [o.SeaLiceLevel for o in observations]
                 else
                     # Use actual states
-                    sea_lice_levels = if config.log_space
-                        [exp(s.SeaLiceLevel) for s in state_hist]
-                    else
-                        [s.SeaLiceLevel for s in state_hist]
-                    end
+                    sea_lice_levels = [s.SeaLiceLevel for s in states]
                 end
                 
                 append!(all_states, sea_lice_levels)
-                append!(all_actions, action_hist)
+                append!(all_actions, actions)
+            end
+            if isempty(all_states) || isempty(all_actions)
+                @warn "No states or actions found for λ=$λ"
+                continue
             end
             
             # Create bins for sea lice levels on first iteration
@@ -183,6 +172,10 @@ function plot_simulation_treatment_heatmap(algorithm, config; use_observations=f
                 
                 # Initialize matrix: Rows = bins, Columns = lambda values
                 treatment_freq_matrix = zeros(n_bins, length(lambda_values))
+            end
+            if length(bin_edges) < n_bins+1
+                @warn "Not enough bin edges for λ=$λ"
+                continue
             end
             
             # Bin the data and calculate treatment frequencies

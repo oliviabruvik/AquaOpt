@@ -24,20 +24,24 @@ function create_pomdp_mdp(λ, config)
     if config.log_space
         pomdp = SeaLiceLogMDP(
             lambda=λ,
+            reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
             growthRate=config.growthRate,
             rho=config.rho,
             discount_factor=config.discount_factor,
-            skew=config.skew
+            adult_sd=abs(log(config.raw_space_sampling_sd)),
+            regulation_limit=config.regulation_limit,
         )
     else
         pomdp = SeaLiceMDP(
             lambda=λ,
+            reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
             growthRate=config.growthRate,
             rho=config.rho,
             discount_factor=config.discount_factor,
-            skew=config.skew
+            adult_sd=config.raw_space_sampling_sd,
+            regulation_limit=config.regulation_limit,
         )
     end
 
@@ -168,12 +172,26 @@ struct HeuristicPolicy{P<:POMDP} <: Policy
 end
 
 # Heuristic action
+# TODO: add some stochasticity
 function POMDPs.action(policy::HeuristicPolicy, b)
-    if heuristicChooseAction(policy, b, true)
-        # Choose Treatment with probability heuristic_rho, otherwise NoTreatment
-        return rand() < policy.heuristic_config.rho ? Treatment : NoTreatment
+
+    # Get the probability of the current sea lice level being above the threshold
+    state_space = states(policy.pomdp)
+    threshold = policy.heuristic_config.raw_space_threshold
+    if policy.pomdp isa SeaLiceLogMDP
+        threshold = log(threshold)
+    end
+    prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
+
+    # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
+    if prob_above_threshold > policy.heuristic_config.belief_threshold_thermal
+        return ThermalTreatment
+    # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose Treatment
+    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
+        return Treatment
+    # Otherwise, choose NoTreatment
     else
-        return rand((Treatment, NoTreatment))
+        return NoTreatment
     end
 end
 
@@ -206,4 +224,45 @@ end
 
 function POMDPs.updater(policy::HeuristicPolicy)
     return DiscreteUpdater(policy.pomdp)
+end
+
+
+# ----------------------------
+# Adaptor Policy
+# ----------------------------
+struct AdaptorPolicy <: Policy
+    lofi_policy::Policy
+    pomdp::POMDP
+end
+
+# Adaptor action
+function POMDPs.action(policy::AdaptorPolicy, b)
+
+    # Predict the next state
+    pred_adult, pred_motile, pred_sessile = predict_next_abundances(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1])
+    adult_sd = sqrt(b.Σ[1,1])
+
+    # Clamp predictions to be positive
+    pred_adult = max(pred_adult, 1e-3)
+
+    if policy.pomdp isa SeaLiceLogMDP
+        pred_adult = log(pred_adult)
+        adult_sd = abs(log(adult_sd))
+    end
+
+    # Get next action from policy
+    # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
+    if policy.lofi_policy isa ValueIterationPolicy
+        if policy.pomdp isa SeaLiceLogMDP
+            pred_adult = SeaLiceLogState(pred_adult)
+        else
+            pred_adult = SeaLiceState(pred_adult)
+        end
+        return action(policy.lofi_policy, pred_adult)
+    end
+
+    # Discretize alpha vectors (representation of utility over belief states per action)
+    state_space = states(policy.lofi_policy.pomdp)
+    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
+    return action(policy.lofi_policy, bvec)
 end

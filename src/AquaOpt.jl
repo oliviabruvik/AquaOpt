@@ -1,3 +1,11 @@
+# -------------------------
+# Include shared types first
+# -------------------------
+include("Utils/SharedTypes.jl")
+
+# -------------------------
+# Include other files
+# -------------------------
 include("Algorithms/Evaluation.jl")
 include("Algorithms/Policies.jl")
 include("Algorithms/Simulation.jl")
@@ -6,6 +14,7 @@ include("Models/SeaLicePOMDP.jl")
 include("Plotting/Heatmaps.jl")
 include("Plotting/Timeseries.jl")
 include("Plotting/Comparison.jl")
+include("Plotting/ParallelPlots.jl")
 include("Utils/Config.jl")
 include("Utils/ExperimentTracking.jl")
 
@@ -45,6 +54,48 @@ end
 # ----------------------------
 function simulate_policies(algorithms, config)
     @info "Simulating policies"
+    parallel_data = simulate_all_policies(algorithms, config)
+    # display_rewards_across_policies(parallel_data, config)
+    # display_best_lambda_for_each_policy(parallel_data, algorithms)
+
+    # Extract reward metrics
+    processed_data = extract_reward_metrics(parallel_data, config)
+
+    # Display reward metrics
+    display_reward_metrics(processed_data, config, true)
+
+    # Print treatment frequency
+    print_treatment_frequency(parallel_data, config)
+
+    # Print histories
+    print_histories(parallel_data, config)
+
+    # Plot heuristic vs sarsop sealice levels over time
+    plot_heuristic_vs_sarsop_sealice_levels_over_time_latex(parallel_data, config)
+
+    # Plot one simulation with all state variables over time
+    plot_one_simulation_with_all_state_variables_over_time(parallel_data, config, "NUS_SARSOP_Policy")
+    plot_one_simulation_with_all_state_variables_over_time(parallel_data, config, "Heuristic_Policy")
+
+    # Plot treatment distribution comparison
+    plot_treatment_distribution_comparison_latex(parallel_data, config)
+    
+    # Plot SARSOP policy action heatmap
+    plot_sarsop_policy_action_heatmap(config, 0.6)
+    
+    # Plot Heuristic policy action heatmap
+    plot_heuristic_policy_action_heatmap(config, 0.6)
+    
+    # Plot combined policy action heatmaps side by side
+    plot_combined_policy_action_heatmaps(config, 0.6)
+
+    plot_beliefs_over_time(parallel_data, "NUS_SARSOP_Policy", config, 0.6)
+    plot_beliefs_over_time(parallel_data, "Heuristic_Policy", config, 0.6)
+
+    # Plot combined treatment probability over time
+    plot_combined_treatment_probability_over_time(parallel_data, config)
+
+    # Simulate policies
     for algo in algorithms
         println("Simulating $(algo.solver_name)")
         histories = simulate_policy(algo, config)
@@ -69,6 +120,14 @@ function plot_results(algorithms, config)
         end
         @load histories_path histories
 
+        # Load data from parallel simulations
+        data_path = joinpath(config.simulations_dir, "all_policies_simulation_data.jld2")
+        if !isfile(data_path)
+            @error "Data file not found at $data_path. Run simulation first. with --simulate"
+            continue
+        end
+        @load data_path data
+
         # Load avg results
         avg_results_path = joinpath(config.results_dir, "$(algo.solver_name)_avg_results.jld2")
         if !isfile(avg_results_path)
@@ -76,6 +135,9 @@ function plot_results(algorithms, config)
             continue
         end
         @load avg_results_path avg_results
+
+        # Plot belief means and variances
+        plot_beliefs_over_time(data, algo.solver_name, config, 0.6)
 
         # Plot policy cost vs sealice
         plot_policy_cost_vs_sealice(histories, avg_results, algo.solver_name, config)
@@ -87,7 +149,10 @@ function plot_results(algorithms, config)
         plot_treatment_heatmap(algo, config)
 
         # Plot simulation treatment heatmap
-        plot_simulation_treatment_heatmap(algo, config; use_observations=false, n_bins=50)
+        # plot_simulation_treatment_heatmap(algo, config; use_observations=false, n_bins=50)
+
+        plot_algo_sealice_levels_over_time(config, algo.solver_name, 0.6)
+        plot_algo_adult_predicted_over_time(config, algo.solver_name, 0.6)
 
     end
     
@@ -100,7 +165,7 @@ function plot_results(algorithms, config)
     plot_policy_reward_over_lambdas(config)
 
     # Generate Pareto frontier
-    plot_pareto_frontier(config)
+    # plot_pareto_frontier(config)
 
     @info "Saved all plots to $(config.figures_dir)"
 end
@@ -109,9 +174,9 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;first_step_flag="solve", log_space=true, experiment_name="exp", skew=false, mode="light")
+function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light")
 
-    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, skew, mode)
+    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, mode)
     algorithms = define_algorithms(config, heuristic_config)
 
     if first_step_flag == "solve"
@@ -165,7 +230,7 @@ end
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_experiment_configs(experiment_name, log_space, skew=false, mode="light")
+function setup_experiment_configs(experiment_name, log_space, mode="light")
 
     # Define experiment configuration
     exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_mode_", mode)
@@ -175,13 +240,13 @@ function setup_experiment_configs(experiment_name, log_space, skew=false, mode="
     if mode == "light"
         config = ExperimentConfig(
             num_episodes=10,
-            steps_per_episode=52,
+            steps_per_episode=100,
             log_space=log_space,
-            skew=skew,
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
-            lambda_values=[0.4, 0.6],
+            # reward_lambdas=[0.7, 0.2, 0.1, 0.05, 0.1], # [treatment, regulatory, biomass, health, sea lice level]
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice level]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -191,30 +256,33 @@ function setup_experiment_configs(experiment_name, log_space, skew=false, mode="
             num_episodes=1,
             steps_per_episode=20,
             log_space=log_space,
-            skew=skew,
             experiment_name=exp_name,
             verbose=true,
             step_through=true,
-            lambda_values=[0.2, 0.4, 0.6, 0.8],
+            reward_lambdas=[0.5, 0.3, 0.1, 0.1, 0.0], # [treatment, regulatory, biomass, health, sea lice]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
         )
     elseif mode == "full"
         config = ExperimentConfig(
-            num_episodes=10,
-            steps_per_episode=52,
+            num_episodes=20,
+            steps_per_episode=104,
             log_space=log_space,
-            skew=skew,
             experiment_name=exp_name,
             verbose=false,
             step_through=false,
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=30.0,
+            VI_max_iterations=50,
+            QMDP_max_iterations=50,
         )
     end
         
     heuristic_config = HeuristicConfig(
         raw_space_threshold=config.heuristic_threshold,
-        belief_threshold=config.heuristic_belief_threshold,
+        belief_threshold_mechanical=config.heuristic_belief_threshold_mechanical,
+        belief_threshold_thermal=config.heuristic_belief_threshold_thermal,
         rho=config.heuristic_rho
     )
 
@@ -244,7 +312,7 @@ function define_algorithms(config, heuristic_config)
         Algorithm(solver_name="AlwaysTreat_Policy"),
         Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
-        Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
+        # Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
@@ -257,7 +325,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     first_step_flag = "solve" # "solve", "simulate", "plot"
     log_space_flag = true
-    skew_flag = false
     experiment_name_flag = "exp"
     mode_flag = "light"
 
@@ -273,7 +340,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
     end
 
-    @info "Running with mode: $mode_flag, log_space: $log_space_flag, skew: $skew_flag, experiment_name: $experiment_name_flag"
+    @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
 
-    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, skew=skew_flag)
+    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
 end

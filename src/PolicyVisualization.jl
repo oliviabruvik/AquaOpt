@@ -712,7 +712,7 @@ begin
 	    # Create directory for simulation histories and results
 	    histories_dir = joinpath(config.data_dir, "simulation_histories", algorithm.solver_name)
 	    mkpath(histories_dir)
-	    results_dir = joinpath(config.data_dir, "avg_results", algorithm.solver_name)
+	    results_dir = joinpath(config.data_dir, "avg_results")
 	    mkpath(results_dir)
 	    policies_dir = joinpath(config.data_dir, "policies", algorithm.solver_name)
 	    mkpath(policies_dir)

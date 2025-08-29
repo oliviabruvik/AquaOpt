@@ -1,54 +1,37 @@
 using Distributions
 using POMDPs
+using Random
+
+# Include shared types
+include("SharedTypes.jl")
 
 # -------------------------
-# Discretized Normal Sampling Utility
+# Utility functions for discretizing distributions
 # -------------------------
-# "Returns a transition distribution that ensures all states are reachable."
-# function discretized_normal_points(mean::Float64, mdp::SeaLiceMDP, skew::Bool=false)
-
-#     if skew
-#         skew_factor = 2.0
-#         dist = SkewNormal(mean, mdp.sampling_sd, skew_factor)
-#     else
-#         dist = Normal(mean, mdp.sampling_sd)
-#     end
-
-#     # Calculate the points
-#     points = mean .+ mdp.sampling_sd .* [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3]
-#     if skew
-#         points = points .* (1 + 0.3 * skew_factor)
-#     end
-    
-#     # Ensure points are within the range of the sea lice range
-#     points = clamp.(points, mdp.min_lice_level, mdp.max_lice_level)
-
-#     # Calculate and normalize the probabilities
-#     probs = pdf.(dist, points)
-#     probs = normalize(probs, 1)
-    
-#     # Ensure we have at least one transition
-#     if length(points) == 0 || sum(probs) == 0
-#         # Fallback to mean state
-#         points = [mean]
-#         probs = [1.0]
-#     end
-
-#     return points, probs
-# end
-
-
-# -------------------------
-# Discretized Normal Distribution
-# -------------------------
-function discretize_distribution(dist::Distribution, space::Any, skew::Bool=false)
+function discretize_distribution(dist::Distribution, space::Any)
 
     probs = zeros(length(space))
     past_cdf = 0.0
+    
+    # Add safety check for NaN values
     for (i, s) in enumerate(space)
         curr_cdf = cdf(dist, s.SeaLiceLevel)
+        
+        # Check for NaN values
+        if isnan(curr_cdf)
+            @warn("NaN detected in CDF calculation. Distribution: $dist, State: $s")
+            # Fallback to uniform distribution
+            return fill(1.0/length(space), length(space))
+        end
+        
         probs[i] = curr_cdf - past_cdf
         past_cdf = curr_cdf
+    end
+
+    # Check for negative probabilities (shouldn't happen with CDF)
+    if any(x -> x < -1e-10, probs)
+        @warn("Negative probabilities detected, clamping to 0")
+        probs = max.(probs, 0.0)
     end
 
     if sum(probs) < 0.01
@@ -71,3 +54,103 @@ function discretize_distribution(dist::Distribution, space::Any, skew::Bool=fals
     return probs
 end
 
+# -------------------------
+# Temperature model: Return estimated weekly sea surface temperature (°C) for Norwegian salmon farms.
+# -------------------------
+function get_temperature(annual_week)
+
+    location = "south"
+
+    if location == "north"
+        T_mean = 12.0 # average annual temperature (°C)
+        T_amp = 4.5 # amplitude (°C)
+        peak_week = 27 # aligns peak with July (week ~27)
+    elseif location == "west"
+        T_mean = 16.0 # average annual temperature (°C)
+        T_amp = 4.5
+        peak_week = 27
+    elseif location == "south"
+        T_mean = 20.0
+        T_amp = 4.5
+        peak_week = 27
+    end
+    return T_mean + T_amp * cos(2π * (annual_week - peak_week) / 52)
+end
+
+# -------------------------
+# Predict the next adult sea lice level based on the current state and temperature
+# Development rate model: Return the expected development rate based on the temperature.
+# Based on A salmon lice prediction model, Stige et al. 2025.
+# https://www.sciencedirect.com/science/article/pii/S0167587724002915
+# -------------------------
+function predict_next_abundances(adult, motile, sessile, temp)
+
+    location = "south"
+
+    if location == "north"
+        d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 12))))  # Faster sessile to motile
+        d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 12))))  # Faster motile to adult
+    elseif location == "west"
+        d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 16))))  # Faster sessile to motile
+        d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 16))))  # Faster motile to adult
+    elseif location == "south"
+        d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 20))))  # Faster sessile to motile
+        d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 20))))  # Faster motile to adult
+    end
+    
+    # Weekly survival probabilities from Table 1 of Stige et al. 2025.
+    if location == "north"
+        s1 = 0.49  # sessile
+        s2 = 2.3   # sessile → motile scaling
+        s3 = 0.88  # motile
+        s4 = 0.61  # adult
+    elseif location == "west"
+        s1 = 0.6  # sessile
+        s2 = 3.0   # sessile → motile scaling
+        s3 = 0.95  # motile
+        s4 = 0.70  # adult
+    elseif location == "south"
+        s1 = 0.8  # sessile
+        s2 = 5.0   # sessile → motile scaling
+        s3 = 0.99  # motile
+        s4 = 0.99  # adult
+    end
+
+    # TODO: Remember to change this back to the original values
+    # Original: d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))
+    # Original: d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))
+    # d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 16))))  # Faster sessile to motile
+    # d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 16))))  # Faster motile to adult
+
+    # Get the predicted sea lice levels
+    pred_sessile = s1 * sessile
+    pred_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
+    pred_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
+
+    # Add an influx of sessiles from the sea
+    if location == "north"
+        pred_sessile += 0.01
+    elseif location == "west"
+        pred_sessile += 0.1
+    elseif location == "south"
+        pred_sessile += 0.2
+    end
+
+    # Clamp the sea lice levels to be positive
+    pred_adult = max(pred_adult, zero(pred_adult))
+    pred_motile = max(pred_motile, zero(pred_motile))
+    pred_sessile = max(pred_sessile, zero(pred_sessile))
+
+    return pred_adult, pred_motile, pred_sessile
+end
+
+# -------------------------
+# Helper: logistic and NB parameterization
+# -------------------------
+logistic(x) = 1 / (1 + exp(-x))
+
+# -------------------------
+# Given NB "size" k and mean μ, Distributions.jl uses NegativeBinomial(r, p) with mean = r*(1-p)/p. 
+# Solve p = k/(k+μ), r = k.
+# -------------------------
+nb_params_from_mean_k(μ, k) = (r = k, p = k/(k + μ))

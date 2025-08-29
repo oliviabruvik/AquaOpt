@@ -1,5 +1,5 @@
-include("SimulationPOMDP.jl")
-include("SimulationLogPOMDP.jl")
+include("../Utils/SharedTypes.jl")
+include("../Utils/Utils.jl")
 
 using POMDPs
 using GaussianFilters
@@ -7,64 +7,89 @@ using Distributions
 using LinearAlgebra
 using Random
 
-struct KFUpdaterStruct
-    ekf::ExtendedKalmanFilter
-    ukf::UnscentedKalmanFilter
-    pomdp::Union{SeaLiceSimMDP, SeaLiceLogSimMDP}
+# TODO: uncertainty in kalman filter a bit bigger than in the simulation
+# TODO: simLog
+
+# --------------------------------------------
+# Updater wrapper struct
+# --------------------------------------------
+mutable struct KalmanUpdater <: POMDPs.Updater
+    filter::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}
 end
 
 # x is state, u is action
 function step(x, u)
-    growth_rate = 0.3
-    rho = 0.95
-    xp = copy(x)
-    xp[1] = (1 - (u[1] == 1.0 ? rho : 0.0)) * exp(growth_rate) * x[1]
-    return xp
+
+    # Unpack the state and action
+    adult, motile, sessile, temp = x
+    treatment, annual_week = u
+
+    # Apply treatment
+    config = get_action_config(Action(Int(treatment)))
+    adult *= (1 - config.adult_reduction)
+    motile *= (1 - config.motile_reduction)
+    sessile *= (1 - config.sessile_reduction)
+
+    # Predict the next abundances
+    next_adult, next_motile, next_sessile = predict_next_abundances(adult, motile, sessile, temp)
+
+    # Get the temperature for the next week
+    next_annual_week = (annual_week + 1) % 52
+    next_temp = get_temperature(next_annual_week)
+
+    return [next_adult, next_motile, next_sessile, next_temp]
 end
 
-# x is state, u is action
-function step_log(x, u)
-    growth_rate = 0.3
-    rho = 0.95
-    xp = copy(x)
-    xp[1] = log(1 - (u[1] == 1.0 ? rho : 0.0)) + growth_rate + x[1]
-    return xp
-end
+# --------------------------------------------
+# Observation model (fully observed)
+# --------------------------------------------
+observe(x, u) = x  # noise handled by V
 
-# build dynamics model
-function observe(x, u)
-    return x
-end
-
-# Extended Kalman Filter Updater
-function KFUpdater(pomdp::Union{SeaLiceSimMDP, SeaLiceLogSimMDP}; process_noise=process_noise, observation_noise=observation_noise)
+# --------------------------------------------
+# Build EKF or UKF filter
+# --------------------------------------------
+function build_kf(sim_pomdp::Any; ekf_filter=false)
     
-    # Create noise matrices
-    W = process_noise^2 * Matrix{Float64}(I, 1, 1)
-    V = observation_noise^2 * Matrix{Float64}(I, 1, 1)
+    # Create noise matrices with the diagonal elements being adult, sessile, motile, temperature
+    # The W matrix stores the process noise for each state variable
+    # The V matrix stores the observation noise for each state variable
+    W = Diagonal([sim_pomdp.adult_sd^2, sim_pomdp.motile_sd^2, sim_pomdp.sessile_sd^2, sim_pomdp.temp_sd^2])
+    V = Diagonal([sim_pomdp.adult_sd^2, sim_pomdp.motile_sd^2, sim_pomdp.sessile_sd^2, sim_pomdp.temp_sd^2])
 
     # Create dynamics and observation models
-    step_func = typeof(pomdp) <: SeaLiceLogSimMDP ? step_log : step
-    dmodel = NonlinearDynamicsModel(step_func, W)
+    dmodel = NonlinearDynamicsModel(step, W)
     omodel = NonlinearObservationModel(observe, V)
 
     # Create and return the KF
-    ekf = ExtendedKalmanFilter(dmodel, omodel)
-    ukf = UnscentedKalmanFilter(dmodel, omodel)
-    return KFUpdaterStruct(ekf, ukf, pomdp)
+    if ekf_filter
+        return ExtendedKalmanFilter(dmodel, omodel)
+    else
+        return UnscentedKalmanFilter(dmodel, omodel)
+    end
 end
 
-# POMDPs.updater(policy::Policy, pomdp::SeaLiceSimMDP) = EKFUpdater(pomdp, process_noise=ST_DEV, observation_noise=ST_DEV)
-
-function POMDPs.initialize_belief(updater::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, dist::Distribution)
-    return GaussianBelief([mean(dist)], Matrix{Float64}(I, 1, 1) * std(dist))
-end
-
-function runKalmanFilter(kf::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}, b0::GaussianBelief, a::Action, o::Union{SeaLiceObservation, SeaLiceLogObservation})
+# --------------------------------------------
+# Belief initialization
+# --------------------------------------------
+function POMDPs.initialize_belief(updater::KalmanUpdater, dists::NTuple{4, Distribution})
     
-    # Convert action to vector
-    action = [a == Treatment ? 1.0 : 0.0]
+    # TODO: add full state distribution with 0 noise
+    μ0 = mean.([dists[1], dists[2], dists[3], dists[4]])
+    σ2s = std.([dists[1], dists[2], dists[3], dists[4]]).^2
+    Σ0 = Diagonal(σ2s)
+    
+    return GaussianBelief(μ0, Σ0)
+end
 
-    # Update belief
-    return GaussianFilters.update(kf, b0, action, [o.SeaLiceLevel])
+# --------------------------------------------
+# Kalman update
+# --------------------------------------------
+function POMDPs.update(updater::KalmanUpdater, b0::GaussianBelief, a::Action, o::Any)
+
+    # We're passing in the annual week to the action because the dynamics model depends on it for the temperature model
+    action = [Int(a), o.AnnualWeek]
+    observation = [o.Adult, o.Motile, o.Sessile, o.Temperature]
+    b = GaussianFilters.update(updater.filter, b0, action, observation)
+
+    return b
 end

@@ -36,7 +36,7 @@ end
 # ----------------------------
 # Sensitivity Analysis Function
 # ----------------------------
-function run_sensitivity_analysis(algorithms, config::SensitivityConfig, pomdp_config; log_space=true)
+function run_sensitivity_analysis(algorithms, config::SensitivityConfig, experiment_config; log_space=true)
 
     mkpath(config.data_dir)
 
@@ -62,39 +62,44 @@ function run_sensitivity_analysis(algorithms, config::SensitivityConfig, pomdp_c
             
             @info "Testing: ht=$ht, bt=$bt, gr=$gr, λ=$λ, pn=$pn, on=$on"
             
-            # Update POMDP configuration
-            pomdp_config = POMDPConfig(
-                costOfTreatment=10.0,
-                growthRate=gr,
-                rho=0.7,
-                discount_factor=0.95,
-                log_space=log_space,
-            )
-            
             # Update algorithm configuration for Heuristic Policy
             algo_config = algo
             if algo.solver_name == "Heuristic_Policy"
                 algo_config = Algorithm(
                     solver_name="Heuristic_Policy",
-                    heuristic_threshold=ht,
-                    heuristic_belief_threshold=bt
+                    heuristic_config=HeuristicConfig(
+                        raw_space_threshold=ht,
+                        belief_threshold=bt,
+                        rho=0.7
+                    )
                 )
             end
 
             # Update simulation configuration for noise parameters
-            sim_config = Config(
-                lambda_values=[λ],
+            experiment_config = ExperimentConfig(
+
+                # Simulation parameters
                 num_episodes=config.num_episodes,
                 steps_per_episode=config.steps_per_episode,
-                heuristic_threshold=ht,
-                heuristic_belief_threshold=bt,
                 process_noise=pn,
                 observation_noise=on,
-                data_dir=config.data_dir,
+
+                # POMDP parameters
+                costOfTreatment=10.0,
+                growthRate=gr,
+                rho=0.7,
+                discount_factor=0.95,
+                log_space=log_space,
+
+                # Algorithm parameters
+                lambda_values=[λ],
+
+                # File management
+                data_dir=config.data_dir
             )
 
             # Run simulation
-            algo_results = test_optimizer(algo_config, sim_config, pomdp_config)
+            algo_results = test_optimizer(algo_config, experiment_config)
 
             # Extract results
             for row in eachrow(algo_results)
@@ -127,13 +132,13 @@ end
 # ----------------------------
 # Plotting Functions
 # ----------------------------
-function plot_sensitivity_results(config::SensitivityConfig; log_space::Bool)
+function plot_sensitivity_results(sensitivity_config::SensitivityConfig; log_space::Bool)
 
     # Load results
-    results_file_path = joinpath(config.data_dir, "sensitivity_analysis_results_$(log_space ? true : false)_log_space.jld2")
+    results_file_path = joinpath(sensitivity_config.data_dir, "sensitivity_analysis_results_$(log_space ? true : false)_log_space.jld2")
     if !isfile(results_file_path)
         @warn "Results file not found at $results_file_path. Run sensitivity analysis first."
-        sensitivity_results = run_sensitivity_analysis(algorithms, config, pomdp_config, log_space=log_space)
+        sensitivity_results = run_sensitivity_analysis(algorithms, sensitivity_config, experiment_config, log_space=log_space)
     else
         @load results_file_path sensitivity_results
     end
@@ -207,7 +212,7 @@ function plot_sensitivity_results(config::SensitivityConfig; log_space::Bool)
         end
 
         # Save plot
-        plot_dir = joinpath(config.data_dir, "plots")
+        plot_dir = joinpath(sensitivity_config.data_dir, "plots")
         mkpath(plot_dir)
         plot_file = joinpath(plot_dir, "$(param_col)_sensitivity_$(log_space ? "log_space" : "raw_space").png")
         savefig(p, plot_file)
@@ -239,7 +244,7 @@ function plot_sensitivity_results(config::SensitivityConfig; log_space::Bool)
         end
     end
     
-    plot_dir = joinpath(config.data_dir, "plots")
+    plot_dir = joinpath(sensitivity_config.data_dir, "plots")
     mkpath(plot_dir)
     plot_file = joinpath(plot_dir, "heuristic_heatmap_$(log_space ? "log_space" : "raw_space").png")
     savefig(p, plot_file)
@@ -258,13 +263,13 @@ function main_sensitivity()
     ]
 
     # Define configurations
-    config = SensitivityConfig()
-    pomdp_config = POMDPConfig(log_space=true)
+    sensitivity_config = SensitivityConfig()
 
     # Run sensitivity analysis for log-space and raw-space
     for log_space in [true, false]
-        # sensitivity_results = run_sensitivity_analysis(algorithms, config, pomdp_config, log_space=log_space)
-        plot_sensitivity_results(config; log_space=log_space)
+        experiment_config = ExperimentConfig(log_space=log_space)
+        sensitivity_results = run_sensitivity_analysis(algorithms, sensitivity_config, experiment_config, log_space=log_space)
+        plot_sensitivity_results(sensitivity_config; log_space=log_space)
     end
 end
 

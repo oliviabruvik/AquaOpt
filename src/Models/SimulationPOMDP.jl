@@ -1,3 +1,8 @@
+# Include shared types
+include("../Utils/SharedTypes.jl")
+include("../Utils/Utils.jl")
+include("KalmanFilter.jl")
+
 using DataFrames
 import Distributions: Normal, Uniform
 using JLD2
@@ -16,76 +21,325 @@ using Random
 # -------------------------
 # State, Observation, Action
 # -------------------------
-"State representing the sea lice level."
-struct SeaLiceState
-	SeaLiceLevel::Float64
+"State representing the predicted sea lice level the following week and the current sea lice level."
+struct EvaluationState
+	SeaLiceLevel::Float64 # The predicted adult sea lice level the following week (without treatment)
+    Adult::Float64 # The adult sea lice level this week
+    Motile::Float64 # The motile sea lice level this week
+    Sessile::Float64 # The sessile sea lice level this week
+    Temperature::Float64 # The mean temperature (°C) over the last 7 days at the farm (based on approximately daily measurements)
+    ProductionWeek::Int64 # The number of weeks since production start
+    AnnualWeek::Int64 # The week of the year
+    NumberOfFish::Int64 # The number of fish in the pen
+    AvgFishWeight::Float64 # The average weight of the fish in the pen (kg)
+    Salinity::Float64 # The salinity of the water (psu)
 end
 
-"Observation representing an observed sea lice level."
-struct SeaLiceObservation
-	SeaLiceLevel::Float64
+"Observation representing the predicted observed sea lice level the following week and the current observed sea lice level."
+struct EvaluationObservation
+	SeaLiceLevel::Float64 # The observed predicted adult sea lice level the following week (without treatment)
+    Adult::Float64 # The observed adult sea lice level this week
+    Motile::Float64 # The observed motile sea lice level this week
+    Sessile::Float64 # The observed sessile sea lice level this week
+    Temperature::Float64 # The observed mean temperature (°C) over the last 7 days at the farm (based on approximately daily measurements)
+    ProductionWeek::Int64 # The number of weeks since production start
+    AnnualWeek::Int64 # The week of the year
+    NumberOfFish::Int64 # The number of fish in the pen
+    AvgFishWeight::Float64 # The average weight of the fish in the pen (kg)
+    Salinity::Float64 # The salinity of the water (psu)
 end
-
-"Available actions: NoTreatment or Treatment."
-@enum Action NoTreatment Treatment
 
 # -------------------------
-# SeaLiceMDP Definition
+# SimulationPOMDP Definition
 # -------------------------
 "Sea lice MDP with growth dynamics and treatment effects."
-@with_kw struct SeaLiceSimMDP <: POMDP{SeaLiceState, Action, SeaLiceObservation}
+@with_kw struct SeaLiceSimMDP <: POMDP{EvaluationState, Action, EvaluationObservation}
+
+    # Parameters
 	lambda::Float64 = 0.5
+    reward_lambdas::Vector{Float64} = [0.5, 0.5, 0.0, 0.0] # [treatment, regulatory, biomass, health]
 	costOfTreatment::Float64 = 10.0
-	growthRate::Float64 = 1.2
-	rho::Float64 = 0.7
+	growthRate::Float64 = 0.3
+	rho::Float64 = 0.95
     discount_factor::Float64 = 0.95
-    skew::Bool = false
+
+    # Regulation parameters
+    regulation_limit::Float64 = 0.5
+
+    # Weight parameters
+    w_max::Float64 = 5.0                        # asymptotic harvest weight (kg)
+    k_growth::Float64 = 0.01                    # weekly von Bertalanffy/logistic-like rate
+    temp_sensitivity::Float64 = 0.03            # temperature effect on growth rate (°C)
+
+    # Fish count parameters
+    nat_mort_rate::Float64 = 0.0008             # weekly natural mortality fraction
+    trt_mort_bump::Float64 = 0.005              # extra mortality fraction in treatment weeks
+    harvest_schedule::Function = (week::Int)->0 # fish harvested this week (kg)
+    move_in_fn::Function = (week::Int)->0       # fish moved in (kg)
+    move_out_fn::Function = (week::Int)->0      # fish moved out (kg)
+
+    # Parameters from Aldrin et al. 2023
+    n_sample::Int = 20                         # number of fish counted (ntc)
+    ρ_adult::Float64 = 0.175                   # aggregation parameter for adults
+    ρ_motile::Float64 = 0.187                   # aggregation parameter for motile
+    ρ_sessile::Float64 = 0.037                  # aggregation parameter for sessile
+
+    # Under-reporting parameters from Aldrin et al. 2023
+    use_underreport::Bool = false      # toggle logistic under-count correction
+    beta0_Scount_f::Float64 = -1.535           # farm-specific intercept (can vary by farm)
+    beta1_Scount::Float64 = 0.039              # common weight slope
+    mean_fish_weight_kg::Float64 = 1.5         # mean fish weight (kg)
+    W0::Float64 = 0.1 # kg
+
+    # Bounds
     sea_lice_bounds::Tuple{Float64, Float64} = (0.0, 30.0)
     initial_bounds::Tuple{Float64, Float64} = (0.0, 0.25)
-    sea_lice_initial_mean::Float64 = 0.125
-    sampling_sd::Float64 = 0.5
+    weight_bounds::Tuple{Float64, Float64} = (0.0, 7.0)
+    number_of_fish_bounds::Tuple{Float64, Float64} = (0.0, 200000.0)
+
+    # Means: Empirical from Aldrin et al. 2023
+    adult_mean::Float64 = 0.13
+    motile_mean::Float64 = 0.47
+    sessile_mean::Float64 = 0.12
+
+    # Transition and Observation Noise
+    adult_sd::Float64 = 0.1
+    motile_sd::Float64 = 0.1
+    sessile_sd::Float64 = 0.1
+    temp_sd::Float64 = 0.0 # TODO: remember to change this back to 0.1
+    weight_sd::Float64 = 0.05
+    number_of_fish_sd::Float64 = 0.0
+
+    # Distributions
+    adult_dist::Distribution = Normal(0, adult_sd)
+    motile_dist::Distribution = Normal(0, motile_sd)
+    sessile_dist::Distribution = Normal(0, sessile_sd)
+    temp_dist::Distribution = Normal(0, temp_sd)
+
+    # Sampling parameters
     rng::AbstractRNG = Random.GLOBAL_RNG
-    normal_dist::Distribution = Normal(0, sampling_sd)
-    skew_normal_dist::Distribution = SkewNormal(0, sampling_sd, 2.0)
+    production_start_week::Int64 = 34 # Week 34 is approximately July 1st
 end
 
 # -------------------------
 # POMDPs.jl Interface
 # -------------------------
-POMDPs.actions(mdp::SeaLiceSimMDP) = [NoTreatment, Treatment]
+POMDPs.actions(mdp::SeaLiceSimMDP) = [NoTreatment, Treatment, ThermalTreatment]
 POMDPs.discount(mdp::SeaLiceSimMDP) = mdp.discount_factor
-POMDPs.isterminal(mdp::SeaLiceSimMDP, s::SeaLiceState) = false
+POMDPs.isterminal(mdp::SeaLiceSimMDP, s::EvaluationState) = false
 
-function POMDPs.transition(pomdp::SeaLiceSimMDP, s::SeaLiceState, a::Action)
+# -------------------------
+# Transition function: the current sea lice level and the predicted sea lice level the following week
+# are affected by the treatment and growth rate. The predicted sea lice level the following week will 
+# have an additional e^r term because it is a week later.
+# -------------------------
+function POMDPs.transition(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
-        μ = (1 - (a == Treatment ? pomdp.rho : 0.0)) * exp(pomdp.growthRate) * s.SeaLiceLevel
-        next_state = μ + rand(rng, pomdp.normal_dist)
-        return SeaLiceState(clamp(next_state, pomdp.sea_lice_bounds...))
+
+        # Run step function to predict the next state
+        x = [s.Adult, s.Motile, s.Sessile, s.Temperature]
+        u = [a, s.AnnualWeek]
+        next_adult, next_motile, next_sessile, next_temp = step(x, u)
+
+        # # Biomass loss
+        # # TODO: add a function to calculate the biomass loss
+        # # https://ars.els-cdn.com/content/image/1-s2.0-S0044848623005239-mmc1.pdf
+        # lambda_mech = 1.210
+
+        # Add noise
+        next_adult = next_adult + rand(rng, pomdp.adult_dist)
+        next_motile = next_motile + rand(rng, pomdp.motile_dist)
+        next_sessile = next_sessile + rand(rng, pomdp.sessile_dist)
+        next_temp = next_temp + rand(rng, pomdp.temp_dist)
+
+        # Clamp the sea lice levels to be positive and within the bounds of the SeaLicePOMDP
+        next_adult = max(next_adult, 0.0)
+        next_motile = max(next_motile, 0.0)
+        next_sessile = max(next_sessile, 0.0)
+        next_pred = clamp(next_adult, pomdp.sea_lice_bounds...)
+ 
+        # Calculate the weight transition based on a von Bertalanffy / logistic-like weekly update
+        # W_{t+1} = W_t + (k0 * f(T)) * (w_max - W_t)
+        k0 = max(pomdp.k_growth  * (1 + pomdp.temp_sensitivity * (s.Temperature - 10)), 0.0)
+        next_average_weight = s.AvgFishWeight + k0 * (pomdp.w_max - s.AvgFishWeight)
+        next_average_weight = clamp(next_average_weight, pomdp.weight_bounds...)
+
+        # Calculate the next number of fish
+        survival_rate = (1 - pomdp.nat_mort_rate) * (1 - get_treatment_mortality_rate(a))
+        harvest = harvest_schedule(s.ProductionWeek)
+        move_in = move_in_fn(s.ProductionWeek)
+        move_out = move_out_fn(s.ProductionWeek)
+        survived_fish = round(Int, floor(s.NumberOfFish * survival_rate))
+        next_number_of_fish = survived_fish + move_in - move_out - harvest
+        next_number_of_fish = clamp(next_number_of_fish, pomdp.number_of_fish_bounds...)
+
+        return EvaluationState(
+            next_pred, # SeaLiceLevel
+            next_adult, # Adult
+            next_motile, # Motile
+            next_sessile, # Sessile
+            next_temp, # Temperature
+            s.ProductionWeek + 1, # ProductionWeek
+            (s.AnnualWeek + 1) % 52, # AnnualWeek
+            next_number_of_fish, # NumberOfFish
+            next_average_weight, # AvgFishWeight
+            s.Salinity, # Salinity is constant
+        )
     end
 end
 
-function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::SeaLiceState)
+# -------------------------
+# Observation function: the current counts of adults, motiles, and sessiles are measured
+# with a negative binomial distribution. The predicted adult level the following week is
+# calculated based on the observed adult count this week and the temperature.
+# -------------------------
+function POMDPs.observation(pomdp::SeaLiceSimMDP, a::Action, s::EvaluationState)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
-        dist = pomdp.skew ? pomdp.skew_normal_dist : pomdp.normal_dist
-        next_state = s.SeaLiceLevel + rand(rng, dist)
-        return SeaLiceObservation(clamp(next_state, pomdp.sea_lice_bounds...))
+
+        # (Optional) under-counting correction like p^Scount_ftc
+        # paper uses (W - 0.1) with W in kg
+        # Accounts for the fact that sessiles are harder to count than motiles and adults
+        p_scount = if pomdp.use_underreport
+            η = pomdp.beta0_Scount_f + pomdp.beta1_Scount * (pomdp.mean_fish_weight_kg - pomdp.W0)
+            logistic(η)  # ∈ (0,1)
+        else
+            1.0
+        end
+
+        # Expected total lice counted across n_sample fish
+        μ_total_adult = max(1e-12, pomdp.n_sample * p_scount * s.Adult)
+        μ_total_motile = max(1e-12, pomdp.n_sample * p_scount * s.Motile)
+        μ_total_sessile = max(1e-12, pomdp.n_sample * p_scount * s.Sessile)
+
+        # Dispersion parameters for the NB distributions
+        # Aggregation (NB size) scales with sample size (n * ρ)
+        k_adult = max(1e-9, pomdp.n_sample * pomdp.ρ_adult)
+        k_motile = max(1e-9, pomdp.n_sample * pomdp.ρ_motile)
+        k_sessile = max(1e-9, pomdp.n_sample * pomdp.ρ_sessile)
+
+        # Converts the biological parameters (mean μ, dispersion k) to the mathematical
+        # parameters (r, p) that Julia's NB distribution expects
+        r_adult, p_adult = nb_params_from_mean_k(μ_total_adult, k_adult)
+        r_motile, p_motile = nb_params_from_mean_k(μ_total_motile, k_motile)
+        r_sessile, p_sessile = nb_params_from_mean_k(μ_total_sessile, k_sessile)
+
+        # Sample the total counts randomly from the NB distributions
+        total_adult = rand(rng, NegativeBinomial(r_adult, p_adult))
+        total_motile = rand(rng, NegativeBinomial(r_motile, p_motile))
+        total_sessile = rand(rng, NegativeBinomial(r_sessile, p_sessile))
+
+        # Calculate the observed sea lice levels
+        observed_adult = total_adult / pomdp.n_sample
+        observed_motile = total_motile / pomdp.n_sample
+        observed_sessile = total_sessile / pomdp.n_sample
+
+        # Calculate the observed temperature
+        observed_temperature = rand(rng, Normal(s.Temperature, pomdp.temp_sd))
+
+        # Clamp the sea lice levels to be positive
+        observed_adult = max(observed_adult, 0.0)
+        observed_motile = max(observed_motile, 0.0)
+        observed_sessile = max(observed_sessile, 0.0)
+
+        # Predict the next adult sea lice level based on the current state and temperature
+        pred_adult, _, _ = predict_next_abundances(observed_adult, observed_motile, observed_sessile, observed_temperature)
+
+        # Clamp the sea lice levels to be positive and within the bounds of the SeaLicePOMDP
+        pred_adult = clamp(pred_adult, pomdp.sea_lice_bounds...)
+
+        # Observe the number of fish and average weight
+        observed_number_of_fish = round(Int, floor(s.NumberOfFish + rand(rng, Normal(0, pomdp.number_of_fish_sd))))
+        observed_number_of_fish = clamp(observed_number_of_fish, pomdp.number_of_fish_bounds...)
+        observed_average_weight = s.AvgFishWeight + rand(rng, Normal(0, pomdp.weight_sd))
+        observed_average_weight = clamp(observed_average_weight, pomdp.weight_bounds...)
+
+        return EvaluationObservation(
+            pred_adult, # SeaLiceLevel
+            observed_adult, # Adult
+            observed_motile, # Motile
+            observed_sessile, # Sessile
+            observed_temperature, # Temperature
+            s.ProductionWeek, # ProductionWeek is fully observable
+            s.AnnualWeek, # AnnualWeek is fully observable
+            observed_number_of_fish,
+            observed_average_weight,
+            s.Salinity, # Salinity is fully observable
+        )
     end
 end
 
-function POMDPs.reward(pomdp::SeaLiceSimMDP, s::SeaLiceState, a::Action)
-    # if s.SeaLiceLevel > 0.5
-    #     lice_penalty = 1000.0
-    # else
-    #     lice_penalty = pomdp.lambda * s.SeaLiceLevel
-    # end
-    lice_penalty = pomdp.lambda * s.SeaLiceLevel
-    treatment_penalty = a == Treatment ? (1 - pomdp.lambda) * pomdp.costOfTreatment : 0.0
-    return - (lice_penalty + treatment_penalty)
+# -------------------------
+# Reward function: for now, we only penalize the current sea lice level
+# Penalize the following:
+# - Regulatory non-compliance: exceeding the bounds of the sea lice level
+# - Treatment cost
+# - Fish mortality
+# - Fish health
+# -------------------------
+function POMDPs.reward(pomdp::SeaLiceSimMDP, s::EvaluationState, a::Action, sp::EvaluationState)
+
+    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = pomdp.reward_lambdas
+
+    # Treatment cost
+    treatment_cost = get_treatment_cost(a)
+
+    # Regulatory penalty
+    regulatory_penalty = get_regulatory_penalty(a) * (s.Adult > pomdp.regulation_limit ? 1.0 : 0.0)
+
+    # Lost biomass
+    Bt = sp.AvgFishWeight * s.NumberOfFish # Using sp.AvgFishWeight because it is the projected average weight of the fish in the pen
+    Btp = sp.AvgFishWeight * sp.NumberOfFish
+    lost_biomass = max(Bt - Btp, 0.0)
+    lost_biomass_1000kg = lost_biomass / 1000.0
+    @assert lost_biomass >= 0.0
+
+    # Fish disease
+    fish_disease = get_fish_disease(a)
+
+    return - (λ_health * fish_disease + λ_trt * treatment_cost + λ_bio * lost_biomass_1000kg + λ_reg * regulatory_penalty + λ_sea_lice * s.Adult)
 end
 
+# -------------------------
+# Initial state distribution
+# -------------------------
 function POMDPs.initialstate(pomdp::SeaLiceSimMDP)
     ImplicitDistribution(pomdp) do pomdp, rng
-        next_state = pomdp.sea_lice_initial_mean + rand(rng, pomdp.normal_dist)
-        return SeaLiceState(clamp(next_state, pomdp.initial_bounds...))
+
+        # Initial temperature upon production start
+        temperature = get_temperature(pomdp.production_start_week) + rand(rng, pomdp.temp_dist)
+
+        # Initial sea lice level upon production start
+        adult = pomdp.adult_mean + rand(rng, pomdp.adult_dist)
+        motile  = pomdp.motile_mean + rand(rng, pomdp.motile_dist)
+        sessile = pomdp.sessile_mean + rand(rng, pomdp.sessile_dist)
+
+        # Next week's predicted adult sea lice level
+        pred_adult, _, _ = predict_next_abundances(adult, motile, sessile, temperature)
+
+        # Clamp the sea lice levels to be positive
+        adult = max(adult, 0.0)
+        motile = max(motile, 0.0)
+        sessile = max(sessile, 0.0)
+        pred_adult = clamp(pred_adult, pomdp.sea_lice_bounds...)
+
+        return EvaluationState(
+            pred_adult, # Predicted adult sea lice level the following week
+            adult, # Adult
+            motile, # Motile
+            sessile, # Sessile
+            temperature, # Temperature
+            1, # ProductionWeek
+            pomdp.production_start_week, # AnnualWeek
+            200000, # NumberOfFish at the start of production
+            0.1, # AvgFishWeight at the start of production (initial weight)
+            30.0, # Salinity at the start of production
+        )
     end
+end
+
+# -------------------------
+# Fish mortality function
+# -------------------------
+function get_fish_mortality(pomdp::SeaLiceSimMDP, s::EvaluationState)
+    return pomdp.fish_mortality_rate * s.Adult
 end
