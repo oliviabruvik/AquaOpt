@@ -15,6 +15,7 @@ include("Plotting/Heatmaps.jl")
 include("Plotting/Timeseries.jl")
 include("Plotting/Comparison.jl")
 include("Plotting/ParallelPlots.jl")
+include("Plotting/PlosOnePlots.jl")
 include("Utils/Config.jl")
 include("Utils/ExperimentTracking.jl")
 
@@ -39,30 +40,220 @@ using Dates
 plotlyjs()  # Activate Plotly backend
 
 # ----------------------------
-# Solve policies
-# ----------------------------
-function solve_policies(algorithms, config)
-    @info "Solving policies"
-    for algo in algorithms
-        println("Solving $(algo.solver_name)")
-        generate_mdp_pomdp_policies(algo, config)
-    end
-end
-
-# ----------------------------
 # Simulate policies
 # ----------------------------
 function simulate_policies(algorithms, config)
     @info "Simulating policies"
     parallel_data = simulate_all_policies(algorithms, config)
-    # display_rewards_across_policies(parallel_data, config)
-    # display_best_lambda_for_each_policy(parallel_data, algorithms)
+    # Simulate policies
+    for algo in algorithms
+        println("Simulating $(algo.solver_name)")
+        histories = simulate_policy(algo, config)
+        avg_results = evaluate_simulation_results(config, algo, histories)
+    end
+    return parallel_data
+end
+
+# ----------------------------
+# Plot Plos One Plots
+# ----------------------------
+function plot_plos_one_plots(parallel_data, config)
+    @info "Plotting Plos One Plots"
+    plos_one_plot_kalman_filter_belief_trajectory(parallel_data, "NUS_SARSOP_Policy", config, 0.6)
+    # plot_kalman_filter_trajectory_with_uncertainty(parallel_data, "NUS_SARSOP_Policy", config, 0.6)
+    plos_one_sealice_levels_over_time(parallel_data, config)
+    plos_one_combined_treatment_probability_over_time(parallel_data, config)
+    plos_one_sarsop_dominant_action(parallel_data, config, 0.6)
+    @info "Saved all plos one plots to $(config.figures_dir)"
+end
+
+
+# ----------------------------
+# Main function
+# ----------------------------
+function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light")
+
+    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, mode)
+    algorithms = define_algorithms(config, heuristic_config)
+
+    if first_step_flag == "solve"
+        @info "Solving policies"
+        for algo in algorithms
+            println("Solving $(algo.solver_name)")
+            generate_mdp_pomdp_policies(algo, config)
+        end
+        @info "Simulating policies"
+        parallel_data = simulate_policies(algorithms, config)
+    end
+
+    if first_step_flag == "simulate"
+        @info "Skipping policy solving"
+        # # If we skip solving but want to simulate, we need to find the latest 
+        # # experiment with the same policy parameters and use that experiment's policies_dir
+        # latest_experiment_config = get_latest_matching_config(config, heuristic_config, false)
+
+        # # Change policies_dir to the latest experiment's policies_dir
+        # config.policies_dir = latest_experiment_config.policies_dir
+
+        parallel_data = simulate_policies(algorithms, config)
+    end
+
+    if first_step_flag == "plot"
+        @info "Skipping policy solving and simulation"
+        # If we skip solving and simulation but want to plot, we need to find the latest 
+        # experiment with the same policy and simulation parameters and use that experiment's config
+        # latest_experiment_config = get_latest_matching_config(config, heuristic_config, true)
+        # @info "Latest experiment: $latest_experiment_config"
+        # config.policies_dir = latest_experiment_config.policies_dir
+        # config.simulations_dir = latest_experiment_config.simulations_dir
+        # config.results_dir = latest_experiment_config.results_dir
+
+        @load joinpath(config.simulations_dir, "all_policies_simulation_data.jld2") data
+        parallel_data = data
+    end
 
     # Extract reward metrics
     processed_data = extract_reward_metrics(parallel_data, config)
 
     # Display reward metrics
-    display_reward_metrics(processed_data, config, true)
+    display_reward_metrics(processed_data, config, false)
+
+    # Plot the results
+    plot_plos_one_plots(parallel_data, config)
+
+    # Log experiment configuration in experiments.csv file with all experiments
+    @info "Saved experiment configuration to $(config.experiment_dir)/config/experiment_config.jld2"
+    save_experiment_config(config, heuristic_config, first_step_flag)
+
+    # Save config to file in current directory for easy access
+    mkpath(joinpath(config.experiment_dir, "config"))
+    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
+    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
+        for field in fieldnames(typeof(config))
+            value = getfield(config, field)
+            println(io, "$field: $value")
+        end
+    end
+
+end
+
+
+# ----------------------------
+# Set up and save experiment configuration
+# ----------------------------
+function setup_experiment_configs(experiment_name, log_space, mode="light")
+
+    # Define experiment configuration
+    exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_mode_", mode)
+
+    @info "Setting up experiment configuration for experiment: $exp_name"
+
+    if mode == "light"
+        config = ExperimentConfig(
+            num_episodes=1000,
+            steps_per_episode=104,
+            log_space=log_space,
+            experiment_name=exp_name,
+            verbose=false,
+            step_through=false,
+            # reward_lambdas=[0.7, 0.2, 0.1, 0.05, 0.1], # [treatment, regulatory, biomass, health, sea lice level]
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice level]
+            sarsop_max_time=5.0,
+            VI_max_iterations=10,
+            QMDP_max_iterations=10,
+            policies_dir = joinpath("NorthernNorway", "policies"),
+            simulations_dir = joinpath("NorthernNorway", "simulation_histories"),
+            results_dir = joinpath("NorthernNorway", "avg_results"),
+            figures_dir = joinpath("NorthernNorway", "figures"),
+            experiment_dir = joinpath("NorthernNorway"),
+        )
+    elseif mode == "debug"
+        config = ExperimentConfig(
+            num_episodes=1,
+            steps_per_episode=20,
+            log_space=log_space,
+            experiment_name=exp_name,
+            verbose=true,
+            step_through=true,
+            reward_lambdas=[0.5, 0.3, 0.1, 0.1, 0.0], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=5.0,
+            VI_max_iterations=10,
+            QMDP_max_iterations=10,
+        )
+    elseif mode == "full"
+        config = ExperimentConfig(
+            num_episodes=20,
+            steps_per_episode=104,
+            log_space=log_space,
+            experiment_name=exp_name,
+            verbose=false,
+            step_through=false,
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=30.0,
+            VI_max_iterations=50,
+            QMDP_max_iterations=50,
+        )
+    elseif mode == "paper"
+        config = ExperimentConfig(
+            num_episodes=10,
+            steps_per_episode=104,
+            log_space=log_space,
+            experiment_name=exp_name,
+            verbose=false,
+            step_through=false,
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=50.0,
+            VI_max_iterations=100,
+            QMDP_max_iterations=100,
+            discount_factor = 0.95,
+        )
+    end
+        
+    heuristic_config = HeuristicConfig(
+        raw_space_threshold=config.heuristic_threshold,
+        belief_threshold_mechanical=config.heuristic_belief_threshold_mechanical,
+        belief_threshold_thermal=config.heuristic_belief_threshold_thermal,
+        rho=config.heuristic_rho
+    )
+
+    return config, heuristic_config
+
+end
+
+# ----------------------------
+# Define algorithms
+# ----------------------------
+function define_algorithms(config, heuristic_config)
+
+    @info "Defining solvers"
+    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.sarsop_max_time, verbose=false)
+    nus_sarsop_solver = SARSOP.SARSOPSolver(
+        timeout=config.sarsop_max_time,
+        verbose=false,
+        policy_filename=joinpath(config.policies_dir, "NUS_SARSOP_Policy/policy.out"),
+        pomdp_filename=joinpath(config.experiment_dir, "pomdp_mdp/pomdp.pomdpx")
+    )
+    vi_solver = ValueIterationSolver(max_iterations=config.VI_max_iterations)
+    qmdp_solver = QMDPSolver(max_iterations=config.QMDP_max_iterations)
+
+    @info "Defining algorithms"
+    algorithms = [
+        Algorithm(solver_name="NeverTreat_Policy"),
+        Algorithm(solver_name="AlwaysTreat_Policy"),
+        Algorithm(solver_name="Random_Policy"),
+        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
+        # Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
+        Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
+        Algorithm(solver=vi_solver, solver_name="VI_Policy"),
+        Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
+    ]
+    return algorithms
+end
+
+# ----------------------------
+# Plot Parallel Plots
+# ----------------------------
+function plot_parallel_plots(parallel_data, config)
 
     # Print treatment frequency
     print_treatment_frequency(parallel_data, config)
@@ -94,13 +285,6 @@ function simulate_policies(algorithms, config)
 
     # Plot combined treatment probability over time
     plot_combined_treatment_probability_over_time(parallel_data, config)
-
-    # Simulate policies
-    for algo in algorithms
-        println("Simulating $(algo.solver_name)")
-        histories = simulate_policy(algo, config)
-        avg_results = evaluate_simulation_results(config, algo, histories)
-    end
 end
 
 # ----------------------------
@@ -164,160 +348,7 @@ function plot_results(algorithms, config)
     plot_policy_treatment_cost_over_time(config, 0.6)
     plot_policy_reward_over_lambdas(config)
 
-    # Generate Pareto frontier
-    # plot_pareto_frontier(config)
-
     @info "Saved all plots to $(config.figures_dir)"
-end
-
-
-# ----------------------------
-# Main function
-# ----------------------------
-function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light")
-
-    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, mode)
-    algorithms = define_algorithms(config, heuristic_config)
-
-    if first_step_flag == "solve"
-        solve_policies(algorithms, config)
-        simulate_policies(algorithms, config)
-    end
-
-    if first_step_flag == "simulate"
-        @info "Skipping policy solving"
-        # If we skip solving but want to simulate, we need to find the latest 
-        # experiment with the same policy parameters and use that experiment's policies_dir
-        latest_experiment_config = get_latest_matching_config(config, heuristic_config, false)
-
-        # Change policies_dir to the latest experiment's policies_dir
-        config.policies_dir = latest_experiment_config.policies_dir
-
-        simulate_policies(algorithms, config)
-    end
-
-    if first_step_flag == "plot"
-        @info "Skipping policy solving and simulation"
-        # If we skip solving and simulation but want to plot, we need to find the latest 
-        # experiment with the same policy and simulation parameters and use that experiment's config
-        latest_experiment_config = get_latest_matching_config(config, heuristic_config, true)
-        @info "Latest experiment: $latest_experiment_config"
-        config.policies_dir = latest_experiment_config.policies_dir
-        config.simulations_dir = latest_experiment_config.simulations_dir
-        config.results_dir = latest_experiment_config.results_dir
-    end
-
-    # Plot the results
-    plot_results(algorithms, config)
-
-    # Log experiment configuration in experiments.csv file with all experiments
-    @info "Saved experiment configuration to $(config.experiment_dir)/config/experiment_config.jld2"
-    save_experiment_config(config, heuristic_config, first_step_flag)
-
-    # Save config to file in current directory for easy access
-    mkpath(joinpath(config.experiment_dir, "config"))
-    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
-    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
-        for field in fieldnames(typeof(config))
-            value = getfield(config, field)
-            println(io, "$field: $value")
-        end
-    end
-
-end
-
-
-# ----------------------------
-# Set up and save experiment configuration
-# ----------------------------
-function setup_experiment_configs(experiment_name, log_space, mode="light")
-
-    # Define experiment configuration
-    exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_mode_", mode)
-
-    @info "Setting up experiment configuration for experiment: $exp_name"
-
-    if mode == "light"
-        config = ExperimentConfig(
-            num_episodes=10,
-            steps_per_episode=100,
-            log_space=log_space,
-            experiment_name=exp_name,
-            verbose=false,
-            step_through=false,
-            # reward_lambdas=[0.7, 0.2, 0.1, 0.05, 0.1], # [treatment, regulatory, biomass, health, sea lice level]
-            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice level]
-            sarsop_max_time=5.0,
-            VI_max_iterations=10,
-            QMDP_max_iterations=10,
-        )
-    elseif mode == "debug"
-        config = ExperimentConfig(
-            num_episodes=1,
-            steps_per_episode=20,
-            log_space=log_space,
-            experiment_name=exp_name,
-            verbose=true,
-            step_through=true,
-            reward_lambdas=[0.5, 0.3, 0.1, 0.1, 0.0], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=5.0,
-            VI_max_iterations=10,
-            QMDP_max_iterations=10,
-        )
-    elseif mode == "full"
-        config = ExperimentConfig(
-            num_episodes=20,
-            steps_per_episode=104,
-            log_space=log_space,
-            experiment_name=exp_name,
-            verbose=false,
-            step_through=false,
-            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=30.0,
-            VI_max_iterations=50,
-            QMDP_max_iterations=50,
-        )
-    end
-        
-    heuristic_config = HeuristicConfig(
-        raw_space_threshold=config.heuristic_threshold,
-        belief_threshold_mechanical=config.heuristic_belief_threshold_mechanical,
-        belief_threshold_thermal=config.heuristic_belief_threshold_thermal,
-        rho=config.heuristic_rho
-    )
-
-    return config, heuristic_config
-
-end
-
-# ----------------------------
-# Define algorithms
-# ----------------------------
-function define_algorithms(config, heuristic_config)
-
-    @info "Defining solvers"
-    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.sarsop_max_time, verbose=false)
-    nus_sarsop_solver = SARSOP.SARSOPSolver(
-        timeout=config.sarsop_max_time,
-        verbose=false,
-        policy_filename=joinpath(config.policies_dir, "NUS_SARSOP_Policy/policy.out"),
-        pomdp_filename=joinpath(config.experiment_dir, "pomdp_mdp/pomdp.pomdpx")
-    )
-    vi_solver = ValueIterationSolver(max_iterations=config.VI_max_iterations)
-    qmdp_solver = QMDPSolver(max_iterations=config.QMDP_max_iterations)
-
-    @info "Defining algorithms"
-    algorithms = [
-        Algorithm(solver_name="NeverTreat_Policy"),
-        Algorithm(solver_name="AlwaysTreat_Policy"),
-        Algorithm(solver_name="Random_Policy"),
-        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
-        # Algorithm(solver=native_sarsop_solver, solver_name="SARSOP_Policy"),
-        Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
-        Algorithm(solver=vi_solver, solver_name="VI_Policy"),
-        Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
-    ]
-    return algorithms
 end
 
 

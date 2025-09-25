@@ -13,7 +13,8 @@ using Parameters
     ekf_filter::Bool = true
     step_through::Bool = false
     verbose::Bool = false
-    
+    high_fidelity_sim::Bool = true
+
     # POMDP parameters
     costOfTreatment::Float64 = 10.0
     growthRate::Float64 = 0.15 # 0.3 #1.26 # "The growth rate of sea lice is 0.3 per day." Costello (2006)

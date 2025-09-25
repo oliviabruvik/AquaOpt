@@ -24,21 +24,28 @@ include("../../src/Algorithms/Policies.jl")
 # We need an initial belief for the simulation because our state
 # and observation variables are different.
 # Returns a tuple of Normal distributions for each state component.
+# For SeaLiceMDP, we just need to return the initial state distribution
 # ----------------------------
 function initialize_belief(sim_pomdp, config)
-    return (
+    if config.high_fidelity_sim
+        return (
         sim_pomdp.adult_mean + sim_pomdp.adult_dist, # adult
         sim_pomdp.motile_mean + sim_pomdp.motile_dist, # motile
         sim_pomdp.sessile_mean + sim_pomdp.sessile_dist, # sessile
         get_temperature(sim_pomdp.production_start_week) + sim_pomdp.temp_dist, # temperature
     )
+    else
+        return initialstate(sim_pomdp)
+    end
 end
 
 # ----------------------------
 # Create Sim POMDP
 # ----------------------------
 function create_sim_pomdp(config, λ)
-   return SeaLiceSimMDP(
+
+    if config.high_fidelity_sim
+        return SeaLiceSimMDP(
         lambda=λ,
         reward_lambdas=config.reward_lambdas,
         costOfTreatment=config.costOfTreatment,
@@ -52,7 +59,19 @@ function create_sim_pomdp(config, λ)
         motile_sd=config.motile_sd,
         sessile_sd=config.sessile_sd,
         temp_sd=config.temp_sd,
-    )
+        )
+    else
+        return SeaLiceMDP(
+                lambda=λ,
+                reward_lambdas=config.reward_lambdas,
+                costOfTreatment=config.costOfTreatment,
+                growthRate=config.growthRate,
+                rho=config.rho,
+                discount_factor=config.discount_factor,
+                adult_sd=config.raw_space_sampling_sd,
+                regulation_limit=config.regulation_limit,
+        )
+    end
 end
 
 # ----------------------------
@@ -78,7 +97,12 @@ function simulate_policy(algorithm, config)
         @load joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
 
         # Create adaptor policy
-        adaptor_policy = AdaptorPolicy(policy, pomdp)
+        if config.high_fidelity_sim
+            adaptor_policy = AdaptorPolicy(policy, pomdp)
+        else
+            # For MDP simulation, use the MDP policy directly
+            adaptor_policy = policy
+        end
 
         # Simulate policy
         histories[λ] = run_simulation(adaptor_policy, mdp, pomdp, config, algorithm)
@@ -104,23 +128,17 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     # Store all histories
     histories = []
 
-    # Create simulator POMDP
-    sim_pomdp = create_sim_pomdp(config, pomdp.lambda)
-
     # Create simulator
-    # sim = RolloutSimulator(max_steps=config.steps_per_episode)
     hr = HistoryRecorder(max_steps=config.steps_per_episode)
-    kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
-    updater = KalmanUpdater(kf)
 
     # Run simulation for each episode
     for episode in 1:config.num_episodes
 
-        # Get initial belief and state
-        initial_belief = initialize_belief(sim_pomdp, config)
-        initial_state = rand(initialstate(sim_pomdp))
+        # Get initial state from MDP
+        initial_state = rand(initialstate(mdp))
 
-        hist = simulate(hr, sim_pomdp, policy, updater, initial_belief, initial_state)
+        # Simulate on MDP directly (fully observable)
+        hist = simulate(hr, mdp, policy, initial_state)
         push!(histories, hist)
     end
 
@@ -142,8 +160,12 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
     # Create simulator
     # sim = RolloutSimulator(max_steps=config.steps_per_episode)
     hr = HistoryRecorder(max_steps=config.steps_per_episode)
-    kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
-    updater = KalmanUpdater(kf)
+    if config.high_fidelity_sim
+        kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
+        updater = KalmanUpdater(kf)
+    else
+        updater = DiscreteUpdater(sim_pomdp)
+    end
 
     # Create the list of Sim objects
     sim_list = []
@@ -207,8 +229,12 @@ function simulate_all_policies(algorithms, config)
 
         # Create simulator
         hr = HistoryRecorder(max_steps=config.steps_per_episode)
-        kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
-        updater = KalmanUpdater(kf)
+        if config.high_fidelity_sim
+            kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
+            updater = KalmanUpdater(kf)
+        else
+            updater = DiscreteUpdater(sim_pomdp)
+        end
 
         # Load policy, pomdp, and mdp
         for algo in algorithms
@@ -216,7 +242,21 @@ function simulate_all_policies(algorithms, config)
             @load joinpath(config.policies_dir, "$(algo.solver_name)", "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
 
             # Create adaptor policy
-            adaptor_policy = AdaptorPolicy(policy, pomdp)
+            if config.high_fidelity_sim
+                adaptor_policy = AdaptorPolicy(policy, pomdp)
+            else
+                adaptor_policy = policy
+                # For SeaLiceMDP, we need to create a compatible policy
+                if algo.solver_name == "Heuristic_Policy"
+                    # Create a new HeuristicPolicy for SeaLiceMDP
+                    heuristic_config = HeuristicConfig(
+                        raw_space_threshold=0.5,
+                        belief_threshold_mechanical=0.3,
+                        belief_threshold_thermal=0.7
+                    )
+                    adaptor_policy = HeuristicPolicy(sim_pomdp, heuristic_config)
+                end
+            end
 
             # Add Sim objects for each episode
             for sim_number in 1:config.num_episodes
