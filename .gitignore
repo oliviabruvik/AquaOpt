@@ -13,3 +13,4 @@ src/Tests/NUS_SARSOP.pomdp
 .DS_Store
 .vscode/launch.json
 .vscode/settings.json
+documentation/
