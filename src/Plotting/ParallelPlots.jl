@@ -718,8 +718,10 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
             growthRate=config.growthRate,
             rho=config.rho,
             discount_factor=config.discount_factor,
+            discretization_step=config.discretization_step,
             adult_sd=abs(log(config.raw_space_sampling_sd)),
             regulation_limit=config.regulation_limit,
+            full_observability_solver=config.full_observability_solver,
         )
     else
         pomdp = SeaLiceMDP(
@@ -729,8 +731,10 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
             growthRate=config.growthRate,
             rho=config.rho,
             discount_factor=config.discount_factor,
+            discretization_step=config.discretization_step,
             adult_sd=config.raw_space_sampling_sd,
             regulation_limit=config.regulation_limit,
+            full_observability_solver=config.full_observability_solver,
         )
     end
     
@@ -953,8 +957,10 @@ function generate_policy_action_data(policy_type, config, λ)
                 growthRate=config.growthRate,
                 rho=config.rho,
                 discount_factor=config.discount_factor,
+                discretization_step=config.discretization_step,
                 adult_sd=abs(log(config.raw_space_sampling_sd)),
                 regulation_limit=config.regulation_limit,
+                full_observability_solver=config.full_observability_solver,
             )
         else
             pomdp = SeaLiceMDP(
@@ -964,8 +970,10 @@ function generate_policy_action_data(policy_type, config, λ)
                 growthRate=config.growthRate,
                 rho=config.rho,
                 discount_factor=config.discount_factor,
+                discretization_step=config.discretization_step,
                 adult_sd=config.raw_space_sampling_sd,
                 regulation_limit=config.regulation_limit,
+                full_observability_solver=config.full_observability_solver,
             )
         end
         policy = HeuristicPolicy(pomdp, heuristic_config)

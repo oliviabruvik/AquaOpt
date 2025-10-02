@@ -84,6 +84,8 @@ end
 # ----------------------------
 function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light", ekf_filter=true)
 
+    @info "Running experiment: $experiment_name, log_space: $log_space, ekf_filter: $ekf_filter, mode: $mode"
+
     config, heuristic_config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode)
     algorithms = define_algorithms(config, heuristic_config)
 
@@ -99,26 +101,11 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
 
     if first_step_flag == "simulate"
         @info "Skipping policy solving"
-        # # If we skip solving but want to simulate, we need to find the latest 
-        # # experiment with the same policy parameters and use that experiment's policies_dir
-        # latest_experiment_config = get_latest_matching_config(config, heuristic_config, false)
-
-        # # Change policies_dir to the latest experiment's policies_dir
-        # config.policies_dir = latest_experiment_config.policies_dir
-
         parallel_data = simulate_policies(algorithms, config)
     end
 
     if first_step_flag == "plot"
         @info "Skipping policy solving and simulation"
-        # If we skip solving and simulation but want to plot, we need to find the latest 
-        # experiment with the same policy and simulation parameters and use that experiment's config
-        # latest_experiment_config = get_latest_matching_config(config, heuristic_config, true)
-        # @info "Latest experiment: $latest_experiment_config"
-        # config.policies_dir = latest_experiment_config.policies_dir
-        # config.simulations_dir = latest_experiment_config.simulations_dir
-        # config.results_dir = latest_experiment_config.results_dir
-
         @load joinpath(config.simulations_dir, "all_policies_simulation_data.jld2") data
         parallel_data = data
     end
@@ -134,8 +121,12 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
     # Display reward metrics
     display_reward_metrics(processed_data, config, false)
 
+    # Compare VI policy on high fidelity MDP with full observability
+    # vi_parallel_data = simulate_vi_policy_on_hifi_mdp(algorithms, config)
+    # print_reward_metrics_for_vi_policy(vi_parallel_data, config)
+
     # Plot the results
-    plot_plos_one_plots(parallel_data, config)
+    # plot_plos_one_plots(parallel_data, config)
 
     # Log experiment configuration in experiments.csv file with all experiments
     @info "Saved experiment configuration to $(config.experiment_dir)/config/experiment_config.jld2"
@@ -186,21 +177,24 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         )
     elseif mode == "debug"
         config = ExperimentConfig(
-            num_episodes=1,
-            steps_per_episode=20,
+            num_episodes=10,
+            steps_per_episode=104,
             log_space=log_space,
             ekf_filter=ekf_filter,
             experiment_name=exp_name,
-            verbose=true,
-            step_through=true,
-            reward_lambdas=[0.5, 0.3, 0.1, 0.1, 0.0], # [treatment, regulatory, biomass, health, sea lice]
+            verbose=false,
+            step_through=false,
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
+            discount_factor = 0.95,
+            high_fidelity_sim = false, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
+            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
         )
-    elseif mode == "full"
+    elseif mode == "fullobs"
         config = ExperimentConfig(
-            num_episodes=20,
+            num_episodes=10,
             steps_per_episode=104,
             log_space=log_space,
             ekf_filter=ekf_filter,
@@ -208,13 +202,16 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
             verbose=false,
             step_through=false,
             reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=30.0,
-            VI_max_iterations=50,
-            QMDP_max_iterations=50,
+            sarsop_max_time=5.0,
+            VI_max_iterations=10,
+            QMDP_max_iterations=10,
+            discount_factor = 0.95,
+            high_fidelity_sim = false, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
+            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
         )
     elseif mode == "paper"
         config = ExperimentConfig(
-            num_episodes=1000,
+            num_episodes=100,
             steps_per_episode=104,
             log_space=log_space,
             ekf_filter=ekf_filter,
@@ -222,11 +219,11 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
             verbose=false,
             step_through=false,
             reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=5000.0,
-            VI_max_iterations=100,
+            sarsop_max_time=50.0,
+            VI_max_iterations=50,
             QMDP_max_iterations=100,
             discount_factor = 0.95,
-            high_fidelity_sim = true,
+            high_fidelity_sim = false,
         )
     end
         
@@ -236,6 +233,9 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         belief_threshold_thermal=config.heuristic_belief_threshold_thermal,
         rho=config.heuristic_rho
     )
+
+    @info "Heuristic config: $heuristic_config"
+    @info "Config: $config"
 
     return config, heuristic_config
 
@@ -247,22 +247,28 @@ end
 function define_algorithms(config, heuristic_config)
 
     @info "Defining solvers"
-    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.sarsop_max_time, verbose=false)
+    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.sarsop_max_time) #, verbose=false)
+    
+    @info "Defining NUS SARSOP solver"
     nus_sarsop_solver = SARSOP.SARSOPSolver(
         timeout=config.sarsop_max_time,
-        verbose=true,
+        verbose=false,
         policy_filename=joinpath(config.policies_dir, "NUS_SARSOP_Policy/policy.out"),
         pomdp_filename=joinpath(config.experiment_dir, "pomdp_mdp/pomdp.pomdpx")
     )
-    vi_solver = ValueIterationSolver(max_iterations=config.VI_max_iterations)
+    
+    @info "Defining VI solver"
+    vi_solver = ValueIterationSolver(max_iterations=config.VI_max_iterations, belres=1e-10, verbose=false)
+
+    @info "Defining QMDP solver"
     qmdp_solver = QMDPSolver(max_iterations=config.QMDP_max_iterations)
 
-    @info "Defining algorithms"
+    
     algorithms = [
-        Algorithm(solver_name="NeverTreat_Policy"),
-        Algorithm(solver_name="AlwaysTreat_Policy"),
-        Algorithm(solver_name="Random_Policy"),
-        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
+        # Algorithm(solver_name="NeverTreat_Policy"),
+        # Algorithm(solver_name="AlwaysTreat_Policy"),
+        # Algorithm(solver_name="Random_Policy"),
+        # Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
@@ -393,5 +399,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
 
-    run_experiments(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    # run_experiments(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
 end
