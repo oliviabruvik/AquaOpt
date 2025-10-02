@@ -29,8 +29,10 @@ function create_pomdp_mdp(λ, config)
             growthRate=config.growthRate,
             rho=config.rho,
             discount_factor=config.discount_factor,
+            discretization_step=config.discretization_step,
             adult_sd=abs(log(config.raw_space_sampling_sd)),
             regulation_limit=config.regulation_limit,
+            full_observability_solver=config.full_observability_solver,
         )
     else
         pomdp = SeaLiceMDP(
@@ -40,10 +42,15 @@ function create_pomdp_mdp(λ, config)
             growthRate=config.growthRate,
             rho=config.rho,
             discount_factor=config.discount_factor,
+            discretization_step=config.discretization_step,
             adult_sd=config.raw_space_sampling_sd,
             regulation_limit=config.regulation_limit,
+            full_observability_solver=config.full_observability_solver,
         )
     end
+
+    @info "Created POMDP"
+    @info "POMDP: $pomdp"
 
     mdp = UnderlyingMDP(pomdp)
 
@@ -51,11 +58,13 @@ function create_pomdp_mdp(λ, config)
     pomdp_mdp_filename = "pomdp_mdp_$(λ)_lambda"
     pomdp_mdp_file_path = joinpath(pomdp_mdp_dir, "$(pomdp_mdp_filename).jld2")
     @save pomdp_mdp_file_path pomdp mdp
+    @info "Saved POMDP and MDP to file $(pomdp_mdp_file_path)"
 
     # Save POMDP as POMDPX file for NUS SARSOP
     pomdpx_file_path = joinpath(pomdp_mdp_dir, "pomdp.pomdpx")
     pomdpx = POMDPXFile(pomdpx_file_path)
     POMDPXFiles.write(pomdp, pomdpx)
+    @info "Saved POMDP as POMDPX file $(pomdpx_file_path)"
 
     return pomdp, mdp
 end
@@ -80,7 +89,7 @@ function generate_mdp_pomdp_policies(algorithm, config)
         # Save policy, pomdp, and mdp to file
         policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
         @save joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
-
+        @info "Saved policy, pomdp, and mdp to file $(joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2"))"
     end
 end
 
@@ -253,12 +262,16 @@ function POMDPs.action(policy::AdaptorPolicy, b)
     # Get next action from policy
     # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
     if policy.lofi_policy isa ValueIterationPolicy
+        closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
+        pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
         if policy.pomdp isa SeaLiceLogMDP
-            pred_adult = SeaLiceLogState(pred_adult)
+            pred_adult_state = SeaLiceLogState(pred_adult_state)
         else
-            pred_adult = SeaLiceState(pred_adult)
+            pred_adult_state = SeaLiceState(pred_adult_state)
         end
-        return action(policy.lofi_policy, pred_adult)
+        @assert pred_adult_state.SeaLiceLevel - pred_adult < policy.pomdp.discretization_step
+        @assert pred_adult_state in states(policy.pomdp)
+        return action(policy.lofi_policy, pred_adult_state)
     end
 
     # Discretize alpha vectors (representation of utility over belief states per action)
@@ -283,9 +296,59 @@ function POMDPs.action(policy::LOFIAdaptorPolicy, b)
         mode_idx = argmax(b.b)
         all_states = states(policy.pomdp)
         state_with_highest_probability = all_states[mode_idx]
+
+        @info "Using LOFI adaptor policy with ValueIterationPolicy"
+        @info "Belief: $b.b"
+        @info "All states: $all_states"
+        @info "Mode idx: $mode_idx"
+        @info "State with highest probability: $state_with_highest_probability"
+        
         return action(policy.lofi_policy, state_with_highest_probability)
     end
 
     # Discretize alpha vectors (representation of utility over belief states per action)
     return action(policy.lofi_policy, b)
+end
+
+# ----------------------------
+# Full Observability Adaptor Policy
+# ----------------------------
+struct FullObservabilityAdaptorPolicy <: Policy
+    lofi_policy::Policy
+    pomdp::POMDP
+    mdp::MDP
+end
+
+# Adaptor action
+function POMDPs.action(policy::FullObservabilityAdaptorPolicy, s)
+
+    # Predict the next state
+    pred_adult, pred_motile, pred_sessile = predict_next_abundances(s.sessile, s.motile, s.adult, s.temp)
+
+    # Clamp predictions to be positive
+    pred_adult = max(pred_adult, 1e-3)
+
+    if policy.pomdp isa SeaLiceLogMDP
+        pred_adult = log(pred_adult)
+    end
+
+    # Get next action from policy
+    # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
+    if policy.lofi_policy isa ValueIterationPolicy
+        closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
+        pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
+        if policy.pomdp isa SeaLiceLogMDP
+            pred_adult_state = SeaLiceLogState(pred_adult_state)
+        else
+            pred_adult_state = SeaLiceState(pred_adult_state)
+        end
+        @assert pred_adult_state.SeaLiceLevel - pred_adult < policy.pomdp.discretization_step
+        @assert pred_adult_state in states(policy.pomdp)
+        return action(policy.lofi_policy, pred_adult_state)
+    end
+
+    # Discretize alpha vectors (representation of utility over belief states per action)
+    state_space = states(policy.lofi_policy.pomdp)
+    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
+    return action(policy.lofi_policy, bvec)
 end

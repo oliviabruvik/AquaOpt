@@ -371,7 +371,7 @@ function print_reward_metrics_for_vi_policy(data, config)
      end
 
      parallel_data = data
-     display_ci = false
+     display_ci = true
  
     # Display the mean and confidence interval for each lambda and each policy
     for λ in config.lambda_values
@@ -446,45 +446,6 @@ function print_reward_metrics_for_vi_policy(data, config)
 
         # Create pivot table format
         println("\n" * "="^80)
-        println("LAMBDA: $(λ)")
-        println("="^80)
-        
-        # Print header
-        println(@sprintf("%-20s %12s %12s %12s %12s", 
-                        "Policy", "Mean Reward", "Treatment Cost", "Reg. Penalties", "Sea Lice Level"))
-        println("-"^80)
-        
-        # Print each policy's results
-        for row in eachrow(result)
-            policy_name = row.policy
-            mean_reward = display_ci ? @sprintf("%.3f±%.3f", row.mean_reward, row.ci_reward) : @sprintf("%.3f", row.mean_reward)
-            treatment_cost = display_ci ? @sprintf("%.1f±%.1f", row.mean_treatment_cost, row.ci_treatment_cost) : @sprintf("%.1f", row.mean_treatment_cost)
-            reg_penalties = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_regulatory_penalties, row.ci_num_regulatory_penalties) : @sprintf("%.1f", row.mean_num_regulatory_penalties)
-            sea_lice = display_ci ? @sprintf("%.3f±%.3f", row.mean_mean_adult_sea_lice_level, row.ci_mean_adult_sea_lice_level) : @sprintf("%.3f", row.mean_mean_adult_sea_lice_level)
-            
-            println(@sprintf("%-20s %12s %12s %12s %12s", 
-                        policy_name, mean_reward, treatment_cost, reg_penalties, sea_lice))
-        end
-        
-        # If treatments column exists, print treatment distribution
-        if :treatments in names(data_filtered)
-            println("\nTreatment Distribution:")
-            println("-"^50)
-            println(@sprintf("%-20s %12s %12s %12s", "Policy", "No Treatment", "Chemical", "Thermal"))
-            println("-"^50)
-            
-            for row in eachrow(result)
-                policy_name = row.policy
-                no_treatment = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_NoTreatment, row.ci_num_NoTreatment) : @sprintf("%.1f", row.mean_num_NoTreatment)
-                chemical = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_Treatment, row.ci_num_Treatment) : @sprintf("%.1f", row.mean_num_Treatment)
-                thermal = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_ThermalTreatment, row.ci_num_ThermalTreatment) : @sprintf("%.1f", row.mean_num_ThermalTreatment)
-                
-                println(@sprintf("%-20s %12s %12s %12s", 
-                            policy_name, no_treatment, chemical, thermal))
-            end
-        end
-        
-        println("\n")
 
         # Save results to csv
         mkpath(config.results_dir)

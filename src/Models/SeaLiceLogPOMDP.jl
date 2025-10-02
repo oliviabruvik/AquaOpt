@@ -43,6 +43,7 @@ end
 	growthRate::Float64 = 1.2
 	rho::Float64 = 0.7
     discount_factor::Float64 = 0.95
+    full_observability_solver::Bool = false
 
     # Regulation parameters
     regulation_limit::Float64 = 0.5
@@ -57,7 +58,7 @@ end
     W0::Float64 = 0.1                  # weight centering (kg)
 
     # Count bounds
-    sea_lice_bounds::Tuple{Float64, Float64} = (log(1e-3), log(5.0))
+    sea_lice_bounds::Tuple{Float64, Float64} = (log(1e-3), log(5.0)) # (-3, 0.70)
     initial_bounds::Tuple{Float64, Float64} = (log(1e-3), log(0.25))
     initial_mean::Float64 = log(0.13)
 
@@ -66,18 +67,18 @@ end
     rng::AbstractRNG = Random.GLOBAL_RNG
     
     # Log space discretization
-    log_discretization_step::Float64 = 0.1
-    initial_range::Vector{Float64} = collect(range(initial_bounds[1], stop=initial_bounds[2], step=log_discretization_step))
-    log_sea_lice_range::Vector{Float64} = collect(range(sea_lice_bounds[1], stop=sea_lice_bounds[2], step=log_discretization_step))
+    discretization_step::Float64 = 0.1 # 0.01
+    initial_range::Vector{Float64} = collect(range(initial_bounds[1], stop=initial_bounds[2], step=discretization_step))
+    sea_lice_range::Vector{Float64} = collect(range(sea_lice_bounds[1], stop=sea_lice_bounds[2], step=discretization_step))
     catdisc::CategoricalDiscretizer = CategoricalDiscretizer([NoTreatment, Treatment, ThermalTreatment])
 end
 
 # -------------------------
 # POMDPs.jl Interface
 # -------------------------
-POMDPs.states(mdp::SeaLiceLogMDP) = [SeaLiceLogState(i) for i in mdp.log_sea_lice_range]
+POMDPs.states(mdp::SeaLiceLogMDP) = [SeaLiceLogState(i) for i in mdp.sea_lice_range]
 POMDPs.actions(mdp::SeaLiceLogMDP) = [NoTreatment, Treatment, ThermalTreatment]
-POMDPs.observations(mdp::SeaLiceLogMDP) = [SeaLiceLogObservation(i) for i in mdp.log_sea_lice_range]
+POMDPs.observations(mdp::SeaLiceLogMDP) = [SeaLiceLogObservation(i) for i in mdp.sea_lice_range]
 POMDPs.discount(mdp::SeaLiceLogMDP) = mdp.discount_factor
 POMDPs.isterminal(mdp::SeaLiceLogMDP, s::SeaLiceLogState) = false
 POMDPs.actionindex(mdp::SeaLiceLogMDP, a::Action) = encode(mdp.catdisc, a)
@@ -86,12 +87,12 @@ POMDPs.actionindex(mdp::SeaLiceLogMDP, a::Action) = encode(mdp.catdisc, a)
 # State and Observation Index
 # -------------------------
 function POMDPs.stateindex(mdp::SeaLiceLogMDP, s::SeaLiceLogState)
-    closest_idx = argmin(abs.(mdp.log_sea_lice_range .- s.SeaLiceLevel))
+    closest_idx = argmin(abs.(mdp.sea_lice_range .- s.SeaLiceLevel))
     return closest_idx
 end
 
 function POMDPs.obsindex(mdp::SeaLiceLogMDP, o::SeaLiceLogObservation)
-    closest_idx = argmin(abs.(mdp.log_sea_lice_range .- o.SeaLiceLevel))
+    closest_idx = argmin(abs.(mdp.sea_lice_range .- o.SeaLiceLevel))
     return closest_idx
 end
 
@@ -130,6 +131,15 @@ function POMDPs.observation(mdp::SeaLiceLogMDP, a::Action, s::SeaLiceLogState)
 
     # Observation grid
     observations = POMDPs.observations(mdp)
+
+    # If full observability solver, we return the exact state as the observation
+    # to mimic full observability.
+    if mdp.full_observability_solver
+        closest_idx = argmin(abs.(mdp.sea_lice_range .- s.SeaLiceLevel))
+        probs = zeros(length(observations))
+        probs[closest_idx] = 1.0
+        return SparseCat(observations, probs)
+    end
 
     # (Optional) under-counting correction like p^Scount_ftc
     # paper uses (W - 0.1) with W in kg
@@ -192,7 +202,7 @@ function POMDPs.observation(mdp::SeaLiceLogMDP, a::Action, s::SeaLiceLogState)
     end
 
     # observations = POMDPs.observations(mdp)
-    # closest_idx = argmin(abs.(mdp.log_sea_lice_range .- s.SeaLiceLevel))
+    # closest_idx = argmin(abs.(mdp.sea_lice_range .- s.SeaLiceLevel))
     # probs = zeros(length(observations))
     # probs[closest_idx] = 1.0
 

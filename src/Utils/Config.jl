@@ -14,6 +14,8 @@ using Parameters
     step_through::Bool = false
     verbose::Bool = false
     high_fidelity_sim::Bool = true
+    full_observability_solver::Bool = false
+    discretization_step::Float64 = 0.1
 
     # POMDP parameters
     costOfTreatment::Float64 = 10.0
