@@ -613,7 +613,7 @@ function plot_sarsop_policy_action_heatmap(config, λ=0.6)
             
             # Create a belief state centered on the predicted level
             # We'll use a simple discretized belief for the policy
-            if pomdp isa SeaLiceLogMDP
+            if pomdp isa SeaLiceLogPOMDP
                 pred_adult = log(max(pred_adult, 1e-6))
                 # Create a belief vector for log space
                 state_space = states(pomdp)
@@ -711,7 +711,7 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
     
     # Create POMDP for the heuristic policy
     if config.log_space
-        pomdp = SeaLiceLogMDP(
+        pomdp = SeaLiceLogPOMDP(
             lambda=λ,
             reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
@@ -724,7 +724,7 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
             full_observability_solver=config.full_observability_solver,
         )
     else
-        pomdp = SeaLiceMDP(
+        pomdp = SeaLicePOMDP(
             lambda=λ,
             reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
@@ -769,7 +769,7 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
             
             # Create a belief state centered on the predicted level
             # We'll use a simple discretized belief for the policy
-            if pomdp isa SeaLiceLogMDP
+            if pomdp isa SeaLiceLogPOMDP
                 pred_adult = log(max(pred_adult, 1e-6))
                 # Create a belief vector for log space
                 state_space = states(pomdp)
@@ -950,7 +950,7 @@ function generate_policy_action_data(policy_type, config, λ)
         
         # Create POMDP for the heuristic policy
         if config.log_space
-            pomdp = SeaLiceLogMDP(
+            pomdp = SeaLiceLogPOMDP(
                 lambda=λ,
                 reward_lambdas=config.reward_lambdas,
                 costOfTreatment=config.costOfTreatment,
@@ -963,7 +963,7 @@ function generate_policy_action_data(policy_type, config, λ)
                 full_observability_solver=config.full_observability_solver,
             )
         else
-            pomdp = SeaLiceMDP(
+            pomdp = SeaLicePOMDP(
                 lambda=λ,
                 reward_lambdas=config.reward_lambdas,
                 costOfTreatment=config.costOfTreatment,
@@ -987,7 +987,7 @@ function generate_policy_action_data(policy_type, config, λ)
             )
             
             # Create a belief state centered on the predicted level
-            if pomdp isa SeaLiceLogMDP
+            if pomdp isa SeaLiceLogPOMDP
                 pred_adult = log(max(pred_adult, 1e-6))
                 # Create a belief vector for log space
                 state_space = states(pomdp)
