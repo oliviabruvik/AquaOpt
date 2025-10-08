@@ -22,7 +22,7 @@ function create_pomdp_mdp(λ, config)
     mkpath(pomdp_mdp_dir)
 
     if config.log_space
-        pomdp = SeaLiceLogMDP(
+        pomdp = SeaLiceLogPOMDP(
             lambda=λ,
             reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
@@ -35,7 +35,7 @@ function create_pomdp_mdp(λ, config)
             full_observability_solver=config.full_observability_solver,
         )
     else
-        pomdp = SeaLiceMDP(
+        pomdp = SeaLicePOMDP(
             lambda=λ,
             reward_lambdas=config.reward_lambdas,
             costOfTreatment=config.costOfTreatment,
@@ -187,7 +187,7 @@ function POMDPs.action(policy::HeuristicPolicy, b)
     # Get the probability of the current sea lice level being above the threshold
     state_space = states(policy.pomdp)
     threshold = policy.heuristic_config.raw_space_threshold
-    if policy.pomdp isa SeaLiceLogMDP
+    if policy.pomdp isa SeaLiceLogPOMDP
         threshold = log(threshold)
     end
     prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
@@ -213,7 +213,7 @@ function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
     state_space = states(policy.pomdp)
 
     # Convert the threshold in log space if needed
-    if policy.pomdp isa SeaLiceLogMDP
+    if policy.pomdp isa SeaLiceLogPOMDP
         threshold = log(policy.heuristic_config.raw_space_threshold)
     else
         threshold = policy.heuristic_config.raw_space_threshold
@@ -254,7 +254,7 @@ function POMDPs.action(policy::AdaptorPolicy, b)
     # Clamp predictions to be positive
     pred_adult = max(pred_adult, 1e-3)
 
-    if policy.pomdp isa SeaLiceLogMDP
+    if policy.pomdp isa SeaLiceLogPOMDP
         pred_adult = log(pred_adult)
         adult_sd = abs(log(adult_sd))
     end
@@ -264,7 +264,7 @@ function POMDPs.action(policy::AdaptorPolicy, b)
     if policy.lofi_policy isa ValueIterationPolicy
         closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
         pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
-        if policy.pomdp isa SeaLiceLogMDP
+        if policy.pomdp isa SeaLiceLogPOMDP
             pred_adult_state = SeaLiceLogState(pred_adult_state)
         else
             pred_adult_state = SeaLiceState(pred_adult_state)
@@ -297,12 +297,11 @@ function POMDPs.action(policy::LOFIAdaptorPolicy, b)
         all_states = states(policy.pomdp)
         state_with_highest_probability = all_states[mode_idx]
 
-        @info "Using LOFI adaptor policy with ValueIterationPolicy"
-        @info "Belief: $b.b"
-        @info "All states: $all_states"
-        @info "Mode idx: $mode_idx"
-        @info "State with highest probability: $state_with_highest_probability"
+        # Assertions
+        @assert state_with_highest_probability in states(policy.pomdp)
+        @assert length(b.b) == length(states(policy.pomdp))
         
+        # Get next action from policy
         return action(policy.lofi_policy, state_with_highest_probability)
     end
 
@@ -328,7 +327,7 @@ function POMDPs.action(policy::FullObservabilityAdaptorPolicy, s)
     # Clamp predictions to be positive
     pred_adult = max(pred_adult, 1e-3)
 
-    if policy.pomdp isa SeaLiceLogMDP
+    if policy.pomdp isa SeaLiceLogPOMDP
         pred_adult = log(pred_adult)
     end
 
@@ -337,7 +336,7 @@ function POMDPs.action(policy::FullObservabilityAdaptorPolicy, s)
     if policy.lofi_policy isa ValueIterationPolicy
         closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
         pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
-        if policy.pomdp isa SeaLiceLogMDP
+        if policy.pomdp isa SeaLiceLogPOMDP
             pred_adult_state = SeaLiceLogState(pred_adult_state)
         else
             pred_adult_state = SeaLiceState(pred_adult_state)
