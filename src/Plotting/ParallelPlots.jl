@@ -608,7 +608,7 @@ function plot_sarsop_policy_action_heatmap(config, λ=0.6)
         for (j, temp) in enumerate(temp_range)
             # Predict next sea lice level using the current state
             pred_adult, pred_motile, pred_sessile = predict_next_abundances(
-                sealice_level, fixed_motile, fixed_sessile, temp
+                sealice_level, fixed_motile, fixed_sessile, temp, config.location
             )
             
             # Create a belief state centered on the predicted level
@@ -764,7 +764,7 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
         for (j, temp) in enumerate(temp_range)
             # Predict next sea lice level using the current state
             pred_adult, pred_motile, pred_sessile = predict_next_abundances(
-                sealice_level, fixed_motile, fixed_sessile, temp
+                sealice_level, fixed_motile, fixed_sessile, temp, config.location
             )
             
             # Create a belief state centered on the predicted level
@@ -983,7 +983,7 @@ function generate_policy_action_data(policy_type, config, λ)
         for (j, temp) in enumerate(temp_range)
             # Predict next sea lice level using the current state
             pred_adult, pred_motile, pred_sessile = predict_next_abundances(
-                sealice_level, fixed_motile, fixed_sessile, temp
+                sealice_level, fixed_motile, fixed_sessile, temp, config.location
             )
             
             # Create a belief state centered on the predicted level

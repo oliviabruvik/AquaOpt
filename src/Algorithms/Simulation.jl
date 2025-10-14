@@ -31,7 +31,7 @@ function initialize_belief(sim_pomdp, config)
             sim_pomdp.adult_mean + sim_pomdp.adult_dist, # adult
             sim_pomdp.motile_mean + sim_pomdp.motile_dist, # motile
             sim_pomdp.sessile_mean + sim_pomdp.sessile_dist, # sessile
-            get_temperature(sim_pomdp.production_start_week) + sim_pomdp.temp_dist, # temperature
+            get_temperature(sim_pomdp.production_start_week, sim_pomdp.location) + sim_pomdp.temp_dist, # temperature
         )
     else
         return initialstate(sim_pomdp)
@@ -59,6 +59,7 @@ function create_sim_pomdp(config, λ)
             motile_sd=config.motile_sd,
             sessile_sd=config.sessile_sd,
             temp_sd=config.temp_sd,
+            location=config.location,
         )
     else
         # Use the same POMDP type that policies were trained on
@@ -116,7 +117,7 @@ function simulate_policy(algorithm, config)
         @load joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
 
         # Create adaptor policy
-        adaptor_policy = AdaptorPolicy(policy, pomdp)
+        adaptor_policy = AdaptorPolicy(policy, pomdp, config.location)
 
         # Simulate policy
         histories[λ] = run_simulation(adaptor_policy, mdp, pomdp, config, algorithm)
@@ -148,8 +149,7 @@ function run_simulation(policy, mdp, pomdp, config, algorithm)
     # Create simulator
     # sim = RolloutSimulator(max_steps=config.steps_per_episode)
     hr = HistoryRecorder(max_steps=config.steps_per_episode)
-    kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
-    updater = KalmanUpdater(kf)
+    updater = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
 
     # Run simulation for each episode
     for episode in 1:config.num_episodes
@@ -180,8 +180,7 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
     # Create simulator
     # sim = RolloutSimulator(max_steps=config.steps_per_episode)
     hr = HistoryRecorder(max_steps=config.steps_per_episode)
-    kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
-    updater = KalmanUpdater(kf)
+    updater = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
 
     # Create the list of Sim objects
     sim_list = []
@@ -249,9 +248,8 @@ function simulate_all_policies(algorithms, config)
         hr = HistoryRecorder(max_steps=config.steps_per_episode)
         if config.high_fidelity_sim
             @info "Simulating high fidelity"
-            @info "Building Kalman filter with ekf_filter: $config.ekf_filter" 
-            kf = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
-            updater = KalmanUpdater(kf)
+            @info "Building Kalman filter with ekf_filter: $config.ekf_filter"
+            updater = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
         else
             @info "Simulating low fidelity"
             @info "Building Discrete updater"
@@ -269,7 +267,7 @@ function simulate_all_policies(algorithms, config)
             # Create adaptor policy
             if config.high_fidelity_sim
                 @info "Creating adaptor policy for high fidelity"
-                adaptor_policy = AdaptorPolicy(policy, pomdp)
+                adaptor_policy = AdaptorPolicy(policy, pomdp, config.location)
             else
                 @info "Creating adaptor policy for low fidelity"
                 adaptor_policy = LOFIAdaptorPolicy(policy, pomdp)
@@ -413,7 +411,7 @@ function simulate_vi_policy_on_hifi_mdp(algorithms, config)
                 sim_mdp = UnderlyingMDP(sim_pomdp)
 
                 # Create adaptor policy
-                adaptor_policy = AdaptorPolicy(policy, pomdp)
+                adaptor_policy = AdaptorPolicy(policy, pomdp, config.location)
 
                 # Add Sim objects for each episode
                 for sim_number in 1:config.num_episodes

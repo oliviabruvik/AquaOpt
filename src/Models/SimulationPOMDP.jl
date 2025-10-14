@@ -119,14 +119,17 @@ end
     # Sampling parameters
     rng::AbstractRNG = Random.GLOBAL_RNG
     production_start_week::Int64 = 34 # Week 34 is approximately July 1st
+
+    # Location for biological and temperature model
+    location::String = "north" # "north", "west", or "south"
 end
 
 # -------------------------
 # POMDPs.jl Interface
 # -------------------------
-POMDPs.actions(mdp::SeaLiceSimPOMDP) = [NoTreatment, Treatment, ThermalTreatment]
-POMDPs.discount(mdp::SeaLiceSimPOMDP) = mdp.discount_factor
-POMDPs.isterminal(mdp::SeaLiceSimPOMDP, s::EvaluationState) = false
+POMDPs.actions(pomdp::SeaLiceSimPOMDP) = [NoTreatment, Treatment, ThermalTreatment]
+POMDPs.discount(pomdp::SeaLiceSimPOMDP) = pomdp.discount_factor
+POMDPs.isterminal(pomdp::SeaLiceSimPOMDP, s::EvaluationState) = false
 
 
 # -------------------------
@@ -137,10 +140,20 @@ POMDPs.isterminal(mdp::SeaLiceSimPOMDP, s::EvaluationState) = false
 function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
 
-        # Run step function to predict the next state
-        x = [s.Adult, s.Motile, s.Sessile, s.Temperature]
-        u = [a, s.AnnualWeek]
-        next_adult, next_motile, next_sessile, next_temp = step(x, u)
+        # Apply treatment effects
+        rf_a, rf_m, rf_s = get_treatment_effectiveness(a)
+        treated_adult = s.Adult * (1 - rf_a)
+        treated_motile = s.Motile * (1 - rf_m)
+        treated_sessile = s.Sessile * (1 - rf_s)
+
+        # Predict next abundances using biological model
+        next_adult, next_motile, next_sessile = predict_next_abundances(
+            treated_adult, treated_motile, treated_sessile, s.Temperature, pomdp.location
+        )
+
+        # Update temperature for next week
+        next_annual_week = (s.AnnualWeek + 1) % 52
+        next_temp = get_temperature(next_annual_week, pomdp.location)
 
         # # Biomass loss
         # # TODO: add a function to calculate the biomass loss
@@ -167,9 +180,9 @@ function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action
 
         # Calculate the next number of fish
         survival_rate = (1 - pomdp.nat_mort_rate) * (1 - get_treatment_mortality_rate(a))
-        harvest = harvest_schedule(s.ProductionWeek)
-        move_in = move_in_fn(s.ProductionWeek)
-        move_out = move_out_fn(s.ProductionWeek)
+        harvest = pomdp.harvest_schedule(s.ProductionWeek)
+        move_in = pomdp.move_in_fn(s.ProductionWeek)
+        move_out = pomdp.move_out_fn(s.ProductionWeek)
         survived_fish = round(Int, floor(s.NumberOfFish * survival_rate))
         next_number_of_fish = survived_fish + move_in - move_out - harvest
         next_number_of_fish = clamp(next_number_of_fish, pomdp.number_of_fish_bounds...)
@@ -243,7 +256,7 @@ function POMDPs.observation(pomdp::SeaLiceSimPOMDP, a::Action, sp::EvaluationSta
         observed_sessile = max(observed_sessile, 0.0)
 
         # Predict the next adult sea lice level based on the current state and temperature
-        pred_adult, _, _ = predict_next_abundances(observed_adult, observed_motile, observed_sessile, observed_temperature)
+        pred_adult, _, _ = predict_next_abundances(observed_adult, observed_motile, observed_sessile, observed_temperature, pomdp.location)
 
         # Clamp the sea lice levels to be positive and within the bounds of the SeaLicePOMDP
         pred_adult = clamp(pred_adult, pomdp.sea_lice_bounds...)
@@ -307,7 +320,7 @@ function POMDPs.initialstate(pomdp::SeaLiceSimPOMDP)
     ImplicitDistribution(pomdp) do pomdp, rng
 
         # Initial temperature upon production start
-        temperature = get_temperature(pomdp.production_start_week) + rand(rng, pomdp.temp_dist)
+        temperature = get_temperature(pomdp.production_start_week, pomdp.location) + rand(rng, pomdp.temp_dist)
 
         # Initial sea lice level upon production start
         adult = pomdp.adult_mean + rand(rng, pomdp.adult_dist)
@@ -315,7 +328,7 @@ function POMDPs.initialstate(pomdp::SeaLiceSimPOMDP)
         sessile = pomdp.sessile_mean + rand(rng, pomdp.sessile_dist)
 
         # Next week's predicted adult sea lice level
-        pred_adult, _, _ = predict_next_abundances(adult, motile, sessile, temperature)
+        pred_adult, _, _ = predict_next_abundances(adult, motile, sessile, temperature, pomdp.location)
 
         # Clamp the sea lice levels to be positive
         adult = max(adult, 0.0)
@@ -336,11 +349,4 @@ function POMDPs.initialstate(pomdp::SeaLiceSimPOMDP)
             30.0, # Salinity at the start of production
         )
     end
-end
-
-# -------------------------
-# Fish mortality function
-# -------------------------
-function get_fish_mortality(pomdp::SeaLiceSimPOMDP, s::EvaluationState)
-    return pomdp.fish_mortality_rate * s.Adult
 end

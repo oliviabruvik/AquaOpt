@@ -242,13 +242,14 @@ end
 struct AdaptorPolicy <: Policy
     lofi_policy::Policy
     pomdp::POMDP
+    location::String
 end
 
 # Adaptor action
 function POMDPs.action(policy::AdaptorPolicy, b)
 
     # Predict the next state
-    pred_adult, pred_motile, pred_sessile = predict_next_abundances(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1])
+    pred_adult, pred_motile, pred_sessile = predict_next_abundances(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1], policy.location)
     adult_sd = sqrt(b.Σ[1,1])
 
     # Clamp predictions to be positive
@@ -316,13 +317,14 @@ struct FullObservabilityAdaptorPolicy <: Policy
     lofi_policy::Policy
     pomdp::POMDP
     mdp::MDP
+    location::String
 end
 
 # Adaptor action
 function POMDPs.action(policy::FullObservabilityAdaptorPolicy, s)
 
     # Predict the next state
-    pred_adult, pred_motile, pred_sessile = predict_next_abundances(s.sessile, s.motile, s.adult, s.temp)
+    pred_adult, pred_motile, pred_sessile = predict_next_abundances(s.sessile, s.motile, s.adult, s.temp, policy.location)
 
     # Clamp predictions to be positive
     pred_adult = max(pred_adult, 1e-3)

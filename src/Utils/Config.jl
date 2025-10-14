@@ -25,6 +25,7 @@ using Parameters
     raw_space_sampling_sd::Float64 = 0.5
     log_space::Bool = false
     regulation_limit::Float64 = 0.5
+    location::String = "north" # Location for temperature and biological model: "north", "west", or "south"
 
     # SimPOMDP parameters
     adult_mean::Float64 = 0.125

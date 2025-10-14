@@ -70,7 +70,7 @@ function plot_plos_one_plots(parallel_data, config)
     @info "Saved all plos one plots to $(config.figures_dir)"
 end
 
-function run_experiments(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light")
+function run_experiments()
 
     main(first_step_flag=first_step_flag, log_space=true, experiment_name="log_space_ekf", mode="paper", ekf_filter=true)
     main(first_step_flag=first_step_flag, log_space=false, experiment_name="raw_space_ekf", mode="paper", ekf_filter=false)
@@ -175,9 +175,9 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
             figures_dir = joinpath("NorthernNorway", "figures"),
             experiment_dir = joinpath("NorthernNorway"),
         )
-    elseif mode == "debug"
+    elseif mode == "VIdebug"
         config = ExperimentConfig(
-            num_episodes=10,
+            num_episodes=1000,
             steps_per_episode=104,
             log_space=log_space,
             ekf_filter=ekf_filter,
@@ -185,11 +185,29 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
             verbose=false,
             step_through=false,
             reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=5.0,
-            VI_max_iterations=10,
-            QMDP_max_iterations=10,
+            sarsop_max_time=500.0,
+            VI_max_iterations=100,
+            QMDP_max_iterations=100,
             discount_factor = 0.95,
             high_fidelity_sim = false, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
+            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
+        )
+    elseif mode == "debug"
+        config = ExperimentConfig(
+            num_episodes=100,
+            steps_per_episode=20,
+            log_space=log_space,
+            ekf_filter=ekf_filter,
+            experiment_name=exp_name,
+            verbose=false,
+            step_through=false,
+            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=500.0,
+            VI_max_iterations=100,
+            QMDP_max_iterations=100,
+            discount_factor = 0.95,
+            location = "north", # "north", "west", or "south"
+            high_fidelity_sim = true, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
             full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
         )
     elseif mode == "fullobs"
@@ -265,10 +283,10 @@ function define_algorithms(config, heuristic_config)
 
     
     algorithms = [
-        # Algorithm(solver_name="NeverTreat_Policy"),
-        # Algorithm(solver_name="AlwaysTreat_Policy"),
-        # Algorithm(solver_name="Random_Policy"),
-        # Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
+        Algorithm(solver_name="NeverTreat_Policy"),
+        Algorithm(solver_name="AlwaysTreat_Policy"),
+        Algorithm(solver_name="Random_Policy"),
+        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
@@ -399,6 +417,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
 
-    # run_experiments(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    # run_experiments()
     main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
 end

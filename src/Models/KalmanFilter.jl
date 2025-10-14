@@ -15,29 +15,33 @@ using Random
 # --------------------------------------------
 mutable struct KalmanUpdater <: POMDPs.Updater
     filter::Union{ExtendedKalmanFilter, UnscentedKalmanFilter}
+    location::String
 end
 
-# x is state, u is action
-function step(x, u)
+# Create a step function with location captured in closure
+function make_step_function(location::String)
+    # x is state, u is action
+    function step(x, u)
+        # Unpack the state and action
+        adult, motile, sessile, temp = x
+        treatment, annual_week = u
 
-    # Unpack the state and action
-    adult, motile, sessile, temp = x
-    treatment, annual_week = u
+        # Apply treatment
+        config = get_action_config(Action(Int(treatment)))
+        adult *= (1 - config.adult_reduction)
+        motile *= (1 - config.motile_reduction)
+        sessile *= (1 - config.sessile_reduction)
 
-    # Apply treatment
-    config = get_action_config(Action(Int(treatment)))
-    adult *= (1 - config.adult_reduction)
-    motile *= (1 - config.motile_reduction)
-    sessile *= (1 - config.sessile_reduction)
+        # Predict the next abundances (using captured location)
+        next_adult, next_motile, next_sessile = predict_next_abundances(adult, motile, sessile, temp, location)
 
-    # Predict the next abundances
-    next_adult, next_motile, next_sessile = predict_next_abundances(adult, motile, sessile, temp)
+        # Get the temperature for the next week (using captured location)
+        next_annual_week = (annual_week + 1) % 52
+        next_temp = get_temperature(next_annual_week, location)
 
-    # Get the temperature for the next week
-    next_annual_week = (annual_week + 1) % 52
-    next_temp = get_temperature(next_annual_week)
-
-    return [next_adult, next_motile, next_sessile, next_temp]
+        return [next_adult, next_motile, next_sessile, next_temp]
+    end
+    return step
 end
 
 # --------------------------------------------
@@ -49,23 +53,31 @@ observe(x, u) = x  # noise handled by V
 # Build EKF or UKF filter
 # --------------------------------------------
 function build_kf(sim_pomdp::Any; ekf_filter=false)
-    
+
     # Create noise matrices with the diagonal elements being adult, sessile, motile, temperature
     # The W matrix stores the process noise for each state variable
     # The V matrix stores the observation noise for each state variable
     W = Diagonal([sim_pomdp.adult_sd^2, sim_pomdp.motile_sd^2, sim_pomdp.sessile_sd^2, sim_pomdp.temp_sd^2])
     V = Diagonal([sim_pomdp.adult_sd^2, sim_pomdp.motile_sd^2, sim_pomdp.sessile_sd^2, sim_pomdp.temp_sd^2])
 
+    # Get location from POMDP
+    location = sim_pomdp.location
+
+    # Create step function with location captured in closure
+    step_fn = make_step_function(location)
+
     # Create dynamics and observation models
-    dmodel = NonlinearDynamicsModel(step, W)
+    dmodel = NonlinearDynamicsModel(step_fn, W)
     omodel = NonlinearObservationModel(observe, V)
 
-    # Create and return the KF
-    if ekf_filter
-        return ExtendedKalmanFilter(dmodel, omodel)
+    # Create the KF and wrap in updater with location
+    kf = if ekf_filter
+        ExtendedKalmanFilter(dmodel, omodel)
     else
-        return UnscentedKalmanFilter(dmodel, omodel)
+        UnscentedKalmanFilter(dmodel, omodel)
     end
+
+    return KalmanUpdater(kf, location)
 end
 
 # --------------------------------------------
