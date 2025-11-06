@@ -1,5 +1,3 @@
-include("Simulation.jl")
-
 using GaussianFilters
 using POMDPs
 using POMDPModels

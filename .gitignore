@@ -16,3 +16,4 @@ src/Tests/NUS_SARSOP.pomdp
 .vscode/launch.json
 .vscode/settings.json
 documentation/
+src/TestVI.jl

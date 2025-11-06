@@ -1,7 +1,4 @@
-# Include shared types
-include("../Utils/SharedTypes.jl")
-include("../Utils/Utils.jl")
-include("KalmanFilter.jl")
+
 
 using DataFrames
 import Distributions: Normal, Uniform
@@ -121,7 +118,7 @@ end
     production_start_week::Int64 = 34 # Week 34 is approximately July 1st
 
     # Location for biological and temperature model
-    location::String = "north" # "north", "west", or "south"
+    location::String = "south" # "north", "west", or "south"
 end
 
 # -------------------------

@@ -1,29 +1,41 @@
 module AquaOpt
 
 # -------------------------
-# Include shared types first
+# Include utilities and configuration first
 # -------------------------
 include("Utils/SharedTypes.jl")
+include("Utils/Utils.jl")
+include("Utils/Config.jl")
 
 # -------------------------
-# Include other files
+# Include model files
 # -------------------------
-include("Algorithms/Evaluation.jl")
+include("Models/KalmanFilter.jl")
+include("Models/SeaLiceLogPOMDP.jl")
+include("Models/SeaLicePOMDP.jl")
+include("Models/SimulationPOMDP.jl")
+
+# -------------------------
+# Include algorithm files
+# -------------------------
 include("Algorithms/Policies.jl")
 include("Algorithms/Simulation.jl")
-include("Models/SeaLicePOMDP.jl")
+include("Algorithms/Evaluation.jl")
+
+# -------------------------
+# Include plotting files
+# -------------------------
 include("Plotting/Heatmaps.jl")
 include("Plotting/Timeseries.jl")
 include("Plotting/Comparison.jl")
 include("Plotting/ParallelPlots.jl")
 include("Plotting/PlosOnePlots.jl")
-include("Utils/Config.jl")
-include("Utils/ExperimentTracking.jl")
 include("Plotting/Plots.jl")
 
-# Environment variables
-ENV["PLOTS_BROWSER"] = "true"
-ENV["PLOTS_BACKEND"] = "plotlyjs"
+# -------------------------
+# Include experiment tracking
+# -------------------------
+include("Utils/ExperimentTracking.jl")
 
 # Import required packages
 using Logging
@@ -39,11 +51,21 @@ using LocalFunctionApproximation
 using LocalApproximationValueIteration
 using Dates
 using JLD2
-using Profile
-using ProfileView
-using PProf
 
-plotlyjs()  # Activate Plotly backend
+# Initialize plotting backend - this function must be called by users
+function __init__()
+    # Set environment variables
+    ENV["PLOTS_BROWSER"] = "true"
+    ENV["PLOTS_BACKEND"] = "plotlyjs"
+
+    # Activate Plotly backend
+    # Users can call this or set their own backend
+    try
+        Plots.plotlyjs()
+    catch e
+        @warn "Could not set plotlyjs backend" exception=e
+    end
+end
 
 function run_experiments(mode)
     main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, ekf_filter=true)
@@ -51,6 +73,10 @@ function run_experiments(mode)
     main(first_step_flag="solve", log_space=true, experiment_name="log_space_noekf", mode=mode, ekf_filter=false)
     main(first_step_flag="solve", log_space=false, experiment_name="raw_space_noekf", mode=mode, ekf_filter=true)
     return
+end
+
+function romeosayshello()
+    println("Hello from AquaOpt4!")
 end
 
 # ----------------------------
@@ -269,14 +295,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
     end
 
     @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
-
-    # @profview main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
-    @time main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
-
-    @time run_experiments(mode_flag)
-    # Print text summary of hotspots
-    @info "\n=== Profile Summary (Top Functions by Time) ==="
-    #Profile.print(format=:flat, sortedby=:count, maxdepth=20, mincount=10)
-
+    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
 end
+
+# -------------------------
+# Export main functions for use in notebooks/scripts
+# -------------------------
+export main, run_experiments, setup_experiment_configs, define_algorithms
+export ExperimentConfig, HeuristicConfig, Algorithm
+export romeosayshello
+
 end # AquaOpt

@@ -2,8 +2,7 @@ using Distributions
 using POMDPs
 using Random
 
-# Include shared types
-include("SharedTypes.jl")
+
 
 # -------------------------
 # Utility functions for discretizing distributions

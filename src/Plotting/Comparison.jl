@@ -1,6 +1,6 @@
 using Plots
 using JLD2
-plotlyjs()  # Set the backend to PlotlyJS
+
 
 # ----------------------------
 # Plot 2: Cost vs Sea Lice for one policy

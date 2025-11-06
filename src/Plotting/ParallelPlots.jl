@@ -5,12 +5,6 @@ using JLD2
 using POMDPs
 using POMDPTools
 
-# Include necessary files for types and functions
-include("../Utils/SharedTypes.jl")
-include("../Utils/Utils.jl")
-include("../Models/SeaLiceLogPOMDP.jl")
-include("../Models/SeaLicePOMDP.jl")
-include("../Algorithms/Policies.jl")
 
 # Preamble: enable fillbetween and modern pgfplots behavior
 PGFPlotsX.DEFAULT_PREAMBLE = [

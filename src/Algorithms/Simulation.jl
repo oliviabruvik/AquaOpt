@@ -12,12 +12,7 @@ using Base.Sys
 using StatsBase: std
 using Random
 
-include("../../src/Utils/Utils.jl")
-include("../../src/Models/SeaLiceLogPOMDP.jl")
-include("../../src/Models/SeaLicePOMDP.jl")
-include("../../src/Models/SimulationPOMDP.jl")
-include("../../src/Models/KalmanFilter.jl")
-include("../../src/Algorithms/Policies.jl")
+
 
 # ----------------------------
 # Initialize belief function

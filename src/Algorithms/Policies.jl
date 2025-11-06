@@ -1,6 +1,3 @@
-include("../Utils/Config.jl")
-include("../Models/SeaLiceLogPOMDP.jl")
-include("../Models/SeaLicePOMDP.jl")
 
 using POMDPs
 using POMDPModels

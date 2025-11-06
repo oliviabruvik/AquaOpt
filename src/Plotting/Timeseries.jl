@@ -2,7 +2,6 @@ using Plots
 using JLD2
 using GaussianFilters
 
-plotlyjs()  # Set the backend to PlotlyJS
 
 # ----------------------------
 # Plot 1: Time series by location
@@ -21,7 +20,7 @@ function plot_sealice_levels_over_time(df)
 end
 
 # ----------------------------
-# Plot 2: Time series of belief means and variances
+# Plot 2: Time series of belief means and variances (Plots.jl version)
 # Creates 6 plots:
 # 1. Belief means with ribbon and true values for each observation variable (Adult, Motile, Sessile, Temperature) *4 plots*
 # 2. Belief variances over time, overlay of all observation variables *1 plot*
@@ -35,7 +34,7 @@ end
 # - Saves plots to config.figures_dir/belief_plots/algo_name/
 # - Returns nothing
 # ----------------------------
-function plot_beliefs_over_time(data, algo_name, config, lambda)
+function plot_beliefs_over_time_plotsjl(data, algo_name, config, lambda)
 
     # Create directory for belief plots
     output_dir = joinpath(config.figures_dir, "belief_plots", algo_name)
