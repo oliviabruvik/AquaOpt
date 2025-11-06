@@ -49,8 +49,7 @@ function create_pomdp_mdp(λ, config)
         )
     end
 
-    @info "Created POMDP"
-    @info "POMDP: $pomdp"
+    @info "Created POMDP with reward lambdas: $(pomdp.reward_lambdas)"
 
     mdp = UnderlyingMDP(pomdp)
 
@@ -58,13 +57,13 @@ function create_pomdp_mdp(λ, config)
     pomdp_mdp_filename = "pomdp_mdp_$(λ)_lambda"
     pomdp_mdp_file_path = joinpath(pomdp_mdp_dir, "$(pomdp_mdp_filename).jld2")
     @save pomdp_mdp_file_path pomdp mdp
-    @info "Saved POMDP and MDP to file $(pomdp_mdp_file_path)"
+    # @info "Saved POMDP and MDP to file $(pomdp_mdp_file_path)"
 
     # Save POMDP as POMDPX file for NUS SARSOP
     pomdpx_file_path = joinpath(pomdp_mdp_dir, "pomdp.pomdpx")
     pomdpx = POMDPXFile(pomdpx_file_path)
-    POMDPXFiles.write(pomdp, pomdpx)
-    @info "Saved POMDP as POMDPX file $(pomdpx_file_path)"
+    # POMDPXFiles.write(pomdp, pomdpx)
+    # @info "Saved POMDP as POMDPX file $(pomdpx_file_path)"
 
     return pomdp, mdp
 end
@@ -89,7 +88,7 @@ function generate_mdp_pomdp_policies(algorithm, config)
         # Save policy, pomdp, and mdp to file
         policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
         @save joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
-        @info "Saved policy, pomdp, and mdp to file $(joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2"))"
+        #@info "Saved policy, pomdp, and mdp to file $(joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2"))"
     end
 end
 
@@ -284,28 +283,26 @@ end
 # ----------------------------
 # LOFI Adaptor Policy
 # ----------------------------
-struct LOFIAdaptorPolicy <: Policy
-    lofi_policy::Policy
-    pomdp::POMDP
+struct LOFIAdaptorPolicy{LP <: Policy, P <: POMDP} <: Policy
+    lofi_policy::LP
+    pomdp::P
+end
+
+function POMDPs.action(policy::LOFIAdaptorPolicy{<:ValueIterationPolicy}, b)
+    mode_idx = argmax(b.b)
+    all_states = states(policy.pomdp)
+    state_with_highest_probability = all_states[mode_idx]
+
+    # Assertions
+    @assert state_with_highest_probability in states(policy.pomdp)
+    @assert length(b.b) == length(states(policy.pomdp))
+    
+    # Get next action from policy
+    return action(policy.lofi_policy, state_with_highest_probability)
 end
 
 # Adaptor action
 function POMDPs.action(policy::LOFIAdaptorPolicy, b)
-
-    # Get next action from policy
-    if policy.lofi_policy isa ValueIterationPolicy
-        mode_idx = argmax(b.b)
-        all_states = states(policy.pomdp)
-        state_with_highest_probability = all_states[mode_idx]
-
-        # Assertions
-        @assert state_with_highest_probability in states(policy.pomdp)
-        @assert length(b.b) == length(states(policy.pomdp))
-        
-        # Get next action from policy
-        return action(policy.lofi_policy, state_with_highest_probability)
-    end
-
     # Discretize alpha vectors (representation of utility over belief states per action)
     return action(policy.lofi_policy, b)
 end

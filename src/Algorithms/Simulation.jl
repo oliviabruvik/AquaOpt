@@ -202,7 +202,7 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
             initial_state;       # Initial state
             rng=MersenneTwister(seed),
             max_steps=config.steps_per_episode,
-            metadata=Dict(:policy => algorithm.solver_name, :lambda => pomdp.lambda, :seed => sim_number)
+            metadata=Dict(:policy => algorithm.solver_name, :lambda => pomdp.lambda, :seed => seed, :episode_number => sim_number)
         ))
     end
 
@@ -224,11 +224,11 @@ function run_all_episodes(policy, mdp, pomdp, config, algorithm)
 
     return data
 end
-
 # ----------------------------
 # Simulate all policies in parallel
 # ----------------------------
 function simulate_all_policies(algorithms, config)
+    rng = MersenneTwister(1)
 
     # Defining parameters for parallel simulation
     starting_seed = 1
@@ -241,35 +241,27 @@ function simulate_all_policies(algorithms, config)
 
         # Create simulator POMDP
         sim_pomdp = create_sim_pomdp(config, λ)
-        @info "Created simulator POMDP"
-        @info "Simulator POMDP: $sim_pomdp"
+        @info "Created simulator POMDP with reward lambdas: $(sim_pomdp.reward_lambdas)"
 
         # Create simulator
         hr = HistoryRecorder(max_steps=config.steps_per_episode)
         if config.high_fidelity_sim
-            @info "Simulating high fidelity"
-            @info "Building Kalman filter with ekf_filter: $config.ekf_filter"
             updater = build_kf(sim_pomdp, ekf_filter=config.ekf_filter)
         else
-            @info "Simulating low fidelity"
-            @info "Building Discrete updater"
             updater = DiscreteUpdater(sim_pomdp)
         end
 
         # Load policy, pomdp, and mdp
         for algo in algorithms
-            @info "Adding sim objects for $(algo.solver_name)"
             policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
             policy_pomdp_mdp_filepath = joinpath(config.policies_dir, "$(algo.solver_name)", "$(policy_pomdp_mdp_filename).jld2")
-            @info "Loading policy, pomdp, and mdp from $(policy_pomdp_mdp_filepath)"
+            # @info "Loading policy, pomdp, and mdp from $(policy_pomdp_mdp_filepath)"
             @load policy_pomdp_mdp_filepath policy pomdp mdp
 
             # Create adaptor policy
             if config.high_fidelity_sim
-                @info "Creating adaptor policy for high fidelity"
                 adaptor_policy = AdaptorPolicy(policy, pomdp, config.location)
             else
-                @info "Creating adaptor policy for low fidelity"
                 adaptor_policy = LOFIAdaptorPolicy(policy, pomdp)
             end
 
@@ -288,13 +280,14 @@ function simulate_all_policies(algorithms, config)
                     updater,                        # Custom updater
                     initial_belief,                 # Initial belief
                     initial_state;                  # Initial state
-                    rng=MersenneTwister(seed),
+                    rng=Random.seed!(copy(rng), seed),
                     max_steps=config.steps_per_episode,
-                    metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => sim_number)
+                    metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => seed, :episode_number => sim_number)
                 ))
             end
         end
     end
+   # Main.@infiltrate
 
     # Run the simulations in parallel
     data = run_parallel(sim_list, proc_warn=false) do sim, hist
@@ -353,7 +346,7 @@ function simulate_all_policies_on_mdp(algorithms, config)
                     initial_state;                  # Initial state
                     rng=MersenneTwister(seed),
                     max_steps=config.steps_per_episode,
-                    metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => sim_number)
+                    metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => seed, :episode_number => sim_number)
                 ))
             end
         end
@@ -426,7 +419,7 @@ function simulate_vi_policy_on_hifi_mdp(algorithms, config)
                         initial_state;                  # Initial state
                         rng=MersenneTwister(seed),
                         max_steps=config.steps_per_episode,
-                        metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => sim_number)
+                        metadata=Dict(:policy => algo.solver_name, :lambda => λ, :seed => seed, :episode_number => sim_number)
                     ))
                 end
             end
