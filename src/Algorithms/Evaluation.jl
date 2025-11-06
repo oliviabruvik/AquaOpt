@@ -82,8 +82,50 @@ function evaluate_simulation_results(config, algorithm, histories)
     # Save results
     mkpath(config.results_dir)
     @save joinpath(config.results_dir, "$(algorithm.solver_name)_avg_results.jld2") avg_results
+    CSV.write(joinpath(config.results_dir, "$(algorithm.solver_name)_avg_results.csv"), avg_results)
     
     return avg_results
+end
+
+# ----------------------------
+# Extract histories for a specific algorithm from parallel simulation results
+# Takes in config, algorithm and parallel data
+# Returns a histories object where the key is the lambda value and the value is a vector of episode histories
+# ----------------------------
+function extract_simulation_histories(config, algorithm, parallel_data)
+
+    histories = Dict{Float64, Vector{Any}}()
+
+    for λ in config.lambda_values
+
+        # Get histories for this lambda
+        data_lambda = filter(row -> row.lambda == λ && row.policy == algorithm.solver_name, parallel_data)
+
+        episode_histories = Vector{Any}()
+
+        for episode in 1:config.num_episodes
+
+            # Get histories for this episode
+            data_episode = filter(row -> row.episode_number == episode, data_lambda)
+
+            if nrow(data_episode) == 1
+                push!(episode_histories, data_episode.history[1])
+            else
+                error("Expected 1 history for lambda=$(λ), policy=$(algorithm.solver_name), seed=$(episode), but found $(nrow(data_episode))")
+            end
+        end
+
+        histories[λ] = episode_histories
+    end
+
+    # Create directory for simulation histories
+    histories_dir = joinpath(config.simulations_dir, "$(algorithm.solver_name)")
+    mkpath(histories_dir)
+    histories_filename = "$(algorithm.solver_name)_histories"
+    histories_filepath = joinpath(histories_dir, "$(algorithm.solver_name)_histories.jld2")
+    @save histories_filepath histories
+
+    return histories
 end
 
 # ----------------------------
@@ -125,7 +167,6 @@ function display_best_lambda_for_each_policy(parallel_data, algorithms)
         data_grouped_by_lambda = groupby(data_filtered, :lambda)
         result = combine(data_grouped_by_lambda, :reward => mean_and_ci => AsTable)
         println(result)
-    
     end
 end
 
