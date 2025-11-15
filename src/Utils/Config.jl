@@ -52,6 +52,7 @@ using Parameters
     # Algorithm parameters
     lambda_values::Vector{Float64} = [0.6] # collect(0.0:0.2:1.0)
     reward_lambdas::Vector{Float64} = [0.8, 0.2, 0.0, 0.0, 0.0] # [treatment, regulatory, biomass, health, sea lice]
+    sim_reward_lambdas::Vector{Float64} = [0.7, 0.2, 0.1, 0.9, 2.0] # for high-fidelity sim
     sarsop_max_time::Float64 = 150.0
     VI_max_iterations::Int = 30
     QMDP_max_iterations::Int = 30

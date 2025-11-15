@@ -51,8 +51,9 @@ using LocalFunctionApproximation
 using LocalApproximationValueIteration
 using Dates
 using JLD2
+import PGFPlotsX
 
-# Initialize plotting backend - this function must be called by users
+# Initialize plotting backend - this function runs when module is loaded
 function __init__()
     # Set environment variables
     ENV["PLOTS_BROWSER"] = "true"
@@ -65,6 +66,20 @@ function __init__()
     catch e
         @warn "Could not set plotlyjs backend" exception=e
     end
+
+    # Configure PGFPlotsX preamble for LaTeX plotting
+    try
+        PGFPlotsX.DEFAULT_PREAMBLE = [
+            raw"\usepackage{pgfplots}",
+            raw"\usepgfplotslibrary{fillbetween}",
+            raw"\usepgfplotslibrary{groupplots}",
+            raw"\usetikzlibrary{intersections}",
+            raw"\pgfplotsset{compat=newest}",
+            raw"\pgfplotsset{legend style={text=white,fill=none,draw=none}}"
+        ]
+    catch e
+        @debug "Could not configure PGFPlotsX" exception=e
+    end
 end
 
 function run_experiments(mode)
@@ -73,10 +88,6 @@ function run_experiments(mode)
     main(first_step_flag="solve", log_space=true, experiment_name="log_space_noekf", mode=mode, ekf_filter=false)
     main(first_step_flag="solve", log_space=false, experiment_name="raw_space_noekf", mode=mode, ekf_filter=true)
     return
-end
-
-function romeosayshello()
-    println("Hello from AquaOpt4!")
 end
 
 # ----------------------------
@@ -295,14 +306,35 @@ if abspath(PROGRAM_FILE) == @__FILE__
     end
 
     @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
-    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    # main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    run_experiments(mode_flag)
 end
 
 # -------------------------
 # Export main functions for use in notebooks/scripts
 # -------------------------
+# Main workflow functions
 export main, run_experiments, setup_experiment_configs, define_algorithms
+
+# Policy generation functions
+export generate_mdp_pomdp_policies, create_pomdp_mdp, generate_policy
+
+# Simulation functions
+export simulate_policy, simulate_all_policies, create_sim_pomdp, initialize_belief
+
+# Evaluation functions
+export evaluate_simulation_results, extract_simulation_histories
+export extract_reward_metrics, display_reward_metrics
+export print_reward_metrics_for_vi_policy
+
+# Plotting functions
+export plot_plos_one_plots, plot_parallel_plots, plot_results
+export plot_treatment_heatmap, plot_simulation_treatment_heatmap
+export plot_beliefs_over_time, plot_beliefs_over_time_plotsjl
+export plot_sealice_levels_over_time
+export plot_policy_sealice_levels_over_time, plot_policy_treatment_cost_over_time
+
+# Configuration types
 export ExperimentConfig, HeuristicConfig, Algorithm
-export romeosayshello
 
 end # AquaOpt

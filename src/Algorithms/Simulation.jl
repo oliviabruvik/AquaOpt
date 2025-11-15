@@ -42,7 +42,7 @@ function create_sim_pomdp(config, λ)
     if config.high_fidelity_sim
         return SeaLiceSimPOMDP(
             lambda=λ,
-            reward_lambdas=config.reward_lambdas,
+            reward_lambdas=config.sim_reward_lambdas,
             costOfTreatment=config.costOfTreatment,
             rho=config.rho,
             discount_factor=config.discount_factor,
@@ -61,7 +61,7 @@ function create_sim_pomdp(config, λ)
         if config.log_space
             return SeaLiceLogPOMDP(
                 lambda=λ,
-                reward_lambdas=config.reward_lambdas,
+                reward_lambdas=config.sim_reward_lambdas,
                 costOfTreatment=config.costOfTreatment,
                 growthRate=config.growthRate,
                 rho=config.rho,
@@ -74,7 +74,7 @@ function create_sim_pomdp(config, λ)
         else
             return SeaLicePOMDP(
                 lambda=λ,
-                reward_lambdas=config.reward_lambdas,
+                reward_lambdas=config.sim_reward_lambdas,
                 costOfTreatment=config.costOfTreatment,
                 growthRate=config.growthRate,
                 rho=config.rho,
