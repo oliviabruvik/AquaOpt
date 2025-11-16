@@ -4,8 +4,8 @@ module AquaOpt
 # Include utilities and configuration first
 # -------------------------
 include("Utils/SharedTypes.jl")
+include("Utils/Config.jl")  # Config must come before Utils since Utils uses get_location_params
 include("Utils/Utils.jl")
-include("Utils/Config.jl")
 
 # -------------------------
 # Include model files
@@ -348,6 +348,9 @@ export plos_one_algo_sealice_levels_over_time
 export plos_one_treatment_distribution_comparison
 
 # Configuration types
-export ExperimentConfig, HeuristicConfig, Algorithm
+export ExperimentConfig, HeuristicConfig, Algorithm, LocationParams, get_location_params
+
+# Utility functions
+export predict_next_abundances, get_temperature
 
 end # AquaOpt

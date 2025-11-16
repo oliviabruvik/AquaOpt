@@ -93,23 +93,8 @@ end
 # Temperature model: Return estimated weekly sea surface temperature (°C) for Norwegian salmon farms.
 # -------------------------
 function get_temperature(annual_week, location="north")
-
-    if location == "north"
-        T_mean = 12.0 # average annual temperature (°C)
-        T_amp = 4.5 # amplitude (°C)
-        peak_week = 27 # aligns peak with July (week ~27)
-    elseif location == "west"
-        T_mean = 16.0 # average annual temperature (°C)
-        T_amp = 4.5
-        peak_week = 27
-    elseif location == "south"
-        T_mean = 20.0
-        T_amp = 4.5
-        peak_week = 27
-    else
-        error("Invalid location: $location. Must be 'north', 'west', or 'south'")
-    end
-    return T_mean + T_amp * cos(2π * (annual_week - peak_week) / 52)
+    params = get_location_params(location)
+    return params.T_mean + params.T_amp * cos(2π * (annual_week - params.peak_week) / 52)
 end
 
 # -------------------------
@@ -120,54 +105,23 @@ end
 # -------------------------
 function predict_next_abundances(adult, motile, sessile, temp, location="north", reproduction_rate=2.0)
 
-    if location == "north"
-        d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))  # Sessile to motile
-        d2_val = 1 / (1 + exp(-(-2.1 + 0.037 * (temp - 9))))  # Motile to adult
-    elseif location == "west"
-        d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 16))))  # Faster sessile to motile
-        d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 16))))  # Faster motile to adult
-    elseif location == "south"
-        d1_val = 1 / (1 + exp(-(-1.5 + 0.5 * (temp - 20))))  # Faster sessile to motile
-        d2_val = 1 / (1 + exp(-(-1.0 + 0.1 * (temp - 20))))  # Faster motile to adult
-    else
-        error("Invalid location: $location. Must be 'north', 'west', or 'south'")
-    end
+    # Get location-specific parameters
+    params = get_location_params(location)
 
-    # Weekly survival probabilities from Table 1 of Stige et al. 2025.
-    if location == "north"
-        s1 = 0.49  # sessile
-        s2 = 2.3   # sessile → motile scaling
-        s3 = 0.88  # motile
-        s4 = 0.61  # adult
-    elseif location == "west"
-        s1 = 0.6  # sessile
-        s2 = 3.0   # sessile → motile scaling
-        s3 = 0.95  # motile
-        s4 = 0.70  # adult
-    elseif location == "south"
-        s1 = 0.8  # sessile
-        s2 = 5.0   # sessile → motile scaling
-        s3 = 0.99  # motile
-        s4 = 0.99  # adult
-    end
+    # Calculate development rates using logistic functions
+    d1_val = 1 / (1 + exp(-(params.d1_intercept + params.d1_temp_coef * (temp - params.d1_temp_offset))))  # Sessile to motile
+    d2_val = 1 / (1 + exp(-(params.d2_intercept + params.d2_temp_coef * (temp - params.d2_temp_offset))))  # Motile to adult
 
-    # Get the predicted sea lice levels
-    pred_sessile = s1 * sessile
-    pred_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
-    pred_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
+    # Get the predicted sea lice levels using weekly survival probabilities
+    pred_sessile = params.s1_sessile * sessile
+    pred_motile = params.s3_motile * (1 - d2_val) * motile + params.s2_scaling * d1_val * sessile
+    pred_adult = params.s4_adult * adult + d2_val * 0.5 * (params.s3_motile + params.s4_adult) * motile
 
     # Add reproduction: adult females produce new sessile larvae
-    # This is the key biological process that was missing!
     pred_sessile += reproduction_rate * adult
 
     # Add an influx of sessiles from the sea (external larval pressure)
-    if location == "north"
-        pred_sessile += 0.01
-    elseif location == "west"
-        pred_sessile += 0.1
-    elseif location == "south"
-        pred_sessile += 0.2
-    end
+    pred_sessile += params.external_influx
 
     # Clamp the sea lice levels to be positive
     pred_adult = max(pred_adult, zero(pred_adult))
