@@ -42,7 +42,6 @@ end
     reward_lambdas::Vector{Float64} = [0.5, 0.5, 0.0, 0.0, 0.0] # [treatment, regulatory, biomass, health, sea_lice]
 	costOfTreatment::Float64 = 10.0
 	growthRate::Float64 = 0.3
-	rho::Float64 = 0.95
     discount_factor::Float64 = 0.95
     full_observability_solver::Bool = false
 

@@ -20,7 +20,7 @@ using Parameters
     # POMDP parameters
     costOfTreatment::Float64 = 10.0
     growthRate::Float64 = 0.15 # 0.3 #1.26 # "The growth rate of sea lice is 0.3 per day." Costello (2006)
-    rho::Float64 = 0.95 # "The treatment kills off 95% on all stages." DOI: 10.1016/j.aquaculture.2019.734329
+    reproduction_rate::Float64 = 2.0 # Number of sessile larvae produced per adult female per week (fecundity)
     discount_factor::Float64 = 0.95
     raw_space_sampling_sd::Float64 = 0.5
     log_space::Bool = false

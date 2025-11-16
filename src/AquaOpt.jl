@@ -107,8 +107,6 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
     @info "Simulating policies"
     parallel_data = simulate_all_policies(algorithms, config)
 
-    print(names(parallel_data))
-
     # If we are simulating on high fidelity model, we want to evaluate the simulation results
     if config.high_fidelity_sim
         for algo in algorithms

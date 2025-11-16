@@ -118,7 +118,7 @@ end
 # Based on A salmon lice prediction model, Stige et al. 2025.
 # https://www.sciencedirect.com/science/article/pii/S0167587724002915
 # -------------------------
-function predict_next_abundances(adult, motile, sessile, temp, location="north")
+function predict_next_abundances(adult, motile, sessile, temp, location="north", reproduction_rate=2.0)
 
     if location == "north"
         d1_val = 1 / (1 + exp(-(-2.4 + 0.37 * (temp - 9))))  # Sessile to motile
@@ -156,7 +156,11 @@ function predict_next_abundances(adult, motile, sessile, temp, location="north")
     pred_motile = s3 * (1 - d2_val) * motile + s2 * d1_val * sessile
     pred_adult = s4 * adult + d2_val * 0.5 * (s3 + s4) * motile
 
-    # Add an influx of sessiles from the sea
+    # Add reproduction: adult females produce new sessile larvae
+    # This is the key biological process that was missing!
+    pred_sessile += reproduction_rate * adult
+
+    # Add an influx of sessiles from the sea (external larval pressure)
     if location == "north"
         pred_sessile += 0.01
     elseif location == "west"

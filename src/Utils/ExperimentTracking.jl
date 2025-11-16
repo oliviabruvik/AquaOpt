@@ -19,7 +19,6 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
         # POMDP parameters
         costOfTreatment = config.costOfTreatment,
         growthRate = config.growthRate,
-        rho = config.rho,
         discount_factor = config.discount_factor,
         log_space = config.log_space,
 
@@ -57,7 +56,6 @@ function get_latest_matching_config(config::ExperimentConfig, heuristic_config::
     # POMDP parameters
     mask = (df.costOfTreatment .== config.costOfTreatment) .&
             (df.growthRate .== config.growthRate) .&
-            (df.rho .== config.rho) .&
             (df.discount_factor .== config.discount_factor) .&
             (df.log_space .== config.log_space) .&
             (df.reward_lambdas .== string(config.reward_lambdas)) .&
