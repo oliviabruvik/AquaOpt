@@ -110,7 +110,7 @@ function simulate_policy(algorithm, config)
         @load joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
 
         # Create adaptor policy
-        adaptor_policy = AdaptorPolicy(policy, pomdp, config.solver_config.location)
+        adaptor_policy = AdaptorPolicy(policy, pomdp, config.solver_config.location, config.solver_config.reproduction_rate)
 
         # Simulate policy
         histories[λ] = run_simulation(adaptor_policy, mdp, pomdp, config, algorithm)
@@ -253,7 +253,7 @@ function simulate_all_policies(algorithms, config)
 
             # Create adaptor policy
             if config.simulation_config.high_fidelity_sim
-                adaptor_policy = AdaptorPolicy(policy, pomdp, config.solver_config.location)
+                adaptor_policy = AdaptorPolicy(policy, pomdp, config.solver_config.location, config.solver_config.reproduction_rate)
             else
                 adaptor_policy = LOFIAdaptorPolicy(policy, pomdp)
             end
@@ -397,7 +397,7 @@ function simulate_vi_policy_on_hifi_mdp(algorithms, config)
                 sim_mdp = UnderlyingMDP(sim_pomdp)
 
                 # Create adaptor policy
-                adaptor_policy = AdaptorPolicy(policy, pomdp, config.solver_config.location)
+                adaptor_policy = AdaptorPolicy(policy, pomdp, config.solver_config.location, config.solver_config.reproduction_rate)
 
                 # Add Sim objects for each episode
                 for sim_number in 1:config.simulation_config.num_episodes
