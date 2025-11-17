@@ -187,7 +187,6 @@ results = test_optimizer(algorithms[1], config, pomdp_config)
 ### POMDP Configuration (`POMDPConfig`)
 - `costOfTreatment`: Cost of treatment action
 - `growthRate`: Sea lice growth rate
-- `rho`: Treatment effectiveness
 - `discount_factor`: Discount factor for future rewards
 - `log_space`: Whether to use log-space model
 

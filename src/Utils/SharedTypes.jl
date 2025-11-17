@@ -71,7 +71,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
         
         ThermalTreatment => ActionConfig(
             action = ThermalTreatment,
-            cost = 12.0,  # MNOK per treatment (higher cost)
+            cost = 13.0,  # MNOK per treatment (higher cost) Increased from 12
             adult_reduction = 0.88,   # 88% reduction
             motile_reduction = 0.87,  # 87% reduction
             sessile_reduction = 0.70, # 70% reduction

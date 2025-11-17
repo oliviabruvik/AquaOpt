@@ -387,10 +387,8 @@ function plos_one_episode_sealice_levels_over_time(
 
     # ----------------- Save Figure ------------------
     if savefig
-        mkpath(joinpath(config.figures_dir, "SingleEpisode_Plots"))
-        outfile = joinpath(config.figures_dir, "SingleEpisode_Plots", "sealice_episode_$(episode_id).pdf")
-        PGFPlotsX.save(outfile, ax)
-        @info "Saved → $outfile"
+        PGFPlotsX.save(joinpath(config.figures_dir, "Plos_One_Plots", "sealice_episode_$(episode_id).pdf"), ax)
+        PGFPlotsX.save(joinpath("Quick_Access", "sealice_episode_$(episode_id).pdf"), ax)
     end
 
     return ax

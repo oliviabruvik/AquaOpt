@@ -42,7 +42,7 @@ function get_location_params(location::String)
             s2_scaling = 2.3,
             s3_motile = 0.88,
             s4_adult = 0.61,
-            external_influx = 0.01
+            external_influx = 0.1
         )
     elseif location == "west"
         return LocationParams(
@@ -55,9 +55,9 @@ function get_location_params(location::String)
             d2_temp_coef = 0.1,
             s1_sessile = 0.6,
             s2_scaling = 3.0,
-            s3_motile = 0.95,
+            s3_motile = 0.90, # Reduced from 0.95
             s4_adult = 0.70,
-            external_influx = 0.1
+            external_influx = 0.12
         )
     elseif location == "south"
         return LocationParams(
@@ -68,11 +68,11 @@ function get_location_params(location::String)
             d1_temp_coef = 0.5,
             d2_intercept = -1.0,
             d2_temp_coef = 0.1,
-            s1_sessile = 0.8,
-            s2_scaling = 5.0,
-            s3_motile = 0.99,
-            s4_adult = 0.99,
-            external_influx = 0.2
+            s1_sessile = 0.7,      # Reduced from 0.8
+            s2_scaling = 3.5,      # Reduced from 5.0
+            s3_motile = 0.92,      # Reduced from 0.99
+            s4_adult = 0.85,       # Reduced from 0.99
+            external_influx = 0.15 # Reduced from 0.2
         )
     else
         error("Invalid location: $location. Must be 'north', 'west', or 'south'")
