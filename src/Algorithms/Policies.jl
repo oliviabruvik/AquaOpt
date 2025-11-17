@@ -44,8 +44,6 @@ function create_pomdp_mdp(λ, config)
         )
     end
 
-    @info "Created POMDP with reward lambdas: $(pomdp.reward_lambdas)"
-
     mdp = UnderlyingMDP(pomdp)
 
     # Save POMDP and MDP to file
@@ -161,7 +159,7 @@ end
 
 # Random action
 function POMDPs.action(policy::RandomPolicy, b)
-    return rand((Treatment, NoTreatment))
+    return rand((Treatment, NoTreatment, ThermalTreatment))
 end
 
 function POMDPs.updater(policy::RandomPolicy)
@@ -242,16 +240,33 @@ end
 # Adaptor action
 function POMDPs.action(policy::AdaptorPolicy, b)
 
-    # Predict the next state
+    # Predict the next state (always in raw space from the biological model)
     pred_adult, pred_motile, pred_sessile = predict_next_abundances(b.μ[1][1], b.μ[3][1], b.μ[2][1], b.μ[4][1], policy.location)
-    adult_sd = sqrt(b.Σ[1,1])
+    adult_variance = b.Σ[1,1]  # Variance in raw space
 
     # Clamp predictions to be positive
     pred_adult = max(pred_adult, 1e-3)
 
+    # Convert to log space if needed for the policy
     if policy.pomdp isa SeaLiceLogPOMDP
-        pred_adult = log(pred_adult)
-        adult_sd = abs(log(adult_sd))
+
+        # Calculate CV^2: Coefficient of Variation squared
+        cv_squared = adult_variance / (pred_adult^2)
+
+        # Lognormal Formula for Log-Space SD (σ_log)
+        # σ_log = sqrt(ln(1 + CV^2))
+        adult_sd_log = sqrt(log(1 + cv_squared))
+
+        # Use log of median (not mean) for point prediction
+        # Median of log-normal: log(μ) (no bias correction)
+        # This ensures better alignment with discretized states
+        pred_adult_log = log(pred_adult)
+
+        # Update the variables
+        pred_adult = pred_adult_log
+        adult_sd = adult_sd_log
+    else
+        adult_sd = sqrt(adult_variance)
     end
 
     # Get next action from policy
