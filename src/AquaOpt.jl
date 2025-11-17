@@ -93,11 +93,34 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light", ekf_filter=true)
+function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light", ekf_filter=true, plot=false)
 
-    @info "Running experiment: $experiment_name, log_space: $log_space, ekf_filter: $ekf_filter, mode: $mode"
     config, heuristic_config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode)
     algorithms = define_algorithms(config, heuristic_config)
+
+    @info """\n
+    ╔════════════════════════════════════════════════════════════════════════╗
+    ║                         NEW EXPERIMENT RUN                              ║
+    ╠════════════════════════════════════════════════════════════════════════╣
+    ║  Mode:            $mode_flag
+    ║  Log Space:       $log_space_flag
+    ║  EKF Filter:      $ekf_filter
+    ║  ExperimentDir: $(config.experiment_dir)
+    ╚════════════════════════════════════════════════════════════════════════╝
+    """
+
+    # Log experiment configuration in experiments.csv file with all experiments
+    save_experiment_config(config, heuristic_config, first_step_flag)
+
+     # Save config to file in current directory for easy access
+     mkpath(joinpath(config.experiment_dir, "config"))
+     @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
+     open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
+         for field in fieldnames(typeof(config))
+             value = getfield(config, field)
+             println(io, "$field: $value")
+         end
+     end
 
     @info "Solving policies"
     for algo in algorithms
@@ -124,26 +147,13 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
     # Display reward metrics
     display_reward_metrics(processed_data, config, false)
 
-    # Plot the results
-    plot_plos_one_plots(processed_data, config)
-
-    # Other plots
-    plot_parallel_plots(processed_data, config)
-    plot_results(algorithms, config)
-
-    # Log experiment configuration in experiments.csv file with all experiments
-    @info "Saved experiment configuration to $(config.experiment_dir)/config/experiment_config.jld2"
-    save_experiment_config(config, heuristic_config, first_step_flag)
-
-    # Save config to file in current directory for easy access
-    mkpath(joinpath(config.experiment_dir, "config"))
-    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
-    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
-        for field in fieldnames(typeof(config))
-            value = getfield(config, field)
-            println(io, "$field: $value")
-        end
+    if plot
+        # Plot the results
+        plot_plos_one_plots(processed_data, config)
     end
+
+    # Treatment frequency
+    print_treatment_frequency(processed_data, config)
 
 end
 
@@ -182,33 +192,10 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
             figures_dir = joinpath("NorthernNorway", "figures"),
             experiment_dir = joinpath("NorthernNorway"),
         )
-    elseif mode == "VIdebug"
-        solver_cfg = SolverConfig(
-            log_space=log_space,
-            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=500.0,
-            VI_max_iterations=100,
-            QMDP_max_iterations=100,
-            discount_factor = 0.95,
-            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
-        )
-        sim_cfg = SimulationConfig(
-            num_episodes=1000,
-            steps_per_episode=104,
-            ekf_filter=ekf_filter,
-            verbose=false,
-            step_through=false,
-            high_fidelity_sim = false, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
-        )
-        config = ExperimentConfig(
-            solver_config=solver_cfg,
-            simulation_config=sim_cfg,
-            experiment_name=exp_name,
-        )
     elseif mode == "debug"
         solver_cfg = SolverConfig(
             log_space=log_space,
-            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
+            reward_lambdas=[1.0, 3.0, 0.5, 0.005, 0.0], # [treatment, regulatory, biomass, health, sea lice]
             sarsop_max_time=5.0,
             VI_max_iterations=10,
             QMDP_max_iterations=10,
@@ -217,35 +204,10 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
             full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
         )
         sim_cfg = SimulationConfig(
-            num_episodes=10,
-            steps_per_episode=20,
+            num_episodes=100,
+            steps_per_episode=52,
             ekf_filter=ekf_filter,
-            verbose=false,
-            step_through=false,
-            high_fidelity_sim = true, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
-        )
-        config = ExperimentConfig(
-            solver_config=solver_cfg,
-            simulation_config=sim_cfg,
-            experiment_name=exp_name,
-        )
-    elseif mode == "fullobs"
-        solver_cfg = SolverConfig(
-            log_space=log_space,
-            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=5.0,
-            VI_max_iterations=10,
-            QMDP_max_iterations=10,
-            discount_factor = 0.95,
-            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
-        )
-        sim_cfg = SimulationConfig(
-            num_episodes=10,
-            steps_per_episode=104,
-            ekf_filter=ekf_filter,
-            verbose=false,
-            step_through=false,
-            high_fidelity_sim = false, # Toggles whether we simulate policies on sim (true) or solver (false) POMDP
+            sim_reward_lambdas = [1.0, 3.0, 0.5, 0.01, 0.0]  # [treatment, regulatory, biomass, health, sea_lice]
         )
         config = ExperimentConfig(
             solver_config=solver_cfg,
@@ -255,20 +217,19 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
     elseif mode == "paper"
         solver_cfg = SolverConfig(
             log_space=log_space,
-            reward_lambdas=[0.7, 0.2, 0.1, 0.1, 0.8], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=1000.0,
-            VI_max_iterations=500,
-            QMDP_max_iterations=500,
+            reward_lambdas=[1.0, 3.0, 0.5, 0.01, 0.0], # [treatment, regulatory, biomass, health, sea lice]
+            sarsop_max_time=300.0,
+            VI_max_iterations=100,
+            QMDP_max_iterations=100,
             discount_factor = 0.95,
-            location = "south",
+            location = "north", # "north", "west", or "south"
+            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
         )
         sim_cfg = SimulationConfig(
             num_episodes=1000,
             steps_per_episode=104,
             ekf_filter=ekf_filter,
-            verbose=false,
-            step_through=false,
-            high_fidelity_sim = false,
+            sim_reward_lambdas = [1.0, 3.0, 0.5, 0.005, 0.0]  # [treatment, regulatory, biomass, health, sea_lice]
         )
         config = ExperimentConfig(
             solver_config=solver_cfg,
@@ -338,9 +299,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
     end
 
-    @info "Running with mode: $mode_flag, log_space: $log_space_flag, experiment_name: $experiment_name_flag"
-    main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
-    #run_experiments(mode_flag)
+    # main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag)
+    run_experiments(mode_flag)
 end
 
 # -------------------------
