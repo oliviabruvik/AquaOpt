@@ -283,6 +283,119 @@ function plos_one_sealice_levels_over_time(parallel_data, config; show_ci=true)
     return ax
 end
 
+
+function plos_one_episode_sealice_levels_over_time(
+    parallel_data,
+    config;
+    episode_id::Int = 1,
+    savefig::Bool = true
+)
+
+    ax = @pgf Axis(Options(
+        :width => "18cm",
+        :height => "6cm",
+        :xlabel => "Time Since Production Start (Weeks)",
+        :ylabel => "Adult Female Sea Lice per Fish",
+        :xlabel_style => "color=black",
+        :ylabel_style => "color=black",
+        :tick_label_style => "color=black",
+        :xmin => 0,
+        :xmax => config.simulation_config.steps_per_episode,
+        :ymin => 0,
+        :ymax => 1,
+        "axis background/.style" => Options("fill" => "white"),
+        "legend style" => Options(
+            "fill" => "white",
+            "draw" => "black",
+            "text" => "black",
+            "font" => "\\scriptsize",
+            "at" => "{(0.98,0.98)}",
+            "anchor" => "north east",
+            "cells" => "{anchor=west}"
+        ),
+        "grid" => "both",
+        "major grid style" => "dashed, opacity=0.35",
+    ))
+
+    policy_styles = Dict(
+        "Heuristic_Policy"      => (color="teal",   marker="o",        name="Heuristic"),
+        "NUS_SARSOP_Policy"     => (color="blue",   marker="square",   name="SARSOP"),
+        "VI_Policy"             => (color="purple", marker="diamond",  name="VI"),
+        "QMDP_Policy"           => (color="violet", marker="triangle", name="QMDP"),
+        "Random_Policy"         => (color="orange", marker="rectangle",name="Random"),
+        "NeverTreat_Policy"     => (color="gray",   marker="star",     name="NeverTreat"),
+        "AlwaysTreat_Policy"    => (color="red",    marker="triangle", name="AlwaysTreat")
+    )
+
+    for (policy_name, style) in policy_styles
+        try
+            data_filtered = filter(row -> row.policy == policy_name, parallel_data)
+
+            seeds = unique(data_filtered.seed)
+            if episode_id > length(seeds)
+                @warn "Policy $policy_name has only $(length(seeds)) episodes, skipping"
+                continue
+            end
+            seed = seeds[episode_id]
+            episode_df = filter(row -> row.seed == seed, data_filtered)
+
+            if isempty(episode_df)
+                continue
+            end
+
+            history = episode_df.history[1]
+            states = collect(state_hist(history))
+
+            time_steps = 1:length(states)
+            levels = [st.SeaLiceLevel for st in states]
+
+            coords = join(["($(time_steps[i]),$(levels[i]))" for i in eachindex(levels)], " ")
+            push!(ax, @pgf("\\addplot[$(style.color), mark=none, line width=1.5pt] coordinates {$coords};"))
+            push!(ax, @pgf("\\addlegendentry{$(style.name)}"))
+
+            #### === CLEAR TREATMENT MARKERS ===
+            try
+                actions = collect(action_hist(history))
+
+                # treatment = any action ≠ 0
+                treatment_steps = findall(!=(0), actions)
+
+                for t in treatment_steps
+                    push!(ax,
+                        @pgf("\\addplot+[only marks,
+                                        mark=*,
+                                        mark size=3.5pt,
+                                        draw=black,
+                                        line width=0.4pt,
+                                        fill=$(style.color)
+                                        ]
+                                coordinates {($(t),$(levels[t]))};")
+                    )
+                end
+            catch e
+                @warn "Treatment detection failed for $policy_name: $e"
+            end
+
+        catch e
+            @warn "Error plotting $policy_name: $e"
+        end
+    end
+
+    # ----------------- Regulatory Limit ------------------
+    push!(ax, @pgf("\\addplot[black, densely dashed, line width=1pt] coordinates {(0,0.5) ($(config.simulation_config.steps_per_episode),0.5)};"))
+    push!(ax, @pgf("\\addlegendentry{Reg. Limit}"))
+
+    # ----------------- Save Figure ------------------
+    if savefig
+        mkpath(joinpath(config.figures_dir, "SingleEpisode_Plots"))
+        outfile = joinpath(config.figures_dir, "SingleEpisode_Plots", "sealice_episode_$(episode_id).pdf")
+        PGFPlotsX.save(outfile, ax)
+        @info "Saved → $outfile"
+    end
+
+    return ax
+end
+
 # ----------------------------
 # Treatment Probability Over Time: Shows all policies overlaid in a single plot
 # Each policy shows the probability of treating (any action that is not NoTreatment)

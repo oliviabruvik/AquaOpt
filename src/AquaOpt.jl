@@ -375,6 +375,7 @@ export plot_kalman_filter_trajectory_with_uncertainty
 export plot_kalman_filter_belief_trajectory_two_panel
 export plos_one_algo_sealice_levels_over_time
 export plos_one_treatment_distribution_comparison
+export plos_one_episode_sealice_levels_over_time
 
 # Configuration types
 export ExperimentConfig, SolverConfig, SimulationConfig, HeuristicConfig, Algorithm, LocationParams, get_location_params

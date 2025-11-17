@@ -200,8 +200,6 @@ function POMDPs.action(policy::HeuristicPolicy, b)
     end
 end
 
-# TODO: plot heuristic bvec with imageMap
-
 # Function to decide whether we choose the action or randomize
 function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
 

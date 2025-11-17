@@ -14,10 +14,8 @@ using Parameters
     # Development rate parameters (logistic function coefficients)
     d1_intercept::Float64   # Intercept for sessile → motile development
     d1_temp_coef::Float64   # Temperature coefficient for sessile → motile
-    d1_temp_offset::Float64 # Temperature offset for sessile → motile
     d2_intercept::Float64   # Intercept for motile → adult development
     d2_temp_coef::Float64   # Temperature coefficient for motile → adult
-    d2_temp_offset::Float64 # Temperature offset for motile → adult
 
     # Weekly survival probabilities
     s1_sessile::Float64     # Sessile stage survival
@@ -38,10 +36,8 @@ function get_location_params(location::String)
             peak_week = 27,
             d1_intercept = -2.4,
             d1_temp_coef = 0.37,
-            d1_temp_offset = 9.0,
             d2_intercept = -2.1,
             d2_temp_coef = 0.037,
-            d2_temp_offset = 9.0,
             s1_sessile = 0.49,
             s2_scaling = 2.3,
             s3_motile = 0.88,
@@ -55,10 +51,8 @@ function get_location_params(location::String)
             peak_week = 27,
             d1_intercept = -1.5,
             d1_temp_coef = 0.5,
-            d1_temp_offset = 16.0,
             d2_intercept = -1.0,
             d2_temp_coef = 0.1,
-            d2_temp_offset = 16.0,
             s1_sessile = 0.6,
             s2_scaling = 3.0,
             s3_motile = 0.95,
@@ -72,10 +66,8 @@ function get_location_params(location::String)
             peak_week = 27,
             d1_intercept = -1.5,
             d1_temp_coef = 0.5,
-            d1_temp_offset = 20.0,
             d2_intercept = -1.0,
             d2_temp_coef = 0.1,
-            d2_temp_offset = 20.0,
             s1_sessile = 0.8,
             s2_scaling = 5.0,
             s3_motile = 0.99,

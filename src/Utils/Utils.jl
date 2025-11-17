@@ -109,8 +109,8 @@ function predict_next_abundances(adult, motile, sessile, temp, location="north",
     params = get_location_params(location)
 
     # Calculate development rates using logistic functions
-    d1_val = 1 / (1 + exp(-(params.d1_intercept + params.d1_temp_coef * (temp - params.d1_temp_offset))))  # Sessile to motile
-    d2_val = 1 / (1 + exp(-(params.d2_intercept + params.d2_temp_coef * (temp - params.d2_temp_offset))))  # Motile to adult
+    d1_val = 1 / (1 + exp(-(params.d1_intercept + params.d1_temp_coef * (temp - params.T_mean))))  # Sessile to motile
+    d2_val = 1 / (1 + exp(-(params.d2_intercept + params.d2_temp_coef * (temp - params.T_mean))))  # Motile to adult
 
     # Get the predicted sea lice levels using weekly survival probabilities
     pred_sessile = params.s1_sessile * sessile

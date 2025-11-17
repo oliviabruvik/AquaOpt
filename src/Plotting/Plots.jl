@@ -8,6 +8,7 @@ function plot_plos_one_plots(parallel_data, config)
     plos_one_combined_treatment_probability_over_time(parallel_data, config)
     plos_one_sarsop_dominant_action(parallel_data, config, 0.6)
     plos_one_algo_sealice_levels_over_time(config, "NUS_SARSOP_Policy", 0.6)
+    plos_one_episode_sealice_levels_over_time(parallel_data, config)
     @info "Saved all plos one plots to $(config.figures_dir)"
 end
 
