@@ -251,7 +251,12 @@ function POMDPs.action(policy::AdaptorPolicy, b)
     if policy.pomdp isa SeaLiceLogPOMDP
 
         # Calculate CV^2: Coefficient of Variation squared
-        cv_squared = adult_variance / (pred_adult^2)
+        # IMPORTANT: Floor the denominator to prevent CV^2 explosion when pred_adult → 0
+        # Using floor of 0.05^2 = 0.0025 caps maximum CV^2 when mean is very small
+        # This prevents the log-space uncertainty from becoming unreasonably large
+        # With typical adult_variance ≈ 0.0013, this caps CV^2 at ~0.52, giving σ_log ≈ 0.65
+        pred_adult_squared_floored = max(pred_adult^2, 0.0025)
+        cv_squared = adult_variance / pred_adult_squared_floored
 
         # Lognormal Formula for Log-Space SD (σ_log)
         # σ_log = sqrt(ln(1 + CV^2))
