@@ -256,11 +256,14 @@ function POMDPs.action(policy::AdaptorPolicy, b)
         # This prevents the log-space uncertainty from becoming unreasonably large
         # With typical adult_variance ≈ 0.0013, this caps CV^2 at ~0.52, giving σ_log ≈ 0.65
         pred_adult_squared_floored = max(pred_adult^2, 0.0025)
-        cv_squared = adult_variance / pred_adult_squared_floored
+
+        # Ensure non-negative variance (numerical stability)
+        cv_squared = max(adult_variance, 0.0) / pred_adult_squared_floored
 
         # Lognormal Formula for Log-Space SD (σ_log)
         # σ_log = sqrt(ln(1 + CV^2))
-        adult_sd_log = sqrt(log(1 + cv_squared))
+        # Ensure log argument is positive (cv_squared >= 0, so 1 + cv_squared >= 1.0)
+        adult_sd_log = sqrt(log(1.0 + cv_squared))
 
         # Use log of median (not mean) for point prediction
         # Median of log-normal: log(μ) (no bias correction)
@@ -271,7 +274,9 @@ function POMDPs.action(policy::AdaptorPolicy, b)
         pred_adult = pred_adult_log
         adult_sd = adult_sd_log
     else
-        adult_sd = sqrt(adult_variance)
+        # Ensure non-negative variance (numerical stability)
+        # Kalman filter covariance can become slightly negative due to floating-point errors
+        adult_sd = sqrt(max(adult_variance, 0.0))
     end
 
     # Get next action from policy
