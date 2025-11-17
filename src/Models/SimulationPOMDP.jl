@@ -170,8 +170,15 @@ function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action
         next_pred = clamp(next_adult, pomdp.sea_lice_bounds...)
  
         # Calculate the weight transition based on a von Bertalanffy / logistic-like weekly update
-        # W_{t+1} = W_t + (k0 * f(T)) * (w_max - W_t)
-        k0 = max(pomdp.k_growth  * (1 + pomdp.temp_sensitivity * (s.Temperature - 10)), 0.0)
+        # W_{t+1} = W_t + (k0 * f(T) * f(lice)) * (w_max - W_t)
+        # Sea lice reduce growth: higher lice = slower growth
+        # Using logistic function: growth_reduction = 1 / (1 + exp(5 * (adult - 0.5)))
+        # At adult=0.5 (regulation limit): ~50% growth reduction
+        # At adult=1.0: ~99% growth reduction
+        lice_growth_factor = 1.0 / (1.0 + exp(5.0 * (s.Adult - 0.5)))
+
+        k0_base = pomdp.k_growth * (1.0 + pomdp.temp_sensitivity * (s.Temperature - 10.0))
+        k0 = max(k0_base * lice_growth_factor, 0.0)
         next_average_weight = s.AvgFishWeight + k0 * (pomdp.w_max - s.AvgFishWeight)
         next_average_weight = clamp(next_average_weight, pomdp.weight_bounds...)
 
@@ -297,12 +304,13 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     # Regulatory penalty
     regulatory_penalty = get_regulatory_penalty(a) * (s.Adult > pomdp.regulation_limit ? 1.0 : 0.0)
 
-    # Lost biomass
-    Bt = sp.AvgFishWeight * s.NumberOfFish # Using sp.AvgFishWeight because it is the projected average weight of the fish in the pen
-    Btp = sp.AvgFishWeight * sp.NumberOfFish
-    lost_biomass = max(Bt - Btp, 0.0)
-    lost_biomass_1000kg = lost_biomass / 1000.0
-    @assert lost_biomass >= 0.0
+    # Lost biomass due to mortality
+    # Calculate biomass loss from fish death (not reduced growth)
+    # Expected biomass if all fish survived = s.AvgFishWeight * (survived fish before harvest/movement)
+    expected_biomass_if_survived = sp.AvgFishWeight * s.NumberOfFish
+    actual_biomass = sp.AvgFishWeight * sp.NumberOfFish
+    lost_biomass = max(expected_biomass_if_survived - actual_biomass, 0.0)
+    lost_biomass_1000kg = lost_biomass / 1000.0  # Convert to tonnes
 
     # Fish disease
     fish_disease = get_fish_disease(a)
