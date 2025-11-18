@@ -46,7 +46,6 @@ function create_sim_pomdp(config, λ)
             costOfTreatment=config.solver_config.costOfTreatment,
             reproduction_rate=config.solver_config.reproduction_rate,
             discount_factor=config.solver_config.discount_factor,
-            regulation_limit=config.simulation_config.regulation_limit,
             # SimPOMDP parameters
             adult_mean=config.simulation_config.adult_mean,
             motile_mean=config.simulation_config.motile_mean,
@@ -64,7 +63,6 @@ function create_sim_pomdp(config, λ)
                 lambda=λ,
                 reward_lambdas=config.solver_config.reward_lambdas,
                 costOfTreatment=config.solver_config.costOfTreatment,
-                growthRate=config.solver_config.growthRate,
                 discount_factor=config.solver_config.discount_factor,
                 discretization_step=config.solver_config.discretization_step,
                 adult_sd=abs(log(config.solver_config.raw_space_sampling_sd)),
@@ -81,7 +79,6 @@ function create_sim_pomdp(config, λ)
                 lambda=λ,
                 reward_lambdas=config.simulation_config.sim_reward_lambdas,
                 costOfTreatment=config.solver_config.costOfTreatment,
-                growthRate=config.solver_config.growthRate,
                 discount_factor=config.solver_config.discount_factor,
                 discretization_step=config.solver_config.discretization_step,
                 adult_sd=config.solver_config.raw_space_sampling_sd,

@@ -7,7 +7,7 @@ using Random
 using Parameters
 
 # Action enum
-@enum Action NoTreatment Treatment ThermalTreatment
+@enum Action NoTreatment MechanicalTreatment ChemicalTreatment ThermalTreatment
 
 # Action configuration struct
 @with_kw struct ActionConfig
@@ -53,8 +53,24 @@ if !isdefined(Main, :ACTION_CONFIGS)
             regulatory_penalty = 100.0
         ),
         
-        Treatment => ActionConfig(
-            action = Treatment,
+        MechanicalTreatment => ActionConfig(
+            action = MechanicalTreatment,
+            cost = 10.0,  # MNOK per treatment
+            adult_reduction = 0.75,   # 75% reduction
+            motile_reduction = 0.84,  # 84% reduction
+            sessile_reduction = 0.74, # 74% reduction
+            name = "Mechanical Treatment",
+            description = "Standard mechanical treatment for sea lice control",
+            duration_days = 7,
+            frequency_limit = 4,  # Maximum 4 treatments per year
+            fish_disease = 10.0,
+            mortality_rate = 0.05,
+            weight_loss = 0.0,
+            regulatory_penalty = 100.0
+        ),
+
+        ChemicalTreatment => ActionConfig(
+            action = ChemicalTreatment,
             cost = 10.0,  # MNOK per treatment
             adult_reduction = 0.75,   # 75% reduction
             motile_reduction = 0.84,  # 84% reduction
@@ -64,26 +80,10 @@ if !isdefined(Main, :ACTION_CONFIGS)
             duration_days = 7,
             frequency_limit = 4,  # Maximum 4 treatments per year
             fish_disease = 10.0,
-            mortality_rate = 0.05,
+            mortality_rate = 0.04,
             weight_loss = 0.0,
             regulatory_penalty = 100.0
         ),
-
-        # ChemicalTreatment => ActionConfig(
-        #     action = Treatment,
-        #     cost = 10.0,  # MNOK per treatment
-        #     adult_reduction = 0.75,   # 75% reduction
-        #     motile_reduction = 0.84,  # 84% reduction
-        #     sessile_reduction = 0.74, # 74% reduction
-        #     name = "Chemical Treatment",
-        #     description = "Standard chemical treatment for sea lice control",
-        #     duration_days = 7,
-        #     frequency_limit = 4,  # Maximum 4 treatments per year
-        #     fish_disease = 10.0,
-        #     mortality_rate = 0.04,
-        #     weight_loss = 0.0,
-        #     regulatory_penalty = 100.0
-        # ),
         
         ThermalTreatment => ActionConfig(
             action = ThermalTreatment,
@@ -179,6 +179,6 @@ function move_out_fn(week::Int)
 end
 
 # Export the Action enum and related functions
-export Action, NoTreatment, Treatment, ThermalTreatment
+export Action, NoTreatment, MechanicalTreatment, ChemicalTreatment, ThermalTreatment
 export ActionConfig, ACTION_CONFIGS
 export get_action_config, get_treatment_cost, get_treatment_effectiveness, get_stochastic_treatment_effectiveness, get_regulatory_penalty, get_fish_disease, get_treatment_mortality_rate, get_weight_loss

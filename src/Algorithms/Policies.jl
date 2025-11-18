@@ -29,7 +29,6 @@ function create_pomdp_mdp(λ, config)
             lambda=λ,
             reward_lambdas=config.solver_config.reward_lambdas,
             costOfTreatment=config.solver_config.costOfTreatment,
-            growthRate=config.solver_config.growthRate,
             discount_factor=config.solver_config.discount_factor,
             discretization_step=config.solver_config.discretization_step,
             adult_sd=abs(log(config.solver_config.raw_space_sampling_sd)),
@@ -46,7 +45,6 @@ function create_pomdp_mdp(λ, config)
             lambda=λ,
             reward_lambdas=config.solver_config.reward_lambdas,
             costOfTreatment=config.solver_config.costOfTreatment,
-            growthRate=config.solver_config.growthRate,
             discount_factor=config.solver_config.discount_factor,
             discretization_step=config.solver_config.discretization_step,
             adult_sd=config.solver_config.raw_space_sampling_sd,
@@ -159,7 +157,7 @@ end
 
 # Always Treat action
 function POMDPs.action(policy::AlwaysTreatPolicy, b)
-    return Treatment
+    return MechanicalTreatment
 end
 
 function POMDPs.updater(policy::AlwaysTreatPolicy)
@@ -175,7 +173,7 @@ end
 
 # Random action
 function POMDPs.action(policy::RandomPolicy, b)
-    return rand((Treatment, NoTreatment, ThermalTreatment))
+    return rand((NoTreatment, MechanicalTreatment, ChemicalTreatment, ThermalTreatment))
 end
 
 function POMDPs.updater(policy::RandomPolicy)
@@ -205,9 +203,12 @@ function POMDPs.action(policy::HeuristicPolicy, b)
     # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
     if prob_above_threshold > policy.heuristic_config.belief_threshold_thermal
         return ThermalTreatment
-    # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose Treatment
+    # Chemical treatment for mid-level infestations
+    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_chemical
+        return ChemicalTreatment
+    # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose MechanicalTreatment
     elseif prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
-        return Treatment
+        return MechanicalTreatment
     # Otherwise, choose NoTreatment
     else
         return NoTreatment
@@ -230,7 +231,7 @@ function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
     if use_cdf
         # Method 1: Calculate probability of being above threshold
         prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
-        return prob_above_threshold > policy.heuristic_config.belief_threshold
+        return prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
     else
         # Method 2: Use mode of belief vector
         mode_sealice_level_index = argmax(b)

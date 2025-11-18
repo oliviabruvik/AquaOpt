@@ -2,6 +2,15 @@ using Plots
 using JLD2
 using GaussianFilters
 
+const TIMESERIES_ACTION_TAG = Dict(
+    NoTreatment => "",
+    MechanicalTreatment => "M",
+    ChemicalTreatment => "C",
+    ThermalTreatment => "Th",
+)
+
+action_short_label(a) = get(TIMESERIES_ACTION_TAG, a, "")
+
 
 # ----------------------------
 # Plot 1: Time series by location
@@ -70,8 +79,8 @@ function plot_beliefs_over_time_plotsjl(data, algo_name, config, lambda)
         Sessile = [o.Sessile for o in observations],
         Temperature = [o.Temperature for o in observations]
     )
-    actions = action_hist(history)
-    actions = [a == Treatment ? "M" : a == ThermalTreatment ? "Th" : "" for a in actions]
+    actions = collect(action_hist(history))
+    action_tags = [action_short_label(a) for a in actions]
 
     labels = ["Adult", "Motile", "Sessile", "Temperature"]
     colors = [:blue, :green, :orange, :purple]
@@ -96,8 +105,8 @@ function plot_beliefs_over_time_plotsjl(data, algo_name, config, lambda)
         scatter!(belief_plot, 1:size(observations_df,1), observations_df[:, i], label="Observation", marker=:circle, markersize=3, color=colors[i])
 
         # Add treatment annotations
-        for (t, a) in zip(1:length(actions), actions)
-            annotate!(belief_plot, t, 0.0, text(a, 8, :black))
+        for (t, tag) in enumerate(action_tags)
+            annotate!(belief_plot, t, 0.0, text(tag, 8, :black))
         end
         
         push!(belief_plots, belief_plot)
@@ -194,9 +203,10 @@ function plot_policy_belief_levels(histories, title, config, lambda; show_actual
     end
 
     # Add treatment annotations
-    action_labels = [actions[i] == Treatment ? "T" : "N" for i in 1:length(actions)]
-    for (t, a) in zip(1:length(action_labels), action_labels)
-        annotate!(p, t, 0.4, text(a, 8, :black))
+    action_labels = [action_short_label(a) for a in actions]
+    for (t, label) in enumerate(action_labels)
+        display_label = isempty(label) ? "N" : label
+        annotate!(p, t, 0.4, text(display_label, 8, :black))
     end
 
     # Save to both directories for backward compatibility
@@ -583,7 +593,7 @@ function plot_policy_treatment_cost_over_time(config, lambda_value)
                     actions = collect(action_hist(episode_history))
                     if t <= length(actions)
                         # Treatment probability: 1 if Treatment, 0 if NoTreatment
-                        treatment_indicator = actions[t] == Treatment ? 1.0 : 0.0
+                        treatment_indicator = actions[t] == NoTreatment ? 0.0 : 1.0
                         push!(step_treatments, treatment_indicator)
                     end
                 end
@@ -681,7 +691,7 @@ function plot_policy_actual_treatment_cost_over_time(config, lambda_value)
                     actions = collect(action_hist(episode_history))
                     if t <= length(actions)
                         # Treatment cost: costOfTreatment if Treatment, 0 if NoTreatment
-                        treatment_cost = actions[t] == Treatment ? config.solver_config.costOfTreatment : 0.0
+                        treatment_cost = actions[t] == NoTreatment ? 0.0 : get_treatment_cost(actions[t])
                         push!(step_costs, treatment_cost)
                     end
                 end
@@ -779,7 +789,7 @@ function plot_policy_treatment_probability_over_time(config, lambda_value)
                     actions = collect(action_hist(episode_history))
                     if t <= length(actions)
                         # Treatment probability: 1 if Treatment, 0 if NoTreatment
-                        treatment_indicator = actions[t] == Treatment ? 1.0 : 0.0
+                        treatment_indicator = actions[t] == NoTreatment ? 0.0 : 1.0
                         push!(step_treatments, treatment_indicator)
                     end
                 end

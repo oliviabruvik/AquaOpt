@@ -5,6 +5,15 @@ using JLD2
 using POMDPs
 using POMDPTools
 
+const PARALLEL_ACTION_TAG = Dict(
+    NoTreatment => "",
+    MechanicalTreatment => "M",
+    ChemicalTreatment => "C",
+    ThermalTreatment => "Th",
+)
+
+action_short_label(a) = get(PARALLEL_ACTION_TAG, a, "")
+
 
 # Preamble: enable fillbetween and modern pgfplots behavior
 PGFPlotsX.DEFAULT_PREAMBLE = [
@@ -155,8 +164,8 @@ function plot_treatment_distribution_comparison(parallel_data, config)
     )
     
     # Define treatment types and their display names
-    treatment_types = ["NoTreatment", "Treatment", "ThermalTreatment"]
-    treatment_labels = ["None", "Chemical", "Thermal"]
+    treatment_types = ["NoTreatment", "MechanicalTreatment", "ChemicalTreatment", "ThermalTreatment"]
+    treatment_labels = ["None", "Mechanical", "Chemical", "Thermal"]
     
     # Define colors for each policy
     policy_colors = Dict(
@@ -178,11 +187,7 @@ function plot_treatment_distribution_comparison(parallel_data, config)
         seeds = unique(data_filtered.seed)
         
         # Collect treatment counts across all seeds
-        treatment_counts = Dict{String, Vector{Int}}(
-            "NoTreatment" => [],
-            "Treatment" => [],
-            "ThermalTreatment" => []
-        )
+        treatment_counts = Dict{String, Vector{Int}}(t => Int[] for t in treatment_types)
         
         for seed in seeds
             data_seed = filter(row -> row.seed == seed, data_filtered)
@@ -190,17 +195,15 @@ function plot_treatment_distribution_comparison(parallel_data, config)
             actions = collect(action_hist(h))
             
             # Count treatments for this seed
-            seed_treatments = Dict{String, Int}(
-                "NoTreatment" => 0,
-                "Treatment" => 0,
-                "ThermalTreatment" => 0
-            )
+            seed_treatments = Dict{String, Int}(t => 0 for t in treatment_types)
             
             for action in actions
                 if action == NoTreatment
                     seed_treatments["NoTreatment"] += 1
-                elseif action == Treatment
-                    seed_treatments["Treatment"] += 1
+                elseif action == MechanicalTreatment
+                    seed_treatments["MechanicalTreatment"] += 1
+                elseif action == ChemicalTreatment
+                    seed_treatments["ChemicalTreatment"] += 1
                 elseif action == ThermalTreatment
                     seed_treatments["ThermalTreatment"] += 1
                 end
@@ -494,8 +497,8 @@ end
 ############ Plot 2: Treatment distribution (grouped bars), transparent ############
 
 function plot_treatment_distribution_comparison_latex(parallel_data, config)
-    treatment_types  = ["NoTreatment", "Treatment", "ThermalTreatment"]
-    treatment_labels = ["None", "Chemical", "Thermal"]
+    treatment_types  = ["NoTreatment", "MechanicalTreatment", "ChemicalTreatment", "ThermalTreatment"]
+    treatment_labels = ["None", "Mechanical", "Chemical", "Thermal"]
 
     policy_colors = Dict(
         "Heuristic_Policy" => "blue",
@@ -517,8 +520,10 @@ function plot_treatment_distribution_comparison_latex(parallel_data, config)
             for a in actions
                 if a == NoTreatment
                     c["NoTreatment"] += 1
-                elseif a == Treatment
-                    c["Treatment"] += 1
+                elseif a == MechanicalTreatment
+                    c["MechanicalTreatment"] += 1
+                elseif a == ChemicalTreatment
+                    c["ChemicalTreatment"] += 1
                 elseif a == ThermalTreatment
                     c["ThermalTreatment"] += 1
                 end
@@ -589,13 +594,15 @@ function plot_sarsop_policy_action_heatmap(config, λ=0.6)
     # Action colors
     action_colors = Dict(
         NoTreatment => "blue",
-        Treatment => "green", 
+        MechanicalTreatment => "green",
+        ChemicalTreatment => "orange",
         ThermalTreatment => "red"
     )
     
     # Create separate coordinate lists for each action
     no_treatment_coords = []
-    treatment_coords = []
+    mechanical_coords = []
+    chemical_coords = []
     thermal_coords = []
     
     for (i, sealice_level) in enumerate(sealice_range)
@@ -633,8 +640,10 @@ function plot_sarsop_policy_action_heatmap(config, λ=0.6)
                 
                 if chosen_action == NoTreatment
                     push!(no_treatment_coords, coord)
-                elseif chosen_action == Treatment
-                    push!(treatment_coords, coord)
+                elseif chosen_action == MechanicalTreatment
+                    push!(mechanical_coords, coord)
+                elseif chosen_action == ChemicalTreatment
+                    push!(chemical_coords, coord)
                 elseif chosen_action == ThermalTreatment
                     push!(thermal_coords, coord)
                 end
@@ -666,13 +675,18 @@ function plot_sarsop_policy_action_heatmap(config, λ=0.6)
                        Coordinates(no_treatment_coords)))
     end
     
-    if !isempty(treatment_coords)
-        push!(ax, Plot(Options(:color => "red", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
-                       Coordinates(treatment_coords)))
+    if !isempty(mechanical_coords)
+        push!(ax, Plot(Options(:color => "green", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+                       Coordinates(mechanical_coords)))
+    end
+
+    if !isempty(chemical_coords)
+        push!(ax, Plot(Options(:color => "orange", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+                       Coordinates(chemical_coords)))
     end
     
     if !isempty(thermal_coords)
-        push!(ax, Plot(Options(:color => "green", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+        push!(ax, Plot(Options(:color => "red", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
                        Coordinates(thermal_coords)))
     end
     
@@ -680,6 +694,8 @@ function plot_sarsop_policy_action_heatmap(config, λ=0.6)
     push!(ax, @pgf("\\addlegendimage{blue, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{No Treatment}"))
     push!(ax, @pgf("\\addlegendimage{green, mark=square, mark size=3pt}"))
+    push!(ax, @pgf("\\addlegendentry{Mechanical Treatment}"))
+    push!(ax, @pgf("\\addlegendimage{orange, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{Chemical Treatment}"))
     push!(ax, @pgf("\\addlegendimage{red, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{Thermal Treatment}"))
@@ -699,6 +715,7 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
     heuristic_config = HeuristicConfig(
         raw_space_threshold=config.solver_config.heuristic_threshold,
         belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
+        belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
         belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
         rho=config.solver_config.heuristic_rho
     )
@@ -748,13 +765,15 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
     # Action colors
     action_colors = Dict(
         NoTreatment => "blue",
-        Treatment => "green", 
+        MechanicalTreatment => "green",
+        ChemicalTreatment => "orange",
         ThermalTreatment => "red"
     )
     
     # Create separate coordinate lists for each action
     no_treatment_coords = []
-    treatment_coords = []
+    mechanical_coords = []
+    chemical_coords = []
     thermal_coords = []
     
     for (i, sealice_level) in enumerate(sealice_range)
@@ -792,8 +811,10 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
                 
                 if chosen_action == NoTreatment
                     push!(no_treatment_coords, coord)
-                elseif chosen_action == Treatment
-                    push!(treatment_coords, coord)
+                elseif chosen_action == MechanicalTreatment
+                    push!(mechanical_coords, coord)
+                elseif chosen_action == ChemicalTreatment
+                    push!(chemical_coords, coord)
                 elseif chosen_action == ThermalTreatment
                     push!(thermal_coords, coord)
                 end
@@ -825,11 +846,16 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
                        Coordinates(no_treatment_coords)))
     end
     
-    if !isempty(treatment_coords)
-        push!(ax, Plot(Options(:color => "red", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
-                       Coordinates(treatment_coords)))
+    if !isempty(mechanical_coords)
+        push!(ax, Plot(Options(:color => "green", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+                       Coordinates(mechanical_coords)))
     end
-    
+
+    if !isempty(chemical_coords)
+        push!(ax, Plot(Options(:color => "orange", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+                       Coordinates(chemical_coords)))
+    end
+
     if !isempty(thermal_coords)
         push!(ax, Plot(Options(:color => "red", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
                        Coordinates(thermal_coords)))
@@ -838,8 +864,11 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
     # Add legend with correct colors
     push!(ax, @pgf("\\addlegendimage{blue, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{No Treatment}"))
-    push!(ax, @pgf("\\addlegendimage{red, mark=square, mark size=3pt}"))
+    push!(ax, @pgf("\\addlegendimage{green, mark=square, mark size=3pt}"))
+    push!(ax, @pgf("\\addlegendentry{Mechanical Treatment}"))
+    push!(ax, @pgf("\\addlegendimage{orange, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{Chemical Treatment}"))
+    push!(ax, @pgf("\\addlegendimage{red, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{Thermal Treatment}"))
     
     PGFPlotsX.save("debug_plots/heuristic_policy_action_heatmap_latex.pdf", ax)
@@ -875,8 +904,11 @@ function plot_combined_policy_action_heatmaps(config, λ=0.6)
     if !isempty(sarsop_data.no_treatment_coords)
         push!(ax, @pgf("\\addplot[blue, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in sarsop_data.no_treatment_coords], " "))};"))
     end
-    if !isempty(sarsop_data.treatment_coords)
-        push!(ax, @pgf("\\addplot[green, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in sarsop_data.treatment_coords], " "))};"))
+    if !isempty(sarsop_data.mechanical_coords)
+        push!(ax, @pgf("\\addplot[green, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in sarsop_data.mechanical_coords], " "))};"))
+    end
+    if !isempty(sarsop_data.chemical_coords)
+        push!(ax, @pgf("\\addplot[orange, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in sarsop_data.chemical_coords], " "))};"))
     end
     if !isempty(sarsop_data.thermal_coords)
         push!(ax, @pgf("\\addplot[red, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in sarsop_data.thermal_coords], " "))};"))
@@ -884,6 +916,7 @@ function plot_combined_policy_action_heatmaps(config, λ=0.6)
     
     # Add SARSOP legend
     push!(ax, @pgf("\\addlegendentry{No Treatment}"))
+    push!(ax, @pgf("\\addlegendentry{Mechanical}"))
     push!(ax, @pgf("\\addlegendentry{Chemical}"))
     push!(ax, @pgf("\\addlegendentry{Thermal}"))
     
@@ -894,8 +927,11 @@ function plot_combined_policy_action_heatmaps(config, λ=0.6)
     if !isempty(heuristic_data.no_treatment_coords)
         push!(ax, @pgf("\\addplot[blue, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in heuristic_data.no_treatment_coords], " "))};"))
     end
-    if !isempty(heuristic_data.treatment_coords)
-        push!(ax, @pgf("\\addplot[red, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in heuristic_data.treatment_coords], " "))};"))
+    if !isempty(heuristic_data.mechanical_coords)
+        push!(ax, @pgf("\\addplot[green, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in heuristic_data.mechanical_coords], " "))};"))
+    end
+    if !isempty(heuristic_data.chemical_coords)
+        push!(ax, @pgf("\\addplot[orange, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in heuristic_data.chemical_coords], " "))};"))
     end
     if !isempty(heuristic_data.thermal_coords)
         push!(ax, @pgf("\\addplot[red, mark=square, mark size=1pt, only marks] coordinates {$(join(["($(coord[1]), $(coord[2]))" for coord in heuristic_data.thermal_coords], " "))};"))
@@ -903,6 +939,7 @@ function plot_combined_policy_action_heatmaps(config, λ=0.6)
     
     # Add Heuristic legend
     push!(ax, @pgf("\\addlegendentry{No Treatment}"))
+    push!(ax, @pgf("\\addlegendentry{Mechanical}"))
     push!(ax, @pgf("\\addlegendentry{Chemical}"))
     push!(ax, @pgf("\\addlegendentry{Thermal}"))
     
@@ -926,7 +963,8 @@ function generate_policy_action_data(policy_type, config, λ)
     
     # Create separate coordinate lists for each action
     no_treatment_coords = []
-    treatment_coords = []
+    mechanical_coords = []
+    chemical_coords = []
     thermal_coords = []
     
     if policy_type == "SARSOP"
@@ -941,6 +979,7 @@ function generate_policy_action_data(policy_type, config, λ)
         heuristic_config = HeuristicConfig(
             raw_space_threshold=config.solver_config.heuristic_threshold,
             belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
+            belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
             belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
             rho=config.solver_config.heuristic_rho
         )
@@ -1013,8 +1052,10 @@ function generate_policy_action_data(policy_type, config, λ)
                 
                 if chosen_action == NoTreatment
                     push!(no_treatment_coords, coord)
-                elseif chosen_action == Treatment
-                    push!(treatment_coords, coord)
+                elseif chosen_action == MechanicalTreatment
+                    push!(mechanical_coords, coord)
+                elseif chosen_action == ChemicalTreatment
+                    push!(chemical_coords, coord)
                 elseif chosen_action == ThermalTreatment
                     push!(thermal_coords, coord)
                 end
@@ -1025,9 +1066,12 @@ function generate_policy_action_data(policy_type, config, λ)
         end
     end
     
-    return (no_treatment_coords=no_treatment_coords, 
-            treatment_coords=treatment_coords, 
-            thermal_coords=thermal_coords)
+    return (
+        no_treatment_coords=no_treatment_coords,
+        mechanical_coords=mechanical_coords,
+        chemical_coords=chemical_coords,
+        thermal_coords=thermal_coords,
+    )
 end
 
 # ----------------------------
@@ -1082,9 +1126,9 @@ function plot_combined_treatment_probability_over_time(parallel_data, config)
     ))
     
     # Define treatment types and their colors
-    treatment_types = [NoTreatment, Treatment, ThermalTreatment]
-    treatment_colors = ["teal", "blue", "violet"]
-    treatment_names = ["No Treatment", "Chemical", "Thermal"]
+    treatment_types = [NoTreatment, MechanicalTreatment, ChemicalTreatment, ThermalTreatment]
+    treatment_colors = ["teal", "green", "orange", "violet"]
+    treatment_names = ["No Treatment", "Mechanical", "Chemical", "Thermal"]
     
     # Define policies to plot
     policies = ["NUS_SARSOP_Policy", "Heuristic_Policy"]
@@ -1109,11 +1153,7 @@ function plot_combined_treatment_probability_over_time(parallel_data, config)
         
         for t in time_steps
             # Extract treatment decisions at time step t from all episodes
-            step_treatments = Dict{Action, Int}(
-                NoTreatment => 0,
-                Treatment => 0,
-                ThermalTreatment => 0
-            )
+            step_treatments = Dict{Action, Int}(t => 0 for t in treatment_types)
             
             total_episodes = 0
             
@@ -1207,8 +1247,8 @@ function plot_beliefs_over_time(data, algo_name, config, lambda)
         Sessile = [o.Sessile for o in observations],
         Temperature = [o.Temperature for o in observations]
     )
-    actions = action_hist(history)
-    actions = [a == Treatment ? "M" : a == ThermalTreatment ? "Th" : "" for a in actions]
+    actions = collect(action_hist(history))
+    action_tags = [action_short_label(a) for a in actions]
 
     # Only plot Adult female sea lice (index 1)
     i = 1  # Adult index

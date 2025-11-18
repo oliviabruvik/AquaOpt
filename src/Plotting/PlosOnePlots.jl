@@ -6,6 +6,19 @@ using DataFrames
 using PGFPlotsX
 using POMDPTools
 
+# Helper to map actions to short labels for annotations
+function action_short_label(a)
+    if a == MechanicalTreatment
+        return "M"
+    elseif a == ChemicalTreatment
+        return "C"
+    elseif a == ThermalTreatment
+        return "Th"
+    else
+        return ""
+    end
+end
+
 # Backend is set in AquaOpt.__init__()
 
 # ----------------------------
@@ -44,8 +57,8 @@ function plos_one_plot_kalman_filter_belief_trajectory(data, algo_name, config, 
         Sessile = [o.Sessile for o in observations],
         Temperature = [o.Temperature for o in observations]
     )
-    actions = action_hist(history)
-    actions = [a == Treatment ? "M" : a == ThermalTreatment ? "Th" : "" for a in actions]
+    actions = collect(action_hist(history))
+    action_tags = [action_short_label(a) for a in actions]
 
     # Only plot Adult female sea lice (index 1)
     i = 1  # Adult index
@@ -526,13 +539,15 @@ function plos_one_sarsop_dominant_action(parallel_data, config, λ=0.6)
     # Action colors
     action_colors = Dict(
         NoTreatment => "blue",
-        Treatment => "green", 
+        MechanicalTreatment => "green",
+        ChemicalTreatment => "orange",
         ThermalTreatment => "red"
     )
     
     # Create separate coordinate lists for each action
     no_treatment_coords = []
-    treatment_coords = []
+    mechanical_coords = []
+    chemical_coords = []
     thermal_coords = []
     
     for (i, sealice_level) in enumerate(sealice_range)
@@ -570,8 +585,10 @@ function plos_one_sarsop_dominant_action(parallel_data, config, λ=0.6)
                 
                 if chosen_action == NoTreatment
                     push!(no_treatment_coords, coord)
-                elseif chosen_action == Treatment
-                    push!(treatment_coords, coord)
+                elseif chosen_action == MechanicalTreatment
+                    push!(mechanical_coords, coord)
+                elseif chosen_action == ChemicalTreatment
+                    push!(chemical_coords, coord)
                 elseif chosen_action == ThermalTreatment
                     push!(thermal_coords, coord)
                 end
@@ -602,13 +619,18 @@ function plos_one_sarsop_dominant_action(parallel_data, config, λ=0.6)
                        Coordinates(no_treatment_coords)))
     end
     
-    if !isempty(treatment_coords)
-        push!(ax, Plot(Options(:color => "red", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
-                       Coordinates(treatment_coords)))
+    if !isempty(mechanical_coords)
+        push!(ax, Plot(Options(:color => "green", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+                       Coordinates(mechanical_coords)))
     end
     
+    if !isempty(chemical_coords)
+        push!(ax, Plot(Options(:color => "orange", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+                       Coordinates(chemical_coords)))
+    end
+
     if !isempty(thermal_coords)
-        push!(ax, Plot(Options(:color => "green", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
+        push!(ax, Plot(Options(:color => "red", :mark => "square", :mark_size => "1pt", :only_marks => nothing),
                        Coordinates(thermal_coords)))
     end
     
@@ -616,6 +638,8 @@ function plos_one_sarsop_dominant_action(parallel_data, config, λ=0.6)
     push!(ax, @pgf("\\addlegendimage{blue, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{No Treatment}"))
     push!(ax, @pgf("\\addlegendimage{green, mark=square, mark size=3pt}"))
+    push!(ax, @pgf("\\addlegendentry{Mechanical Treatment}"))
+    push!(ax, @pgf("\\addlegendimage{orange, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{Chemical Treatment}"))
     push!(ax, @pgf("\\addlegendimage{red, mark=square, mark size=3pt}"))
     push!(ax, @pgf("\\addlegendentry{Thermal Treatment}"))
@@ -767,7 +791,7 @@ function plot_kalman_filter_belief_trajectory_two_panel(data, algo_name, config,
     # States & observations
     states = state_hist(history)
     observations = observation_hist(history)
-    actions_raw = action_hist(history)
+    actions_raw = collect(action_hist(history))
 
     states_df = DataFrame(
         Adult = [s.Adult for s in states],
@@ -783,7 +807,7 @@ function plot_kalman_filter_belief_trajectory_two_panel(data, algo_name, config,
     )
 
     # Compact action tags for top-of-plot markers
-    action_tags = [a == Treatment ? "M" : a == ThermalTreatment ? "Th" : "" for a in actions_raw]
+    action_tags = [action_short_label(a) for a in actions_raw]
 
     # Only plot Adult (index 1)
     i = 1
@@ -1094,8 +1118,8 @@ end
 # Displays No Treatment, Chemical Treatment, and Thermal Treatment counts
 # ----------------------------
 function plos_one_treatment_distribution_comparison(parallel_data, config)
-    treatment_types  = ["NoTreatment", "Treatment", "ThermalTreatment"]
-    treatment_labels = ["No Treatment", "Chemical", "Thermal"]
+    treatment_types  = ["NoTreatment", "MechanicalTreatment", "ChemicalTreatment", "ThermalTreatment"]
+    treatment_labels = ["No Treatment", "Mechanical", "Chemical", "Thermal"]
 
     # Define all policies with colors matching other plots
     policy_info = [
@@ -1129,8 +1153,10 @@ function plos_one_treatment_distribution_comparison(parallel_data, config)
             for a in actions
                 if a == NoTreatment
                     c["NoTreatment"] += 1
-                elseif a == Treatment
-                    c["Treatment"] += 1
+                elseif a == MechanicalTreatment
+                    c["MechanicalTreatment"] += 1
+                elseif a == ChemicalTreatment
+                    c["ChemicalTreatment"] += 1
                 elseif a == ThermalTreatment
                     c["ThermalTreatment"] += 1
                 end

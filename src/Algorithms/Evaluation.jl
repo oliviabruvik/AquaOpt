@@ -57,7 +57,7 @@ function evaluate_simulation_results(config, algorithm, histories)
             rewards = collect(reward_hist(episode_history))
 
             # Get total treatment cost
-            episode_cost = sum(a == Treatment for a in actions) * config.solver_config.costOfTreatment
+            episode_cost = sum(get_treatment_cost(a) for a in actions)
             
             # Get mean abundance
             episode_abundance = mean(s.SeaLiceLevel for s in states)
@@ -258,8 +258,10 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
                     :fish_disease => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_fish_disease,
                     :treatments => (x -> round(mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean, digits=2)) => :mean_num_Treatment,
-                    :treatments => (x -> round(mean_and_ci([get(t[1], Treatment, 0) for t in x]).ci, digits=2)) => :ci_num_Treatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], MechanicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_MechanicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], ChemicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ChemicalTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ThermalTreatment
                 )
@@ -274,7 +276,8 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
                     :lost_biomass_1000kg => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_lost_biomass_1000kg,
                     :fish_disease => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_fish_disease,
                     :treatments => (x -> round(mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean, digits=2)) => :mean_num_Treatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment
                 )
             end
@@ -362,17 +365,18 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
             if :treatments in names(data_filtered)
                 println("\nTreatment Distribution:")
                 println("-"^50)
-                println(@sprintf("%-20s %12s %12s %12s", "Policy", "No Treatment", "Chemical", "Thermal"))
+                println(@sprintf("%-20s %12s %12s %12s %12s", "Policy", "No Treatment", "Mechanical", "Chemical", "Thermal"))
                 println("-"^50)
                 
                 for row in eachrow(result)
                     policy_name = row.policy
                     no_treatment = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_NoTreatment, row.ci_num_NoTreatment) : @sprintf("%.1f", row.mean_num_NoTreatment)
-                    chemical = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_Treatment, row.ci_num_Treatment) : @sprintf("%.1f", row.mean_num_Treatment)
+                    mechanical = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_MechanicalTreatment, row.ci_num_MechanicalTreatment) : @sprintf("%.1f", row.mean_num_MechanicalTreatment)
+                    chemical = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_ChemicalTreatment, row.ci_num_ChemicalTreatment) : @sprintf("%.1f", row.mean_num_ChemicalTreatment)
                     thermal = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_ThermalTreatment, row.ci_num_ThermalTreatment) : @sprintf("%.1f", row.mean_num_ThermalTreatment)
                     
-                    println(@sprintf("%-20s %12s %12s %12s", 
-                                policy_name, no_treatment, chemical, thermal))
+                    println(@sprintf("%-20s %12s %12s %12s %12s", 
+                                policy_name, no_treatment, mechanical, chemical, thermal))
                 end
             end
         end
@@ -443,8 +447,10 @@ function print_reward_metrics_for_vi_policy(data, config)
                     :num_regulatory_penalties => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_num_regulatory_penalties,
                     :treatments => (x -> round(mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean, digits=2)) => :mean_num_Treatment,
-                    :treatments => (x -> round(mean_and_ci([get(t[1], Treatment, 0) for t in x]).ci, digits=2)) => :ci_num_Treatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], MechanicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_MechanicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], ChemicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ChemicalTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ThermalTreatment
                 )
@@ -456,7 +462,8 @@ function print_reward_metrics_for_vi_policy(data, config)
                     :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
                     :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
                     :treatments => (x -> round(mean_and_ci([get(t[1], NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t[1], Treatment, 0) for t in x]).mean, digits=2)) => :mean_num_Treatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
+                    :treatments => (x -> round(mean_and_ci([get(t[1], ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
                     :treatments => (x -> round(mean_and_ci([get(t[1], ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment
                 )
             end
@@ -521,7 +528,12 @@ function print_treatment_frequency(data, config)
         for policy in policies
 
             # Initialize the inner dictionary for this policy
-            treatment_counts[policy] = Dict{String, Vector{Int}}("NoTreatment" => [], "Treatment" => [], "ThermalTreatment" => [])
+            treatment_counts[policy] = Dict{String, Vector{Int}}(
+                "NoTreatment" => [],
+                "MechanicalTreatment" => [],
+                "ChemicalTreatment" => [],
+                "ThermalTreatment" => [],
+            )
 
             # Get histories for this policy
             data_policy = filter(row -> row.policy == policy, data_lambda)
@@ -539,7 +551,8 @@ function print_treatment_frequency(data, config)
 
                 # Count the number of times each treatment is taken
                 push!(treatment_counts[policy]["NoTreatment"], get(treatment_count, NoTreatment, 0))
-                push!(treatment_counts[policy]["Treatment"], get(treatment_count, Treatment, 0))
+                push!(treatment_counts[policy]["MechanicalTreatment"], get(treatment_count, MechanicalTreatment, 0))
+                push!(treatment_counts[policy]["ChemicalTreatment"], get(treatment_count, ChemicalTreatment, 0))
                 push!(treatment_counts[policy]["ThermalTreatment"], get(treatment_count, ThermalTreatment, 0))
 
             end
@@ -553,11 +566,9 @@ function print_treatment_frequency(data, config)
             push!(treatment_data, (
                 policy = policy,
                 NoTreatment = mean_and_ci(counts["NoTreatment"]).mean,
-                # NoTreatment_ci = mean_and_ci(counts["NoTreatment"]).ci,
-                Treatment = mean_and_ci(counts["Treatment"]).mean,
-                # Treatment_ci = mean_and_ci(counts["Treatment"]).ci,
+                MechanicalTreatment = mean_and_ci(counts["MechanicalTreatment"]).mean,
+                ChemicalTreatment = mean_and_ci(counts["ChemicalTreatment"]).mean,
                 ThermalTreatment = mean_and_ci(counts["ThermalTreatment"]).mean,
-                # ThermalTreatment_ci = mean_and_ci(counts["ThermalTreatment"]).ci
             ))
         end
         

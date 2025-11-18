@@ -76,14 +76,14 @@ end
     sea_lice_range::Vector{Float64} = collect(sea_lice_bounds[1]:discretization_step:sea_lice_bounds[2])
     initial_range::Vector{Float64} = collect(initial_bounds[1]:discretization_step:initial_bounds[2])
     lindisc::LinearDiscretizer = LinearDiscretizer(collect(sea_lice_bounds[1]:discretization_step:(sea_lice_bounds[2]+discretization_step)))
-    catdisc::CategoricalDiscretizer = CategoricalDiscretizer([NoTreatment, Treatment, ThermalTreatment])
+    catdisc::CategoricalDiscretizer = CategoricalDiscretizer([NoTreatment, MechanicalTreatment, ChemicalTreatment, ThermalTreatment])
 end
 
 # -------------------------
 # POMDPs.jl Interface
 # -------------------------
 POMDPs.states(pomdp::SeaLicePOMDP) = [SeaLiceState(i) for i in pomdp.sea_lice_range]
-POMDPs.actions(pomdp::SeaLicePOMDP) = [NoTreatment, Treatment, ThermalTreatment]
+POMDPs.actions(pomdp::SeaLicePOMDP) = [NoTreatment, MechanicalTreatment, ChemicalTreatment, ThermalTreatment]
 POMDPs.observations(pomdp::SeaLicePOMDP) = [SeaLiceObservation(i) for i in pomdp.sea_lice_range]
 POMDPs.discount(pomdp::SeaLicePOMDP) = pomdp.discount_factor
 POMDPs.isterminal(pomdp::SeaLicePOMDP, s::SeaLiceState) = false

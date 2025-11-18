@@ -37,7 +37,7 @@ function plot_policy_cost_vs_sealice(histories, avg_results, title, config)
             rewards = collect(reward_hist(episode_history))
             
             # Episode treatment cost
-            episode_cost = sum(a == Treatment for a in actions) * config.solver_config.costOfTreatment
+            episode_cost = sum(get_treatment_cost(a) for a in actions)
             push!(episode_costs, episode_cost)
             
             # Episode sea lice level
@@ -192,7 +192,7 @@ function plot_all_cost_vs_sealice(config)
                     states = collect(state_hist(episode_history))
 
                     # Episode treatment cost
-                    episode_cost = sum(a == Treatment for a in actions) * config.solver_config.costOfTreatment
+                    episode_cost = sum(get_treatment_cost(a) for a in actions)
                     push!(episode_costs, episode_cost)
                     
                     # Episode sea lice Level
@@ -409,7 +409,7 @@ function plot_policy_treatment_cost_over_lambdas(config)
                 for episode in 1:config.simulation_config.num_episodes
                     episode_history = histories_lambda[episode]
                     actions = collect(action_hist(episode_history))
-                    episode_cost = sum(a == Treatment for a in actions) * config.solver_config.costOfTreatment
+                    episode_cost = sum(get_treatment_cost(a) for a in actions)
                     push!(episode_costs, episode_cost)
                 end
                 
