@@ -71,7 +71,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
 
         ChemicalTreatment => ActionConfig(
             action = ChemicalTreatment,
-            cost = 8.0,  # MNOK per treatment
+            cost = 7.0,  # MNOK per treatment
             adult_reduction = 0.60,   # 80% reduction
             motile_reduction = 0.58,  # 84% reduction
             sessile_reduction = 0.37, # 74% reduction
@@ -79,7 +79,7 @@ if !isdefined(Main, :ACTION_CONFIGS)
             description = "Standard chemical treatment for sea lice control",
             duration_days = 7,
             frequency_limit = 4,  # Maximum 4 treatments per year
-            fish_disease = 10.0,
+            fish_disease = 7.0,
             mortality_rate = 0.04,
             weight_loss = 0.0,
             regulatory_penalty = 100.0

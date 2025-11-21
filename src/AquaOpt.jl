@@ -132,9 +132,9 @@ function run_experiments(mode, location)
 
 
     reward_lambdas1 = [0.46, 0.12, 0.12, 0.18, 0.12] # [treatment, regulatory, biomass, health, sea lice]
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
 
     # Option 2: Cost-focused (prioritize economics over welfare)
     # reward_lambdas2 = [0.4, 0.02, 0.1, 2.0, 0.8] # [treatment, regulatory, biomass, health, sea lice]
@@ -235,7 +235,7 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
     processed_data = extract_reward_metrics(parallel_data, config)
 
     # Display reward metrics
-    display_reward_metrics(processed_data, config, false)
+    display_reward_metrics(processed_data, config, true, true)
 
     if plot
         # Plot the results
@@ -261,9 +261,9 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         solver_cfg = SolverConfig(
             log_space=log_space,
             reward_lambdas=reward_lambdas, # [1.0, 3.0, 0.5, 0.01, 0.0], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=30.0,
-            VI_max_iterations=30,
-            QMDP_max_iterations=30,
+            sarsop_max_time=5.0,
+            VI_max_iterations=5,
+            QMDP_max_iterations=5,
             discount_factor = 0.95,
             discretization_step = 0.1,
             location = location, # "north", "west", or "south"
@@ -285,9 +285,9 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         solver_cfg = SolverConfig(
             log_space=log_space,
             reward_lambdas=reward_lambdas, # [1.0, 3.0, 0.5, 0.01, 0.0], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=300.0,
-            VI_max_iterations=100,
-            QMDP_max_iterations=100,
+            sarsop_max_time=3000.0,
+            VI_max_iterations=300,
+            QMDP_max_iterations=300,
             discount_factor = 0.95,
             discretization_step = 0.01,
             location = location, # "north", "west", or "south"
@@ -298,7 +298,7 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         )
         sim_cfg = SimulationConfig(
             num_episodes=1000,
-            steps_per_episode=104,
+            steps_per_episode=100,
             ekf_filter=ekf_filter,
             n_sample=100,
             sim_reward_lambdas = sim_reward_lambdas,  # [treatment, regulatory, biomass, health, sea_lice]
