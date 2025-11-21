@@ -1,5 +1,26 @@
 #!/usr/bin/env julia
 
+#=
+region_analysis.jl
+
+Generates regional comparison plots for sea lice levels, treatment costs, and SARSOP
+policy performance across West, North, and South regions.
+
+Usage:
+    julia --project scripts/region_analysis.jl [--output-dir DIR]
+
+Configuration:
+    - WEST_EXPERIMENT: Path to West region experiment
+    - NORTH_EXPERIMENT: Path to North region experiment
+    - SOUTH_EXPERIMENT: Path to South region experiment
+    - DEFAULT_OUTPUT_DIR: Default output directory for plots
+
+Outputs:
+    - region_sealice_levels_over_time.pdf: Sea lice comparison across regions
+    - region_treatment_cost_over_time.pdf/.tex: Treatment cost comparison
+    - region_sarsop_sealice_stages_lambda_0.6.pdf: SARSOP stage breakdown
+=#
+
 using AquaOpt
 using DataFrames
 using JLD2
@@ -7,6 +28,12 @@ using PGFPlotsX
 using PGFPlotsX: Axis, GroupPlot, Options, Plot, @pgf
 using Statistics
 using POMDPTools: state_hist, action_hist, reward_hist, observation_hist
+
+# Hardcoded experiment paths
+const WEST_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T23:17:39.432_log_space_ukf_paper_west_[0.46, 0.12, 0.12, 0.18, 0.12]"
+const NORTH_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
+const SOUTH_EXPERIMENT = "results/experiments/2025-11-20/2025-11-20T00:17:15.348_log_space_ukf_paper_south_[0.46, 0.12, 0.12, 0.18, 0.12]"
+const DEFAULT_OUTPUT_DIR = "final_results/region_outputs"
 
 struct RegionInput
     name::String
@@ -20,14 +47,13 @@ struct RegionData
 end
 
 function usage()
-    println("Usage: julia --project scripts/region_analysis.jl --west PATH --north PATH --south PATH [--output-dir DIR]")
+    println("Usage: julia --project scripts/region_analysis.jl [--output-dir DIR]")
+    println("  --output-dir, -o  Directory where plots should be saved (default: $(DEFAULT_OUTPUT_DIR))")
+    println("  --help, -h        Show this help message")
 end
 
 function parse_args(args)
-    west = nothing
-    north = nothing
-    south = nothing
-    output_dir::Union{Nothing,String} = nothing
+    output_dir = DEFAULT_OUTPUT_DIR
     i = 1
     while i <= length(args)
         arg = strip(args[i])
@@ -35,17 +61,9 @@ function parse_args(args)
             i += 1
             continue
         end
-        if arg == "--west"
+        if arg in ("-o", "--output-dir")
             i += 1
-            west = args[i]
-        elseif arg == "--north"
-            i += 1
-            north = args[i]
-        elseif arg == "--south"
-            i += 1
-            south = args[i]
-        elseif arg in ("-o", "--output-dir")
-            i += 1
+            i <= length(args) || error("--output-dir requires a value")
             output_dir = args[i]
         elseif arg in ("-h", "--help")
             usage()
@@ -56,15 +74,10 @@ function parse_args(args)
         end
         i += 1
     end
-    if any(isnothing, (west, north, south))
-        usage()
-        error("Please provide --west, --north, and --south experiment directories.")
-    end
-    output_dir = isnothing(output_dir) ? "region_outputs" : output_dir
     return (
-        [RegionInput("West", west),
-         RegionInput("North", north),
-         RegionInput("South", south)],
+        [RegionInput("West", WEST_EXPERIMENT),
+         RegionInput("North", NORTH_EXPERIMENT),
+         RegionInput("South", SOUTH_EXPERIMENT)],
         output_dir
     )
 end
@@ -391,6 +404,12 @@ function sarsop_axis(region::RegionData, stats; ylabel::String, show_xlabel::Boo
         :motile => "teal!70!black",
         :predicted => "black!70"
     )
+    fill_colors = Dict(
+        :adult => "blue!25!white",
+        :sessile => "purple!20!white",
+        :motile => "teal!20!white",
+        :predicted => "black!10"
+    )
     for (key, label) in legend_entries
         mean_vals, lower_vals, upper_vals = stats[key]
         times = collect(1:length(mean_vals))
@@ -408,7 +427,7 @@ function sarsop_axis(region::RegionData, stats; ylabel::String, show_xlabel::Boo
         push!(ax, @pgf("\\addplot[name path=lower$(safe_name), draw=none, forget plot] coordinates {$(lower_coords)};"))
         push!(
             ax,
-            @pgf("\\addplot[forget plot, fill=$(colors[key])!40!white, fill opacity=$(AquaOpt.PLOS_FILL_OPACITY)] fill between[of=upper$(safe_name) and lower$(safe_name)];")
+            @pgf("\\addplot[forget plot, fill=$(fill_colors[key]), fill opacity=$(AquaOpt.PLOS_FILL_OPACITY)] fill between[of=upper$(safe_name) and lower$(safe_name)];")
         )
         push!(ax, @pgf("\\addplot[color=$(colors[key]), mark=none, line width=1.2pt] coordinates {$(mean_coords)};"))
         show_legend && push!(ax, @pgf("\\addlegendentry{$label}"))

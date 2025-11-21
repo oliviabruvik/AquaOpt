@@ -33,33 +33,39 @@ using PGFPlotsX
 using PGFPlotsX: @pgf, Axis, Plot, Coordinates, GroupPlot, Options
 using POMDPs: action, states
 using Printf
+using Statistics
 
-const EXPERIMENT_FOLDERS = [
-    "results/experiments/2025-11-18/2025-11-18T22:40:00.463_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]",
-    "results/experiments/2025-11-18/2025-11-18T21:28:47.647_log_space_ukf_paper_north_[0.4, 0.2, 0.1, 0.0, 0.1]",
-    "results/experiments/2025-11-18/2025-11-18T22:08:47.305_log_space_ukf_paper_north_[0.4, 0.1, 0.1, 0.5, 0.2]",
-]
+const EXPERIMENT_FOLDERS = Dict(
+    "Scotland" => "results/experiments/2025-11-20/2025-11-20T00:17:15.348_log_space_ukf_paper_south_[0.46, 0.12, 0.12, 0.18, 0.12]",
+    "Chile" => "results/experiments/2025-11-20/2025-11-20T10:47:44.656_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]",
+    "Southern Norway" => "results/experiments/2025-11-20/2025-11-20T11:48:15.203_log_space_ukf_paper_south_[0.15, 0.05, 0.1, 0.35, 0.35]",
+    "Northern Norway" => "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
+)
 
 const TARGET_LAMBDA = 0.6
-const TABLE_OUTPUT_PATH = "Quick_Access/lambda_treatment_summary.tex"
-const FIGURE_OUTPUT_PATH = "Quick_Access/lambda_dominant_actions.tex"
+const TABLE_OUTPUT_PATH = "final_results/reward_outputs/lambda_treatment_summary.tex"
+const FIGURE_OUTPUT_PATH = "final_results/reward_outputs/lambda_dominant_actions.tex"
+const LAMBDA_TABLE_OUTPUT_PATH = "final_results/reward_outputs/lambda_parameters.tex"
 
-const TREATMENT_COLUMNS = ["NoTreatment", "MechanicalTreatment", "ChemicalTreatment", "ThermalTreatment"]
+const TREATMENT_COLUMNS = ["NoTreatment", "ChemicalTreatment", "MechanicalTreatment", "ThermalTreatment"]
 const TREATMENT_LABELS = Dict(
     "NoTreatment" => "No Tx",
     "MechanicalTreatment" => "Mechanical",
     "ChemicalTreatment" => "Chemical",
     "ThermalTreatment" => "Thermal",
 )
+const TREATMENT_ACTIONS = Dict(
+    "NoTreatment" => NoTreatment,
+    "MechanicalTreatment" => MechanicalTreatment,
+    "ChemicalTreatment" => ChemicalTreatment,
+    "ThermalTreatment" => ThermalTreatment,
+)
 
 const POLICY_ORDER = [
-    "NeverTreat_Policy",
-    "Random_Policy",
     "Heuristic_Policy",
-    "AlwaysTreat_Policy",
-    "VI_Policy",
     "QMDP_Policy",
     "NUS_SARSOP_Policy",
+    "VI_Policy",
 ]
 
 const POLICY_LABELS = Dict(
@@ -72,11 +78,23 @@ const POLICY_LABELS = Dict(
     "NUS_SARSOP_Policy" => "SARSOP",
 )
 
+const LAMBDA_COMPONENTS = [
+    (label=raw"\lambda_{trt}", idx=1),
+    (label=raw"\lambda_{reg}", idx=2),
+    (label=raw"\lambda_{bio}", idx=3),
+    (label=raw"\lambda_{fd}", idx=4),
+    (label=raw"\lambda_{lice}", idx=5),
+]
+const LAMBDA_REGION_ORDER = ["Northern Norway", "Southern Norway", "Scotland", "Chile"]
+
+const TreatmentStats = Dict{String, Dict{String, Union{Missing, Float64}}}
+
 struct ExperimentSummary
     name::String
     label::String
     config::ExperimentConfig
     treatment::DataFrame
+    treatment_std::TreatmentStats
 end
 
 function adjust_config_paths!(config::ExperimentConfig, experiment_root::String)
@@ -112,20 +130,75 @@ function load_treatment_data(experiment_root::String; λ::Float64=TARGET_LAMBDA)
     return df
 end
 
-function load_experiment(experiment_root::String)
+function compute_treatment_std(config::ExperimentConfig; λ::Float64=TARGET_LAMBDA)
+    data_path = joinpath(config.simulations_dir, "all_policies_simulation_data.jld2")
+    if !isfile(data_path)
+        @warn "Simulation data not found at $data_path; cannot compute standard deviations."
+        return TreatmentStats()
+    end
+
+    @load data_path data
+    processed = AquaOpt.extract_reward_metrics(data, config)
+    if !(:treatments in propertynames(processed))
+        @warn "Processed data is missing treatment counts; cannot compute standard deviations."
+        return TreatmentStats()
+    end
+
+    data_λ = filter(row -> row.lambda == λ, processed)
+    if isempty(data_λ)
+        @warn "No simulation episodes found for λ=$(λ); cannot compute standard deviations."
+        return TreatmentStats()
+    end
+
+    grouped = groupby(data_λ, :policy)
+    stats = TreatmentStats()
+    for grp in grouped
+        policy = grp.policy[1]
+        action_stats = Dict{String, Union{Missing, Float64}}()
+        for col in TREATMENT_COLUMNS
+            action_obj = TREATMENT_ACTIONS[col]
+            counts = [get(row.treatments, action_obj, 0) for row in eachrow(grp)]
+            action_stats[col] = isempty(counts) ? missing : (length(counts) == 1 ? 0.0 : std(counts))
+        end
+        stats[policy] = action_stats
+    end
+    return stats
+end
+
+function load_experiment(experiment_root::String, label::String="")
     abs_root = abspath(experiment_root)
     isdir(abs_root) || error("Experiment folder does not exist: $abs_root")
     config = load_experiment_config(abs_root)
     treatment = load_treatment_data(abs_root)
-    label = extract_lambda_label(abs_root)
-    return ExperimentSummary(basename(abs_root), label, config, treatment)
+    if isempty(label)
+        label = extract_lambda_label(abs_root)
+    end
+    treatment_std = compute_treatment_std(config)
+    return ExperimentSummary(basename(abs_root), label, config, treatment, treatment_std)
 end
 
-function format_value(value)
+function format_value(mean_value, std_value=missing)
+    if ismissing(mean_value) || (mean_value isa Float64 && isnan(mean_value))
+        return "--"
+    else
+        mean_str = @sprintf("%.2f", Float64(mean_value))
+        if ismissing(std_value)
+            return mean_str
+        end
+        std_num = Float64(std_value)
+        if isnan(std_num)
+            return mean_str
+        end
+        std_str = @sprintf("%.2f", std_num)
+        return string("\\(", mean_str, " \\pm ", std_str, "\\)")
+    end
+end
+
+function format_lambda_value(value)
     if value === missing || isnan(value)
         return "--"
     else
-        return @sprintf("%.3f", value)
+        return @sprintf("%.2f", Float64(value))
     end
 end
 
@@ -138,9 +211,18 @@ function fetch_policy_value(df::DataFrame, policy::String, column::String)
     end
 end
 
+function fetch_policy_std(stats::TreatmentStats, policy::String, column::String)
+    policy_stats = get(stats, policy, nothing)
+    if policy_stats === nothing
+        return missing
+    else
+        return get(policy_stats, column, missing)
+    end
+end
+
 function build_table(entries::Vector{ExperimentSummary})
     isempty(entries) && error("No experiments provided.")
-    col_spec = "l" * join(fill("cccc", length(entries)), "")
+    col_spec = "ll" * join(fill("c", length(POLICY_ORDER)), "")
     lines = String[]
     push!(lines, "\\begin{table}[htbp]")
     push!(lines, "\\centering")
@@ -148,36 +230,26 @@ function build_table(entries::Vector{ExperimentSummary})
     push!(lines, "\\begin{tabular}{$col_spec}")
     push!(lines, "\\toprule")
 
-    first_row = ["Policy"]
-    for entry in entries
-        push!(first_row, "\\multicolumn{4}{c}{" * entry.label * "}")
-    end
-    push!(lines, join(first_row, " & ") * " \\\\")
-
-    cmidrules = String[]
-    for (i, _) in enumerate(entries)
-        start_col = 2 + 4 * (i - 1)
-        stop_col = start_col + 3
-        push!(cmidrules, "\\cmidrule(lr){$(start_col)-$(stop_col)}")
-    end
-    push!(lines, join(cmidrules, " "))
-
-    header_row = ["Policy"]
-    for _ in entries
-        append!(header_row, [TREATMENT_LABELS[col] for col in TREATMENT_COLUMNS])
-    end
+    header_row = ["Location", "Treatment"]
+    append!(header_row, [get(POLICY_LABELS, policy, policy) for policy in POLICY_ORDER])
     push!(lines, join(header_row, " & ") * " \\\\")
     push!(lines, "\\midrule")
 
-    for policy in POLICY_ORDER
-        row = [get(POLICY_LABELS, policy, policy)]
-        for entry in entries
-            for col in TREATMENT_COLUMNS
-                value = fetch_policy_value(entry.treatment, policy, col)
-                push!(row, format_value(value))
+    for (entry_idx, entry) in enumerate(entries)
+        for (col_idx, col) in enumerate(TREATMENT_COLUMNS)
+            row = String[]
+            push!(row, col_idx == 1 ? entry.label : "")
+            push!(row, TREATMENT_LABELS[col])
+            for policy in POLICY_ORDER
+                mean_value = fetch_policy_value(entry.treatment, policy, col)
+                std_value = fetch_policy_std(entry.treatment_std, policy, col)
+                push!(row, format_value(mean_value, std_value))
             end
+            push!(lines, join(row, " & ") * " \\\\")
         end
-        push!(lines, join(row, " & ") * " \\\\")
+        if entry_idx != length(entries)
+            push!(lines, "\\addlinespace")
+        end
     end
 
     push!(lines, "\\bottomrule")
@@ -193,6 +265,51 @@ function save_table(entries::Vector{ExperimentSummary}; output_path::String=TABL
     mkpath(dirname(output_path))
     open(output_path, "w") do io
         write(io, table_tex)
+    end
+    return output_path
+end
+
+function build_lambda_table(entries::Dict{String, ExperimentSummary})
+    col_spec = "@{} l " * join(fill("c", length(LAMBDA_COMPONENTS)), " ") * " @{}"
+    lines = String[]
+    push!(lines, "\\begin{table}[htbp!]")
+    push!(lines, "\\centering")
+    push!(lines, "\\caption{Reward parameters for different salmon farming regions.}")
+    push!(lines, "\\label{tab:lambda_params}")
+    push!(lines, "\\begin{tabular}{$col_spec}")
+    push!(lines, "\\toprule")
+
+    header_row = ["Region"]
+    append!(header_row, [comp.label for comp in LAMBDA_COMPONENTS])
+    push!(lines, join(header_row, " & ") * " \\\\")
+    push!(lines, "\\midrule")
+
+    for region in LAMBDA_REGION_ORDER
+        row = [region]
+        entry = get(entries, region, nothing)
+        if entry === nothing
+            append!(row, fill("--", length(LAMBDA_COMPONENTS)))
+        else
+            lambdas = entry.config.solver_config.reward_lambdas
+            for comp in LAMBDA_COMPONENTS
+                value = comp.idx <= length(lambdas) ? lambdas[comp.idx] : missing
+                push!(row, format_lambda_value(value))
+            end
+        end
+        push!(lines, join(row, " & ") * " \\\\")
+    end
+
+    push!(lines, "\\bottomrule")
+    push!(lines, "\\end{tabular}")
+    push!(lines, "\\end{table}")
+    return join(lines, "\n")
+end
+
+function save_lambda_table(entries::Dict{String, ExperimentSummary}; output_path::String=LAMBDA_TABLE_OUTPUT_PATH)
+    lambda_tex = build_lambda_table(entries)
+    mkpath(dirname(output_path))
+    open(output_path, "w") do io
+        write(io, lambda_tex)
     end
     return output_path
 end
@@ -288,25 +405,14 @@ function build_dominant_action_axis(config::ExperimentConfig;
                     Coordinates(coords)
                 )
             )
+            if include_legend
+                push!(ax, @pgf("\\addlegendentry{$(style.label)}"))
+            end
         elseif include_legend
-            # Add invisible dummy plot for legend entry when no data exists
-            push!(ax,
-                Plot(
-                    Options(
-                        :only_marks => nothing,
-                        :mark => style.marker,
-                        :mark_size => "2pt",
-                        :color => style.color,
-                        "mark options" => style.mark_opts,
-                        "forget plot" => nothing,  # Don't add to legend automatically
-                    ),
-                    Coordinates([])  # Empty coordinates
-                )
-            )
-        end
-        # Always add legend entry if legend is requested
-        if include_legend
-            push!(ax, @pgf("\\addlegendentry{$(style.label)}"))
+            # Add legend-only entry for actions with no data using \addlegendimage
+            legend_img = "\\addlegendimage{only marks, mark=$(style.marker), mark size=2pt, color=$(style.color), mark options=$(style.mark_opts)}"
+            push!(ax, legend_img)
+            push!(ax, "\\addlegendentry{$(style.label)}")
         end
     end
 
@@ -359,19 +465,106 @@ function save_combined_dominant_plot(entries::Vector{ExperimentSummary};
     return output_path
 end
 
+function save_quad_dominant_plot(entries_dict::Dict{String, ExperimentSummary};
+        λ::Float64=TARGET_LAMBDA,
+        output_path::String=replace(FIGURE_OUTPUT_PATH, ".tex" => "_quad.tex"))
+
+    # Define the order: Northern Norway, Southern Norway (top row), Scotland, Chile (bottom row)
+    plot_order = ["Northern Norway", "Southern Norway", "Scotland", "Chile"]
+
+    axes = Vector{Axis}()
+    for (idx, region_name) in enumerate(plot_order)
+        if !haskey(entries_dict, region_name)
+            @warn "Region $region_name not found in experiment data, skipping"
+            continue
+        end
+
+        entry = entries_dict[region_name]
+
+        # Put legend above the top-left plot (NorthernNorway)
+        include_legend = (idx == 1)
+        ax = build_dominant_action_axis(entry.config; λ=λ, include_legend=include_legend, include_axis_labels=false)
+        ax.options["title"] = entry.label
+
+        # Position legend above the first plot
+        if include_legend
+            ax.options["legend style"] = Options(
+                "fill" => "white",
+                "draw" => "black!40",
+                "text" => "black",
+                "font" => AquaOpt.PLOS_FONT,
+                "at" => "{(1.0,1.25)}",  # Position above first subplot
+                "anchor" => "south",
+                "row sep" => "1pt",
+                "column sep" => "0.5cm",
+                "legend columns" => "4",
+            )
+        end
+
+        # Add x-label only to bottom row plots (idx 3, 4)
+        if idx >= 3
+            ax.options["xlabel"] = "Sea Temperature (°C)"
+            ax.options["xlabel style"] = AquaOpt.PLOS_LABEL_STYLE
+        end
+
+        # Add y-label only to left column plots (idx 1, 3)
+        if idx == 1 || idx == 3
+            ax.options["ylabel"] = "Avg. AF Sea Lice per Fish"
+            ax.options["ylabel style"] = AquaOpt.PLOS_LABEL_STYLE
+        end
+
+        push!(axes, ax)
+    end
+
+    # Create 2x2 grid layout - don't add xlabel/ylabel here since we added them to individual axes
+    group_opts = Options(
+        "group style" => "{group size=2 by 2, horizontal sep=1.1cm, vertical sep=1.2cm}",
+    )
+    plot_obj = @pgf GroupPlot(group_opts, axes...)
+    mkpath(dirname(output_path))
+    PGFPlotsX.save(output_path, plot_obj)
+
+    # Also save PDF version
+    pdf_path = replace(output_path, ".tex" => ".pdf")
+    PGFPlotsX.save(pdf_path, plot_obj)
+
+    return output_path
+end
+
 function main()
-    if length(EXPERIMENT_FOLDERS) != 3
-        @warn "Expected three experiment folders; found $(length(EXPERIMENT_FOLDERS))."
+    if length(EXPERIMENT_FOLDERS) < 3
+        @warn "Expected at least three experiment folders; found $(length(EXPERIMENT_FOLDERS))."
     end
+
+    # Load all experiments into a vector and dict
     entries = ExperimentSummary[]
-    for folder in EXPERIMENT_FOLDERS
-        push!(entries, load_experiment(folder))
+    entries_dict = Dict{String, ExperimentSummary}()
+
+    for (label, folder) in EXPERIMENT_FOLDERS
+        entry = load_experiment(folder, label)
+        push!(entries, entry)
+        entries_dict[label] = entry
     end
 
-    table_path = save_table(entries)
-    figure_path = save_combined_dominant_plot(entries)
+    # Define order for 3-plot figure: Southern Norway, Scotland, Chile
+    three_plot_order = ["Southern Norway", "Scotland", "Chile"]
+    three_plot_entries = [entries_dict[name] for name in three_plot_order if haskey(entries_dict, name)]
 
-    println("Wrote LaTeX table to $(abspath(table_path)).")
+    # Generate table (using the 3 selected entries)
+    table_path = save_table(three_plot_entries)
+    lambda_table_path = save_lambda_table(entries_dict)
+
+    # Generate original 1-row plot with Southern Norway, Scotland, Chile
+    figure_path = save_combined_dominant_plot(three_plot_entries)
+
+    # Generate new 2x2 quad plot if we have all 4 regions
+    if length(entries_dict) >= 4
+        quad_path = save_quad_dominant_plot(entries_dict)
+        println("Wrote quad dominant action figure (.tex) to $(abspath(quad_path)).")
+    end
+
+    println("Wrote treatment summary table to $(abspath(table_path)).")
+    println("Wrote lambda parameter table to $(abspath(lambda_table_path)).")
     println("Wrote dominant action figure (.tex) to $(abspath(figure_path)).")
 end
 

@@ -9,13 +9,13 @@ using Dates
 
 # Consistent palette + labeling for the Plos One figures
 const PLOS_POLICY_STYLE_ORDERED = [
-    ("Heuristic_Policy", (; label = "Heuristic",     line = "teal!75!black",    fill = "teal!25!white")),
-    ("NUS_SARSOP_Policy", (; label = "SARSOP",       line = "blue!80!black",    fill = "blue!25!white")),
-    ("VI_Policy",         (; label = "VI",           line = "violet!80!black",  fill = "violet!25!white")),
-    ("QMDP_Policy",       (; label = "QMDP",         line = "magenta!70!black", fill = "magenta!25!white")),
-    ("Random_Policy",     (; label = "Random",       line = "orange!85!black",  fill = "orange!25!white")),
     ("NeverTreat_Policy", (; label = "NeverTreat",   line = "gray!70!black",    fill = "gray!20!white")),
     ("AlwaysTreat_Policy",(; label = "AlwaysTreat",  line = "red!80!black",     fill = "red!20!white")),
+    ("Random_Policy",     (; label = "Random",       line = "orange!85!black",  fill = "orange!25!white")),
+    ("Heuristic_Policy", (; label = "Heuristic",     line = "teal!75!black",    fill = "teal!25!white")),
+    ("QMDP_Policy",       (; label = "QMDP",         line = "magenta!70!black", fill = "magenta!25!white")),
+    ("NUS_SARSOP_Policy", (; label = "SARSOP",       line = "blue!80!black",    fill = "blue!25!white")),
+    ("VI_Policy",         (; label = "VI",           line = "violet!80!black",  fill = "violet!25!white")),
 ]
 const PLOS_POLICY_STYLE_LOOKUP = Dict(name => style for (name, style) in PLOS_POLICY_STYLE_ORDERED)
 
@@ -291,7 +291,7 @@ function plos_one_sealice_levels_over_time(parallel_data, config; show_ci=true, 
         :xmin => 0,
         :xmax => config.simulation_config.steps_per_episode,
         :ymin => 0,
-        :ymax => 1,
+        :ymax => 0.6,
         :xtick => ticks,
         :xticklabels => labels,
         "axis background/.style" => Options("fill" => "white"),
@@ -625,6 +625,7 @@ function plos_one_biomass_loss_over_time(parallel_data, config; policies_to_plot
         ylabel = "Cumulative Biomass Loss (tons)",
         file_suffix = "north_biomass_loss_over_time.pdf",
         ymin = 0.0,
+        ymax = 0.1,
         policies_to_plot = policies_to_plot
     )
 end
@@ -635,7 +636,7 @@ function plos_one_regulatory_penalty_over_time(parallel_data, config; policies_t
         ylabel = "Penalty Probability",
         file_suffix = "north_regulatory_penalty_over_time.pdf",
         ymin = 0.0,
-        ymax = 1.0,
+        ymax = 0.1,
         policies_to_plot = policies_to_plot
     )
 end
