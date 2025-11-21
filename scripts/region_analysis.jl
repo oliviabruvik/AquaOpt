@@ -430,8 +430,8 @@ end
 function region_axis(region::RegionData, stats; ylabel::String, show_xlabel::Bool, show_legend::Bool)
     ticks, labels = time_ticks(region.config)
     option_pairs = [
-        :width => "15cm",
-        :height => "4.5cm",
+        :width => "18cm",
+        :height => "6cm",
         :title => region.name,
         :ylabel => ylabel,
         :xlabel_style => AquaOpt.PLOS_LABEL_STYLE,
@@ -440,6 +440,7 @@ function region_axis(region::RegionData, stats; ylabel::String, show_xlabel::Boo
         :xmin => 0,
         :xmax => region.config.simulation_config.steps_per_episode,
         :ymin => 0,
+        :ymax => 0.6,
         :xtick => ticks,
         :xticklabels => labels,
         "axis background/.style" => Options("fill" => "white"),
@@ -616,8 +617,13 @@ function main()
     regions_input, out_dir = parse_args(ARGS)
     regions = [load_region(r) for r in regions_input]
 
+    @info "Computing sea lice stats"
     sealice_stats = [compute_sealice_stats(r.parallel_data, r.config) for r in regions]
+    
+    @info "Computing treatment cost stats"
     treatment_stats = [compute_treatment_cost_stats(r.parallel_data, r.config) for r in regions]
+    
+    @info "Computing sarsop stats"
     sarsop_stats = [compute_sarsop_stage_stats(r, 0.6) for r in regions]
 
     axes_sealice = Axis[]
