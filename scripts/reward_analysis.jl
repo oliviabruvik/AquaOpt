@@ -460,7 +460,7 @@ function save_combined_dominant_plot(entries::Vector{ExperimentSummary};
 
     # Also save PDF version
     pdf_path = replace(output_path, ".tex" => ".pdf")
-    PGFPlotsX.save(pdf_path, plot_obj)
+    PGFPlotsX.save(pdf_path, plot_obj, include_preamble=false)
 
     return output_path
 end
@@ -526,7 +526,7 @@ function save_quad_dominant_plot(entries_dict::Dict{String, ExperimentSummary};
 
     # Also save PDF version
     pdf_path = replace(output_path, ".tex" => ".pdf")
-    PGFPlotsX.save(pdf_path, plot_obj)
+    PGFPlotsX.save(pdf_path, plot_obj, include_preamble=false)
 
     return output_path
 end
