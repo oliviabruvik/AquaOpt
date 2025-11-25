@@ -65,7 +65,7 @@ function create_sim_pomdp(config, λ)
                 costOfTreatment=config.solver_config.costOfTreatment,
                 discount_factor=config.solver_config.discount_factor,
                 discretization_step=config.solver_config.discretization_step,
-                adult_sd=abs(log(config.solver_config.raw_space_sampling_sd)),
+                adult_sd=config.solver_config.adult_sd,
                 regulation_limit=config.solver_config.regulation_limit,
                 full_observability_solver=config.solver_config.full_observability_solver,
                 location=config.solver_config.location,
@@ -81,7 +81,7 @@ function create_sim_pomdp(config, λ)
                 costOfTreatment=config.solver_config.costOfTreatment,
                 discount_factor=config.solver_config.discount_factor,
                 discretization_step=config.solver_config.discretization_step,
-                adult_sd=config.solver_config.raw_space_sampling_sd,
+                adult_sd=config.solver_config.adult_sd,
                 regulation_limit=config.solver_config.regulation_limit,
                 full_observability_solver=config.solver_config.full_observability_solver,
             )

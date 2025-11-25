@@ -100,10 +100,13 @@ end
     sessile_mean::Float64 = 0.12
 
     # Transition and Observation Noise
+    adult_obs_sd::Float64 = 0.17
+    motile_obs_sd::Float64 = 0.327
+    sessile_obs_sd::Float64 = 0.10
     adult_sd::Float64 = 0.1
-    motile_sd::Float64 = 0.1
-    sessile_sd::Float64 = 0.1
-    temp_sd::Float64 = 0.1 # TODO: remember to change this back to 0.1
+    motile_sd::Float64 = 0.29
+    sessile_sd::Float64 = 0.16
+    temp_sd::Float64 = 0.3
     weight_sd::Float64 = 0.05
     number_of_fish_sd::Float64 = 0.0
 

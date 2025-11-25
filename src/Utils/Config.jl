@@ -88,7 +88,7 @@ end
     growthRate::Float64 = 0.15
     reproduction_rate::Float64 = 2.0
     discount_factor::Float64 = 0.95
-    raw_space_sampling_sd::Float64 = 0.5
+    adult_sd::Float64 = 0.1
     log_space::Bool = false
     regulation_limit::Float64 = 0.5
     location::String = "north"
@@ -124,12 +124,19 @@ end
     high_fidelity_sim::Bool = true
 
     # SimPOMDP parameters (stochasticity in simulation)
-    adult_mean::Float64 = 0.125
-    motile_mean::Float64 = 0.25
-    sessile_mean::Float64 = 0.25
-    adult_sd::Float64 = 0.05
-    motile_sd::Float64 = 0.1
-    sessile_sd::Float64 = 0.1
+    adult_mean::Float64 = 0.13
+    motile_mean::Float64 = 0.47
+    sessile_mean::Float64 = 0.12
+
+    # Observation noise (biological variability in transitions)
+    adult_obs_sd::Float64 = 0.17 
+    motile_obs_sd::Float64 = 0.327
+    sessile_obs_sd::Float64 = 0.10
+
+    # Observation noise (measurement uncertainty from Negative Binomial sampling)
+    adult_sd::Float64 = 0.1
+    motile_sd::Float64 = 0.29
+    sessile_sd::Float64 = 0.16
     temp_sd::Float64 = 0.3
 
     # Observation parameters from Aldrin et al. 2023

@@ -304,7 +304,7 @@ function solver_model_rows(config::ExperimentConfig)
         ("Reproduction rate", format_number(sc.reproduction_rate; digits=2)),
         ("Growth rate", format_number(sc.growthRate; digits=2)),
         ("State discretization step", format_number(sc.discretization_step; digits=2)),
-        ("Raw-space sampling sd", format_number(sc.raw_space_sampling_sd; digits=2)),
+        ("Raw-space sampling sd", format_number(sc.adult_sd; digits=2)),
         ("Solver reward weights \\(\\lambda\\)", latex_array(sc.reward_lambdas)),
         ("Log-space solver", format_bool(sc.log_space)),
     ]

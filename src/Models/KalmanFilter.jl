@@ -57,7 +57,7 @@ function build_kf(sim_pomdp::Any; ekf_filter=false)
     # The W matrix stores the process noise for each state variable
     # The V matrix stores the observation noise for each state variable
     W = Diagonal([sim_pomdp.adult_sd^2, sim_pomdp.motile_sd^2, sim_pomdp.sessile_sd^2, sim_pomdp.temp_sd^2])
-    V = Diagonal([sim_pomdp.adult_sd^2, sim_pomdp.motile_sd^2, sim_pomdp.sessile_sd^2, sim_pomdp.temp_sd^2])
+    V = Diagonal([sim_pomdp.adult_obs_sd^2, sim_pomdp.motile_obs_sd^2, sim_pomdp.sessile_obs_sd^2, sim_pomdp.temp_sd^2])
 
     # Get location and reproduction_rate from POMDP
     location = sim_pomdp.location

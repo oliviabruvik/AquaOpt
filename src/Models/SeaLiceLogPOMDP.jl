@@ -73,7 +73,7 @@ end
     initial_mean::Float64 = log(0.13)
 
     # Sampling parameters
-    adult_sd::Float64 = abs(log(0.1))
+    adult_sd::Float64 = 0.1  # Approximately equivalent to 0.1 in raw space
     rng::AbstractRNG = Random.GLOBAL_RNG
     
     # Log space discretization
@@ -127,10 +127,14 @@ function POMDPs.transition(pomdp::SeaLiceLogPOMDP, s::SeaLiceLogState, a::Action
     )
 
     # Convert back to log space and clamp to discretization bounds
-    μ = clamp(log(max(pred_adult_raw, 1e-6)), pomdp.sea_lice_bounds...)
+    pred_adult = max(pred_adult_raw, 1e-3)
+    μ = clamp(log(pred_adult), pomdp.sea_lice_bounds...)
 
     # Construct transition distribution in log space
-    dist = truncated(Normal(μ, pomdp.adult_sd), pomdp.sea_lice_bounds...)
+    pred_adult_sq = max(pred_adult^2, 0.0025)
+    cv_squared = (pomdp.adult_sd^2) / pred_adult_sq
+    log_adult_sd = sqrt(log(1 + cv_squared))
+    dist = truncated(Normal(μ, log_adult_sd), pomdp.sea_lice_bounds...)
 
     # Get the states
     states = POMDPs.states(pomdp)
@@ -308,7 +312,11 @@ end
 function POMDPs.initialstate(pomdp::SeaLiceLogPOMDP)
 
     # Get the distribution
-    dist = truncated(Normal(pomdp.initial_mean, pomdp.adult_sd), pomdp.sea_lice_bounds...)
+    raw_initial = max(exp(pomdp.initial_mean), 1e-3)
+    raw_initial_sq = max(raw_initial^2, 0.0025)
+    cv_squared = (pomdp.adult_sd^2) / raw_initial_sq
+    initial_sd_log = sqrt(log(1.0 + cv_squared))
+    dist = truncated(Normal(pomdp.initial_mean, initial_sd_log), pomdp.sea_lice_bounds...)
 
     # Get the states
     states = POMDPs.states(pomdp)
