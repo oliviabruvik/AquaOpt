@@ -603,10 +603,7 @@ function _extract_metric_caches(data_filtered, seeds)
         states = collect(state_hist(history))
         actions = collect(action_hist(history))
         rewards = Float64.(collect(reward_hist(history)))
-        initial_avg_weight = isempty(states) ? 0.0 : states[1].AvgFishWeight
-        initial_number_of_fish = isempty(states) ? 0 : states[1].NumberOfFish
-        initial_biomass = initial_avg_weight * initial_number_of_fish
-        push!(caches, (; states, actions, rewards, initial_biomass, initial_avg_weight, initial_number_of_fish))
+        push!(caches, (; states, actions, rewards))
     end
     return caches
 end
@@ -715,13 +712,17 @@ end
 
 reward_step_value(cache, t, _) = t <= length(cache.rewards) ? cache.rewards[t] : nothing
 
-function biomass_loss_step_value(cache, t, _)
-    if t <= length(cache.states)
-        state = cache.states[t]
-        Δweight = state.AvgFishWeight - cache.initial_avg_weight
-        return (Δweight * cache.initial_number_of_fish) / 1000.0
+function biomass_loss_step_value(cache, t, config)
+    if t <= 1 || t > length(cache.states)
+        return nothing
     end
-    return nothing
+    sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+    n_pairs = min(length(cache.states) - 1, length(cache.actions))
+    cumulative_loss = 0.0
+    for τ in 1:min(t-1, n_pairs)
+        cumulative_loss += _expected_biomass_shortfall(sim_params, cache.states[τ], cache.states[τ+1])
+    end
+    return cumulative_loss
 end
 
 function regulatory_penalty_step_value(cache, t, config)
@@ -1565,4 +1566,15 @@ function plos_one_treatment_distribution_comparison(parallel_data, config)
     PGFPlotsX.save(joinpath("Quick_Access", "north_treatment_distribution.pdf"), ax)
 
     return ax
+end
+function _expected_biomass_shortfall(sim_params::SeaLiceSimPOMDP, s, sp)
+    ideal_survival_rate = 1 - sim_params.nat_mort_rate
+    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
+    k0_base = sim_params.k_growth * (1.0 + sim_params.temp_sensitivity * (s.Temperature - 10.0))
+    ideal_k0 = max(k0_base, 0.0)
+    expected_weight = s.AvgFishWeight + ideal_k0 * (sim_params.w_max - s.AvgFishWeight)
+    expected_weight = clamp(expected_weight, sim_params.weight_bounds...)
+    expected_biomass = biomass_tons(expected_weight, expected_fish)
+    next_biomass = biomass_tons(sp)
+    return max(expected_biomass - next_biomass, 0.0)
 end

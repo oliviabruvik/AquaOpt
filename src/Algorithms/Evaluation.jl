@@ -21,6 +21,18 @@ function mean_and_ci(x)
     return (mean = m, ci = ci)
 end
 
+function _expected_biomass_shortfall(sim_params::SeaLiceSimPOMDP, s, sp)
+    ideal_survival_rate = 1 - sim_params.nat_mort_rate
+    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
+    k0_base = sim_params.k_growth * (1.0 + sim_params.temp_sensitivity * (s.Temperature - 10.0))
+    ideal_k0 = max(k0_base, 0.0)
+    expected_weight = s.AvgFishWeight + ideal_k0 * (sim_params.w_max - s.AvgFishWeight)
+    expected_weight = clamp(expected_weight, sim_params.weight_bounds...)
+    expected_biomass = biomass_tons(expected_weight, expected_fish)
+    next_biomass = biomass_tons(sp)
+    return max(expected_biomass - next_biomass, 0.0)
+end
+
 # ----------------------------
 # Calculate averages
 # ----------------------------
@@ -187,6 +199,8 @@ function extract_reward_metrics(data, config)
     processed_data.mean_adult_sea_lice_level = zeros(Float64, nrow(processed_data))
 
     # For each episode, extract the number of treatments, regulatory penalties, lost biomass, and fish disease
+    sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+
     for (i, row) in enumerate(eachrow(processed_data))
 
         # Get the history
@@ -202,8 +216,13 @@ function extract_reward_metrics(data, config)
         end
 
         # Get total lost biomass
-        num_steps = length(states)
-        lost_biomass_1000kg = (states[num_steps].AvgFishWeight * states[1].NumberOfFish - states[1].AvgFishWeight * states[1].NumberOfFish) / 1000.0
+        lost_biomass_1000kg = 0.0
+        if length(states) > 1
+            n_pairs = min(length(states) - 1, length(actions))
+            for t in 1:n_pairs
+                lost_biomass_1000kg += _expected_biomass_shortfall(sim_params, states[t], states[t+1])
+            end
+        end
 
         # Get total fish disease
         fish_disease = sum(get_fish_disease(a) + 100.0 * s.SeaLiceLevel for (s, a) in zip(states, actions))

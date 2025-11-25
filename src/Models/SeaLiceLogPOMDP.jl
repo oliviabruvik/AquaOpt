@@ -47,6 +47,14 @@ end
     sessile_ratio::Float64 = 1.0
     base_temperature::Float64 = 10.0
 
+    # Surrogate biomass parameters (used by reward to scale treatment impacts)
+    biomass_min_tons::Float64 = 20.0          # start of cycle biomass
+    biomass_max_tons::Float64 = 900.0         # late-cycle biomass
+    biomass_low_lice::Float64 = 0.05          # lice level corresponding to biomass_min
+    biomass_high_lice::Float64 = 1.5          # lice level corresponding to biomass_max
+    biomass_progress_curve::Float64 = 1.1     # controls slope of the progression curve
+    max_growth_loss_fraction::Float64 = 0.10  # mirrors simulator maximum weekly shortfall
+
     # Regulation parameters
     regulation_limit::Float64 = 0.5
 
@@ -223,6 +231,7 @@ function POMDPs.reward(pomdp::SeaLiceLogPOMDP, s::SeaLiceLogState, a::Action)
 
     # Convert from log space to natural space
     adult_level = exp(s.SeaLiceLevel)
+    biomass_estimate = surrogate_biomass_tons(pomdp, adult_level)
 
     # === 1. DIRECT TREATMENT COSTS ===
     treatment_cost = get_treatment_cost(a)
@@ -242,16 +251,14 @@ function POMDPs.reward(pomdp::SeaLiceLogPOMDP, s::SeaLiceLogState, a::Action)
 
     # === 3. BIOMASS LOSS ===
     # 3a. Mortality loss (acute) - approximation for typical farm
-    # Typical: 200k fish at 2kg avg weight
-    mortality_biomass_loss = get_treatment_mortality_rate(a) * 400.0
+    mortality_biomass_loss = get_treatment_mortality_rate(a) * biomass_estimate
 
     # 3b. Growth reduction from sea lice (chronic)
     # Research shows 3-16% biomass growth lost per cycle above ~0.5 lice/fish
     # Using 10% per week at high infestation as conservative estimate
     if adult_level > 0.5
         lice_severity = min((adult_level - 0.5) / 1.5, 1.0)  # 0 at 0.5, 1.0 at 2.0+
-        # Typical farm mid-cycle biomass ~400 tonnes
-        growth_biomass_loss = 400.0 * 0.10 * lice_severity
+        growth_biomass_loss = biomass_estimate * pomdp.max_growth_loss_fraction * lice_severity
     else
         growth_biomass_loss = 0.0
     end
@@ -280,6 +287,19 @@ function POMDPs.reward(pomdp::SeaLiceLogPOMDP, s::SeaLiceLogState, a::Action)
         λ_health * fish_health_penalty +
         λ_sea_lice * sea_lice_penalty
     )
+end
+
+function surrogate_biomass_tons(pomdp::SeaLiceLogPOMDP, adult_level::Float64)
+    lice_low = pomdp.biomass_low_lice
+    lice_high = pomdp.biomass_high_lice
+    if lice_high <= lice_low
+        return pomdp.biomass_min_tons
+    end
+
+    progress = clamp((adult_level - lice_low) / (lice_high - lice_low), 0.0, 1.0)
+    progress = progress ^ pomdp.biomass_progress_curve
+
+    return pomdp.biomass_min_tons + progress * (pomdp.biomass_max_tons - pomdp.biomass_min_tons)
 end
 
 # -------------------------

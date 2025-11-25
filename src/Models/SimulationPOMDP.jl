@@ -180,6 +180,7 @@ function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action
         k0_base = pomdp.k_growth * (1.0 + pomdp.temp_sensitivity * (s.Temperature - 10.0))
         k0 = max(k0_base * lice_growth_factor, 0.0)
         next_average_weight = s.AvgFishWeight + k0 * (pomdp.w_max - s.AvgFishWeight)
+        next_average_weight = next_average_weight * (1 - get_weight_loss(a))
         next_average_weight = clamp(next_average_weight, pomdp.weight_bounds...)
 
         # Calculate the next number of fish
@@ -218,7 +219,7 @@ function POMDPs.observation(pomdp::SeaLiceSimPOMDP, a::Action, sp::EvaluationSta
         # paper uses (W - 0.1) with W in kg
         # Accounts for the fact that sessiles are harder to count than motiles and adults
         p_scount = if pomdp.use_underreport
-            η = pomdp.beta0_Scount_f + pomdp.beta1_Scount * (pomdp.mean_fish_weight_kg - pomdp.W0)
+            η = pomdp.beta0_Scount_f + pomdp.beta1_Scount * (sp.AvgFishWeight - pomdp.W0)
             logistic(η)  # ∈ (0,1)
         else
             1.0
@@ -315,17 +316,22 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
         regulatory_penalty = 0.0
     end
 
-    # === 3. BIOMASS LOSS ===
-    # Only mortality loss from natural and treatment-induced death
-    # Growth reduction from sea lice is modeled in transition dynamics (lice_growth_factor, line 178)
-    # and implicitly affects long-term biomass accumulation without explicit penalty here
-    survival_rate = (1 - pomdp.nat_mort_rate) * (1 - get_treatment_mortality_rate(a))
-    fish_died = s.NumberOfFish * (1 - survival_rate)
+    # === 3. BIOMASS LOSS (expected growth shortfall) ===
+    next_biomass = biomass_tons(sp)
 
-    # Weight biomass by fish size (losing 5kg fish > losing 0.5kg fish)
-    # Normalized to harvest weight (5kg)
-    biomass_value_factor = s.AvgFishWeight / 5.0
-    total_biomass_loss = fish_died * s.AvgFishWeight * biomass_value_factor / 1000.0  # tonnes
+    # Predict what biomass should be next week if no mortality occurs.
+    # 1) Project fish count forward with only natural/treatment survival.
+    ideal_survival_rate = 1 - pomdp.nat_mort_rate
+    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
+    
+    # 2) Project average weight using the same growth rule as the transition.
+    k0_base = pomdp.k_growth * (1.0 + pomdp.temp_sensitivity * (s.Temperature - 10.0))
+    ideal_k0 = max(k0_base, 0.0)
+    expected_weight = s.AvgFishWeight + ideal_k0 * (pomdp.w_max - s.AvgFishWeight)
+    expected_weight = clamp(expected_weight, pomdp.weight_bounds...)
+    expected_biomass = biomass_tons(expected_weight, expected_fish)
+
+    total_biomass_loss = max(expected_biomass - next_biomass, 0.0)
 
     # === 4. FISH HEALTH (treatment side effects only) ===
     # Stress, injuries, disease susceptibility from treatments

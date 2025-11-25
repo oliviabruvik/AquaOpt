@@ -178,7 +178,32 @@ function move_out_fn(week::Int)
     return 0
 end
 
+# -------------------------
+# Biomass helpers
+# -------------------------
+"""
+    biomass_tons(avg_weight, number_of_fish)
+
+Return the biomass (in metric tons) represented by the given average weight (kg)
+and number of fish. Values are clamped at zero to avoid negative biomass.
+"""
+function biomass_tons(avg_weight::Real, number_of_fish::Real)
+    return max((float(avg_weight) * float(number_of_fish)) / 1000.0, 0.0)
+end
+
+biomass_tons(state) = biomass_tons(getproperty(state, :AvgFishWeight), getproperty(state, :NumberOfFish))
+
+"""
+    biomass_loss_tons(start_state, end_state)
+
+Compute non-negative biomass lost (tons) between two states.
+"""
+function biomass_loss_tons(start_state, end_state)
+    return max(biomass_tons(start_state) - biomass_tons(end_state), 0.0)
+end
+
 # Export the Action enum and related functions
 export Action, NoTreatment, MechanicalTreatment, ChemicalTreatment, ThermalTreatment
 export ActionConfig, ACTION_CONFIGS
 export get_action_config, get_treatment_cost, get_treatment_effectiveness, get_stochastic_treatment_effectiveness, get_regulatory_penalty, get_fish_disease, get_treatment_mortality_rate, get_weight_loss
+export biomass_tons, biomass_loss_tons
