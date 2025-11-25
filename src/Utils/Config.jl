@@ -31,7 +31,7 @@ end
 function get_location_params(location::String)
     if location == "north"
         return LocationParams(
-            T_mean = 12.0,
+            T_mean = 8.0,
             T_amp = 4.5,
             peak_week = 27,
             d1_intercept = -2.4,
@@ -46,32 +46,32 @@ function get_location_params(location::String)
         )
     elseif location == "west"
         return LocationParams(
-            T_mean = 16.0,
+            T_mean = 10.0,
             T_amp = 4.5,
             peak_week = 27,
-            d1_intercept = -1.5,
-            d1_temp_coef = 0.5,
-            d2_intercept = -1.0,
-            d2_temp_coef = 0.1,
-            s1_sessile = 0.6,
-            s2_scaling = 3.0,
-            s3_motile = 0.90, # Reduced from 0.95
-            s4_adult = 0.70,
+            d1_intercept = -2.4,
+            d1_temp_coef = 0.37,
+            d2_intercept = -2.1,
+            d2_temp_coef = 0.037,
+            s1_sessile = 0.49,
+            s2_scaling = 2.3,
+            s3_motile = 0.88,
+            s4_adult = 0.61,
             external_influx = 0.12
         )
     elseif location == "south"
         return LocationParams(
-            T_mean = 20.0,
+            T_mean = 12.0,
             T_amp = 4.5,
             peak_week = 27,
-            d1_intercept = -1.5,
-            d1_temp_coef = 0.5,
-            d2_intercept = -1.0,
-            d2_temp_coef = 0.1,
-            s1_sessile = 0.7,      # Reduced from 0.8
-            s2_scaling = 3.5,      # Reduced from 5.0
-            s3_motile = 0.92,      # Reduced from 0.99
-            s4_adult = 0.85,       # Reduced from 0.99
+            d1_intercept = -2.4,
+            d1_temp_coef = 0.37,
+            d2_intercept = -2.1,
+            d2_temp_coef = 0.037,
+            s1_sessile = 0.49,
+            s2_scaling = 2.3,
+            s3_motile = 0.88,
+            s4_adult = 0.61,
             external_influx = 0.15 # Reduced from 0.2
         )
     else
@@ -86,7 +86,7 @@ end
     # POMDP structure parameters (affect the policy being solved)
     costOfTreatment::Float64 = 10.0
     growthRate::Float64 = 0.15
-    reproduction_rate::Float64 = 2.0
+    reproduction_rate::Float64 = 4.0
     discount_factor::Float64 = 0.95
     adult_sd::Float64 = 0.1
     log_space::Bool = false

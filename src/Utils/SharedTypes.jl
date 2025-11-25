@@ -56,48 +56,48 @@ if !isdefined(Main, :ACTION_CONFIGS)
         MechanicalTreatment => ActionConfig(
             action = MechanicalTreatment,
             cost = 10.0,  # MNOK per treatment
-            adult_reduction = 0.75,   # 75% reduction
-            motile_reduction = 0.84,  # 84% reduction
-            sessile_reduction = 0.74, # 74% reduction
+            adult_reduction = 0.75,
+            motile_reduction = 0.84,
+            sessile_reduction = 0.74,
             name = "Mechanical Treatment",
             description = "Standard mechanical treatment for sea lice control",
             duration_days = 7,
             frequency_limit = 4,  # Maximum 4 treatments per year
-            fish_disease = 10.0,
-            mortality_rate = 0.05,
-            weight_loss = 0.0,
+            fish_disease = 0.35,
+            mortality_rate = 0.006,
+            weight_loss = 0.01,
             regulatory_penalty = 100.0
         ),
 
         ChemicalTreatment => ActionConfig(
             action = ChemicalTreatment,
-            cost = 7.0,  # MNOK per treatment
-            adult_reduction = 0.60,   # 80% reduction
-            motile_reduction = 0.58,  # 84% reduction
-            sessile_reduction = 0.37, # 74% reduction
+            cost = 9.0,  # MNOK per treatment
+            adult_reduction = 0.60,
+            motile_reduction = 0.58,
+            sessile_reduction = 0.37,
             name = "Chemical Treatment",
             description = "Standard chemical treatment for sea lice control",
             duration_days = 7,
             frequency_limit = 4,  # Maximum 4 treatments per year
-            fish_disease = 7.0,
-            mortality_rate = 0.04,
-            weight_loss = 0.0,
+            fish_disease = 0.3,
+            mortality_rate = 0.004,
+            weight_loss = 0.005,
             regulatory_penalty = 100.0
         ),
         
         ThermalTreatment => ActionConfig(
             action = ThermalTreatment,
             cost = 13.0,  # MNOK per treatment (higher cost) Increased from 12
-            adult_reduction = 0.88,   # 88% reduction
-            motile_reduction = 0.87,  # 87% reduction
-            sessile_reduction = 0.70, # 70% reduction
+            adult_reduction = 0.88,
+            motile_reduction = 0.87,
+            sessile_reduction = 0.70,
             name = "Thermal Treatment",
             description = "Thermal treatment for sea lice control",
             duration_days = 5,
             frequency_limit = 6,  # Maximum 6 treatments per year
-            fish_disease = 15.0,
-            mortality_rate = 0.07,
-            weight_loss = 0.0,
+            fish_disease = 0.4,
+            mortality_rate = 0.008,
+            weight_loss = 0.015,
             regulatory_penalty = 100.0
         )
     )
