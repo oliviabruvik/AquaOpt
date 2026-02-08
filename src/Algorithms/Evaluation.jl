@@ -21,16 +21,22 @@ function mean_and_ci(x)
     return (mean = m, ci = ci)
 end
 
+function _expected_biomass_shortfall(sim_params::SeaLiceSimPOMDP, s, sp)
+    ideal_survival_rate = 1 - sim_params.nat_mort_rate
+    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
+    k0_base = sim_params.k_growth * (1.0 + sim_params.temp_sensitivity * (s.Temperature - 10.0))
+    ideal_k0 = max(k0_base, 0.0)
+    expected_weight = s.AvgFishWeight + ideal_k0 * (sim_params.w_max - s.AvgFishWeight)
+    expected_weight = clamp(expected_weight, sim_params.weight_bounds...)
+    expected_biomass = biomass_tons(expected_weight, expected_fish)
+    next_biomass = biomass_tons(sp)
+    return max(expected_biomass - next_biomass, 0.0)
+end
+
 # ----------------------------
 # Calculate averages
 # ----------------------------
 function evaluate_simulation_results(config, algorithm, histories)
-
-    # Create directory for simulation histories
-    histories_dir = joinpath(config.simulations_dir, "$(algorithm.solver_name)")
-    histories_filename = "$(algorithm.solver_name)_histories"
-    
-    @load joinpath(histories_dir, "$(histories_filename).jld2") histories
 
     avg_results = DataFrame(
         lambda=Float64[],
@@ -97,14 +103,15 @@ function extract_simulation_histories(config, algorithm, parallel_data)
     for λ in config.lambda_values
 
         # Get histories for this lambda
-        data_lambda = filter(row -> row.lambda == λ && row.policy == algorithm.solver_name, parallel_data)
+        data_lambda_idx = parallel_data.lambda .== λ .&& parallel_data.policy .== algorithm.solver_name
+        data_lambda = parallel_data[data_lambda_idx, [:episode_number, :history]]
 
-        episode_histories = Vector{Any}()
+        episode_histories = Vector{typeof(first(data_lambda.history))}()
 
         for episode in 1:config.simulation_config.num_episodes
 
             # Get histories for this episode
-            data_episode = filter(row -> row.episode_number == episode, data_lambda)
+            data_episode = data_lambda[data_lambda.episode_number .== episode, :]
 
             if nrow(data_episode) == 1
                 push!(episode_histories, data_episode.history[1])
@@ -187,6 +194,8 @@ function extract_reward_metrics(data, config)
     processed_data.mean_adult_sea_lice_level = zeros(Float64, nrow(processed_data))
 
     # For each episode, extract the number of treatments, regulatory penalties, lost biomass, and fish disease
+    sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+
     for (i, row) in enumerate(eachrow(processed_data))
 
         # Get the history
@@ -202,8 +211,13 @@ function extract_reward_metrics(data, config)
         end
 
         # Get total lost biomass
-        num_steps = length(states)
-        lost_biomass_1000kg = (states[num_steps].AvgFishWeight * states[1].NumberOfFish - states[1].AvgFishWeight * states[1].NumberOfFish) / 1000.0
+        lost_biomass_1000kg = 0.0
+        if length(states) > 1
+            n_pairs = min(length(states) - 1, length(actions))
+            for t in 1:n_pairs
+                lost_biomass_1000kg += _expected_biomass_shortfall(sim_params, states[t], states[t+1])
+            end
+        end
 
         # Get total fish disease
         fish_disease = sum(get_fish_disease(a) + 100.0 * s.SeaLiceLevel for (s, a) in zip(states, actions))

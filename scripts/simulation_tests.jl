@@ -85,7 +85,7 @@ new_sim_config = SimulationConfig(
 new_experiment_name = "resim_$(Dates.format(now(), "yyyy-mm-ddTHH:MM:SS.sss"))"
 solver_reward_lambdas = training_config.solver_config.reward_lambdas
 
-config, heuristic_config = setup_experiment_configs(
+config = setup_experiment_configs(
     new_experiment_name,
     training_config.solver_config.log_space,
     training_config.simulation_config.ekf_filter,
@@ -108,17 +108,9 @@ config.results_dir = joinpath("results", "experiments", new_experiment_name, "av
 config.figures_dir = joinpath("results", "experiments", new_experiment_name, "figures")
 config.experiment_dir = joinpath("results", "experiments", new_experiment_name)
 
-heuristic_config = HeuristicConfig(
-    raw_space_threshold=config.solver_config.heuristic_threshold,
-    belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
-    belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
-    belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
-    rho=config.solver_config.heuristic_rho
-)
-
 # Define algorithms (same as original run)
 @info "Defining algorithms"
-algorithms = define_algorithms(config, heuristic_config)
+algorithms = define_algorithms(config)
 
 # Simulate policies with NEW simulation config but OLD trained policies
 @info "Simulating trained policies with NEW simulation configuration"

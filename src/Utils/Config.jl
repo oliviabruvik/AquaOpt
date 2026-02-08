@@ -27,56 +27,48 @@ using Parameters
     external_influx::Float64  # Weekly influx of sessile larvae from external sources
 end
 
-# Define location-specific parameter sets
+# Shared biological parameters across all locations.
+# Only T_mean and external_influx differ between north/west/south.
+const SHARED_BIO_PARAMS = (
+    T_amp        = 4.5,
+    peak_week    = 27,
+    d1_intercept = -2.4,
+    d1_temp_coef = 0.37,
+    d2_intercept = -2.1,
+    d2_temp_coef = 0.037,
+    s1_sessile   = 0.49,
+    s2_scaling   = 2.3,
+    s3_motile    = 0.88,
+    s4_adult     = 0.61,
+)
+
+# Pre-built location parameter sets keyed by location name
+const LOCATION_PARAMS = Dict(
+    "north" => LocationParams(;
+        SHARED_BIO_PARAMS...,
+        T_mean = 8.0,
+        external_influx = 0.1,
+    ),
+    "west" => LocationParams(;
+        SHARED_BIO_PARAMS...,
+        T_mean = 10.0,
+        external_influx = 0.12,
+    ),
+    "south" => LocationParams(;
+        SHARED_BIO_PARAMS...,
+        T_mean = 12.0,
+        external_influx = 0.15,
+    ),
+)
+
+"""
+Look up biological parameters for a given location ("north", "west", or "south").
+"""
 function get_location_params(location::String)
-    if location == "north"
-        return LocationParams(
-            T_mean = 12.0,
-            T_amp = 4.5,
-            peak_week = 27,
-            d1_intercept = -2.4,
-            d1_temp_coef = 0.37,
-            d2_intercept = -2.1,
-            d2_temp_coef = 0.037,
-            s1_sessile = 0.49,
-            s2_scaling = 2.3,
-            s3_motile = 0.88,
-            s4_adult = 0.61,
-            external_influx = 0.1
-        )
-    elseif location == "west"
-        return LocationParams(
-            T_mean = 16.0,
-            T_amp = 4.5,
-            peak_week = 27,
-            d1_intercept = -1.5,
-            d1_temp_coef = 0.5,
-            d2_intercept = -1.0,
-            d2_temp_coef = 0.1,
-            s1_sessile = 0.6,
-            s2_scaling = 3.0,
-            s3_motile = 0.90, # Reduced from 0.95
-            s4_adult = 0.70,
-            external_influx = 0.12
-        )
-    elseif location == "south"
-        return LocationParams(
-            T_mean = 20.0,
-            T_amp = 4.5,
-            peak_week = 27,
-            d1_intercept = -1.5,
-            d1_temp_coef = 0.5,
-            d2_intercept = -1.0,
-            d2_temp_coef = 0.1,
-            s1_sessile = 0.7,      # Reduced from 0.8
-            s2_scaling = 3.5,      # Reduced from 5.0
-            s3_motile = 0.92,      # Reduced from 0.99
-            s4_adult = 0.85,       # Reduced from 0.99
-            external_influx = 0.15 # Reduced from 0.2
-        )
-    else
+    if !haskey(LOCATION_PARAMS, location)
         error("Invalid location: $location. Must be 'north', 'west', or 'south'")
     end
+    return LOCATION_PARAMS[location]
 end
 
 # ----------------------------
@@ -86,9 +78,9 @@ end
     # POMDP structure parameters (affect the policy being solved)
     costOfTreatment::Float64 = 10.0
     growthRate::Float64 = 0.15
-    reproduction_rate::Float64 = 2.0
+    reproduction_rate::Float64 = 4.0
     discount_factor::Float64 = 0.95
-    raw_space_sampling_sd::Float64 = 0.5
+    adult_sd::Float64 = 0.1
     log_space::Bool = false
     regulation_limit::Float64 = 0.5
     location::String = "north"
@@ -114,7 +106,7 @@ end
 # ----------------------------
 # Simulation Configuration (for evaluating policies)
 # ----------------------------
-@with_kw mutable struct SimulationConfig
+@with_kw struct SimulationConfig
     # Simulation run parameters
     num_episodes::Int = 10
     steps_per_episode::Int = 20
@@ -124,12 +116,19 @@ end
     high_fidelity_sim::Bool = true
 
     # SimPOMDP parameters (stochasticity in simulation)
-    adult_mean::Float64 = 0.125
-    motile_mean::Float64 = 0.25
-    sessile_mean::Float64 = 0.25
-    adult_sd::Float64 = 0.05
-    motile_sd::Float64 = 0.1
-    sessile_sd::Float64 = 0.1
+    adult_mean::Float64 = 0.13
+    motile_mean::Float64 = 0.47
+    sessile_mean::Float64 = 0.12
+
+    # Observation noise (biological variability in transitions)
+    adult_obs_sd::Float64 = 0.17 
+    motile_obs_sd::Float64 = 0.327
+    sessile_obs_sd::Float64 = 0.10
+
+    # Observation noise (measurement uncertainty from Negative Binomial sampling)
+    adult_sd::Float64 = 0.1
+    motile_sd::Float64 = 0.29
+    sessile_sd::Float64 = 0.16
     temp_sd::Float64 = 0.3
 
     # Observation parameters from Aldrin et al. 2023
@@ -152,7 +151,7 @@ end
 # ----------------------------
 # Experiment struct (combines solver and simulation configs)
 # ----------------------------
-@with_kw mutable struct ExperimentConfig
+@with_kw struct ExperimentConfig
     # Configurations
     solver_config::SolverConfig = SolverConfig()
     simulation_config::SimulationConfig = SimulationConfig()
@@ -170,21 +169,12 @@ end
 end
 
 # ----------------------------
-# Heuristic config struct
-# ----------------------------
-@with_kw struct HeuristicConfig
-    raw_space_threshold::Float64 = 0.4
-    belief_threshold_mechanical::Float64 = 0.3
-    belief_threshold_chemical::Float64 = 0.35
-    belief_threshold_thermal::Float64 = 0.4
-    rho::Float64 = 0.8
-end
-
-# ----------------------------
 # Algorithm struct
 # ----------------------------
+struct HeuristicSolver <: Solver end
+
 @with_kw struct Algorithm{S<:Union{Solver, Nothing}}
-    solver::S = nothing # TODO: set to heuristic solver
+    solver::S = HeuristicSolver()
     solver_name::String = "Heuristic_Policy"
-    heuristic_config::HeuristicConfig = HeuristicConfig()
+    solver_config::SolverConfig = SolverConfig()
 end

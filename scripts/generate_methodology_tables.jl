@@ -85,6 +85,9 @@ function latex_math(value::Real; digits::Int=3)
     return raw"$" * format_number(value; digits=value isa Integer ? 0 : digits) * raw"$"
 end
 
+format_fixed(value::Real; digits::Int=2) = @sprintf("%.*f", digits, Float64(value))
+latex_fixed(value::Real; digits::Int=2) = raw"$" * format_fixed(value; digits=digits) * raw"$"
+
 function latex_percent(value::Real; digits::Int=0)
     return latex_math(value * 100; digits=digits)
 end
@@ -301,7 +304,7 @@ function solver_model_rows(config::ExperimentConfig)
         ("Reproduction rate", format_number(sc.reproduction_rate; digits=2)),
         ("Growth rate", format_number(sc.growthRate; digits=2)),
         ("State discretization step", format_number(sc.discretization_step; digits=2)),
-        ("Raw-space sampling sd", format_number(sc.raw_space_sampling_sd; digits=2)),
+        ("Raw-space sampling sd", format_number(sc.adult_sd; digits=2)),
         ("Solver reward weights \\(\\lambda\\)", latex_array(sc.reward_lambdas)),
         ("Log-space solver", format_bool(sc.log_space)),
     ]
@@ -353,7 +356,7 @@ function fish_population_rows(config::ExperimentConfig)
     return [
         (parameter=raw"Asymptotic weight ($w_{\max}$)", value=latex_math(sim.w_max; digits=1), description="Maximum harvest weight (kg)", source=SOURCE_MODEL),
         (parameter=raw"Growth rate ($k_{\text{growth}}$)", value=latex_math(sim.k_growth; digits=2), description="Weekly von Bertalanffy growth rate", source=SOURCE_ALDRIN),
-        (parameter="Temperature sensitivity", value=latex_math(sim.temp_sensitivity; digits=2), description="Temperature effect on growth (°C)", source=SOURCE_ALDRIN),
+        (parameter=raw"Temperature sensitivity ($\alpha_T$)", value=latex_math(sim.temp_sensitivity; digits=2), description="Temperature effect on growth (°C)", source=SOURCE_ALDRIN),
         (parameter="Natural mortality rate", value=latex_math(sim.nat_mort_rate; digits=4), description="Weekly natural mortality fraction", source=SOURCE_ALDRIN),
         (parameter="Treatment mortality bump", value=latex_math(sim.trt_mort_bump; digits=3), description="Extra mortality applied in treatment weeks", source=SOURCE_ALDRIN),
         (parameter="Production start week", value=latex_math(sim.production_start_week; digits=0), description="Week of production start", source=SOURCE_MODEL),
@@ -466,6 +469,96 @@ function location_dynamics_rows()
     return rows
 end
 
+function region_environment_rows()
+    params = Dict(loc => get_location_params(loc) for loc in LOCATION_ORDER)
+    labels = Dict("north" => "North", "west" => "West", "south" => "South")
+    rows = Vector{NamedTuple{(:region, :t_mean, :t_amp, :peak_week, :external_influx), NTuple{5, String}}}()
+    for loc in LOCATION_ORDER
+        par = params[loc]
+        push!(rows, (
+            region = labels[loc],
+            t_mean = latex_math(par.T_mean; digits=1),
+            t_amp = latex_math(par.T_amp; digits=1),
+            peak_week = latex_math(par.peak_week; digits=0),
+            external_influx = latex_math(par.external_influx; digits=2) * raw"\tnote{a}"
+        ))
+    end
+    return rows
+end
+
+function write_region_environment_table(rows; filename::String, caption::String, label::String)
+    mkpath(OUTPUT_DIR)
+    lines = String[]
+    push!(lines, "\\begin{table}[htbp!]")
+    push!(lines, "\\centering")
+    push!(lines, "    \\caption{$caption}")
+    push!(lines, "    \\label{$label}")
+    push!(lines, "    \\begin{threeparttable}")
+    push!(lines, "    \\begin{tabular}{@{}lcccc@{}}")
+    push!(lines, "    \\toprule")
+    push!(lines, "    Region & \\(T_{\\text{mean}}\\) (\\(^{\\circ}\\)C) & \\(T_{\\text{amp}}\\) (\\(^{\\circ}\\)C) & \\(W_{\\text{peak}}\\) (week) & \\(\\lambda_{\\text{ext}}\\) \\\\")
+    push!(lines, "    \\midrule")
+    for row in rows
+        push!(lines, "    $(row.region) & $(row.t_mean) & $(row.t_amp) & $(row.peak_week) & $(row.external_influx) \\\\")
+    end
+    push!(lines, "    \\bottomrule")
+    push!(lines, "    \\end{tabular}")
+    push!(lines, "    \\begin{tablenotes}")
+    push!(lines, "    \\item[a] Model assumptions calibrated to reflect warmer-region larval pressure.")
+    push!(lines, "    \\end{tablenotes}")
+    push!(lines, "    \\end{threeparttable}")
+    push!(lines, "\\end{table}")
+    output_path = joinpath(OUTPUT_DIR, filename)
+    open(output_path, "w") do io
+        write(io, join(lines, "\n"))
+    end
+    return output_path
+end
+
+function noise_parameter_rows(config::ExperimentConfig)
+    sim = config.simulation_config
+    sim_defaults = DEFAULT_SIM_POMDP
+    rows = [
+        (symbol=raw"$\sigma_A$", value=latex_fixed(sim.adult_sd; digits=2), description="Adult lice process noise"),
+        (symbol=raw"$\sigma_A^{\mathrm{obs}}$", value=latex_fixed(sim.adult_sd; digits=2), description="Adult lice observation noise (Kalman filter)"),
+        (symbol=raw"$\sigma_M$", value=latex_fixed(sim.motile_sd; digits=2), description="Motile lice process noise"),
+        (symbol=raw"$\sigma_M^{\mathrm{obs}}$", value=latex_fixed(sim.motile_sd; digits=2), description="Motile lice observation noise (Kalman filter)"),
+        (symbol=raw"$\sigma_S$", value=latex_fixed(sim.sessile_sd; digits=2), description="Sessile lice process noise"),
+        (symbol=raw"$\sigma_S^{\mathrm{obs}}$", value=latex_fixed(sim.sessile_sd; digits=2), description="Sessile lice observation noise (Kalman filter)"),
+        (symbol=raw"$\sigma_T$", value=latex_fixed(sim.temp_sd; digits=2), description="Temperature process noise"),
+        (symbol=raw"$\sigma_T^{\mathrm{obs}}$", value=latex_fixed(sim.temp_sd; digits=2), description="Temperature observation noise"),
+        (symbol=raw"$\sigma_W$", value=latex_fixed(sim_defaults.weight_sd; digits=2), description="Fish weight observation noise"),
+        (symbol=raw"$\sigma_N$", value=latex_fixed(sim_defaults.number_of_fish_sd; digits=2), description="Fish count observation noise"),
+    ]
+    return rows
+end
+
+function write_noise_table(rows; filename::String, caption::String, label::String)
+    mkpath(OUTPUT_DIR)
+    lines = String[]
+    push!(lines, "\\begin{table}[htbp!]")
+    push!(lines, "\\centering")
+    push!(lines, "    \\caption{$caption}")
+    push!(lines, "    \\label{$label}")
+    push!(lines, "    \\begin{threeparttable}")
+    push!(lines, "    \\begin{tabular}{@{}lcc@{}}")
+    push!(lines, "    \\toprule")
+    push!(lines, "    Noise term & Value & Description \\\\")
+    push!(lines, "    \\midrule")
+    for row in rows
+        push!(lines, "    $(row.symbol) & $(row.value) & $(row.description) \\\\")
+    end
+    push!(lines, "    \\bottomrule")
+    push!(lines, "    \\end{tabular}")
+    push!(lines, "    \\end{threeparttable}")
+    push!(lines, "\\end{table}")
+    output_path = joinpath(OUTPUT_DIR, filename)
+    open(output_path, "w") do io
+        write(io, join(lines, "\n"))
+    end
+    return output_path
+end
+
 function load_reward_metrics(config::ExperimentConfig; λ::Float64=0.6)
     csv_path = joinpath(config.results_dir, "reward_metrics_lambda_$(λ).csv")
     isfile(csv_path) || error("Missing reward metrics at $(csv_path)")
@@ -562,6 +655,14 @@ function main()
         filename="regional_dynamics.tex",
         caption="Regional temperature and development dynamics for Norwegian sites.",
         label="tab:regional_dynamics"))
+    push!(outputs, write_region_environment_table(region_environment_rows();
+        filename="regional_environment_summary.tex",
+        caption="Region-specific environmental parameters.",
+        label="tab:region_environment_params"))
+    push!(outputs, write_noise_table(noise_parameter_rows(config);
+        filename="noise_parameters.tex",
+        caption="Process and observation noise parameters used in solvers and simulator.",
+        label="tab:noise_params"))
     push!(outputs, write_lambda_table(
         ["Region", raw"$\lambda_{trt}$", raw"$\lambda_{reg}$", raw"$\lambda_{bio}$", raw"$\lambda_{fd}$", raw"$\lambda_{lice}$"],
         [solver_lambda_rows(config)];

@@ -222,11 +222,6 @@ function POMDPs.reward(pomdp::SeaLicePOMDP, s::SeaLiceState, a::Action)
     # === 2. REGULATORY PENALTY (exponential above limit) ===
     # Reflects escalating consequences: fines, production caps, license restrictions
     if adult_level > pomdp.regulation_limit
-        excess_ratio = adult_level / pomdp.regulation_limit
-        # Penalty grows as: 100 * (excess%)^2 * ratio
-        # At 0.6 (20% over): 100 * 0.2^2 * 1.2 = 4.8
-        # At 0.75 (50% over): 100 * 0.5^2 * 1.5 = 37.5
-        # At 1.0 (100% over): 100 * 1.0^2 * 2.0 = 200
         regulatory_penalty = 100.0 # * ((excess_ratio - 1.0)^2) * excess_ratio
     else
         regulatory_penalty = 0.0

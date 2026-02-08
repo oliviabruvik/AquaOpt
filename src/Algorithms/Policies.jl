@@ -14,10 +14,6 @@ using Plots
 # ----------------------------
 function create_pomdp_mdp(λ, config)
 
-    # Create directory for POMDP and MDP
-    pomdp_mdp_dir = joinpath(config.experiment_dir, "pomdp_mdp")
-    mkpath(pomdp_mdp_dir)
-
     sim_cfg = config.simulation_config
     adult_mean = max(sim_cfg.adult_mean, 1e-6)
     motile_ratio = sim_cfg.motile_mean / adult_mean
@@ -31,7 +27,7 @@ function create_pomdp_mdp(λ, config)
             costOfTreatment=config.solver_config.costOfTreatment,
             discount_factor=config.solver_config.discount_factor,
             discretization_step=config.solver_config.discretization_step,
-            adult_sd=abs(log(config.solver_config.raw_space_sampling_sd)),
+            adult_sd=config.solver_config.adult_sd,
             regulation_limit=config.solver_config.regulation_limit,
             full_observability_solver=config.solver_config.full_observability_solver,
             location=config.solver_config.location,
@@ -47,7 +43,7 @@ function create_pomdp_mdp(λ, config)
             costOfTreatment=config.solver_config.costOfTreatment,
             discount_factor=config.solver_config.discount_factor,
             discretization_step=config.solver_config.discretization_step,
-            adult_sd=config.solver_config.raw_space_sampling_sd,
+            adult_sd=config.solver_config.adult_sd,
             regulation_limit=config.solver_config.regulation_limit,
             full_observability_solver=config.solver_config.full_observability_solver,
             location=config.solver_config.location,
@@ -59,46 +55,38 @@ function create_pomdp_mdp(λ, config)
     end
 
     mdp = UnderlyingMDP(pomdp)
-
-    # Save POMDP and MDP to file
-    pomdp_mdp_filename = "pomdp_mdp_$(λ)_lambda"
-    pomdp_mdp_file_path = joinpath(pomdp_mdp_dir, "$(pomdp_mdp_filename).jld2")
-    @save pomdp_mdp_file_path pomdp mdp
-    # @info "Saved POMDP and MDP to file $(pomdp_mdp_file_path)"
-
-    # Save POMDP as POMDPX file for NUS SARSOP
-    pomdpx_file_path = joinpath(pomdp_mdp_dir, "pomdp.pomdpx")
-    pomdpx = POMDPXFile(pomdpx_file_path)
-    # POMDPXFiles.write(pomdp, pomdpx)
-    # @info "Saved POMDP as POMDPX file $(pomdpx_file_path)"
-
     return pomdp, mdp
 end
 
 # ----------------------------
 # Generate MDP and POMDP policies
 # ----------------------------
-function generate_mdp_pomdp_policies(algorithm, config)
+function solve_policies(algorithms, config)
 
-    policies_dir = joinpath(config.policies_dir, "$(algorithm.solver_name)")
-    mkpath(policies_dir)
+    λ = config.lambda_values[1]
+    pomdp, mdp = create_pomdp_mdp(λ, config)
 
-    # Generate policies for each lambda
-    for λ in config.lambda_values
-
-        # Generate POMDP and MDP
-        pomdp, mdp = create_pomdp_mdp(λ, config)
+    all_policies = Dict{String, Dict{Float64, NamedTuple}}()
+        
+    for algo in algorithms
 
         # Generate policy
-        policy = generate_policy(algorithm, pomdp, mdp)
+        policy = generate_policy(algo, pomdp, mdp)
 
-        # Save policy, pomdp, and mdp to file
-        policy_pomdp_mdp_filename = "policy_pomdp_mdp_$(λ)_lambda"
-        @save joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2") policy pomdp mdp
-        #@info "Saved policy, pomdp, and mdp to file $(joinpath(policies_dir, "$(policy_pomdp_mdp_filename).jld2"))"
-
-        return policy, pomdp, mdp
+        # Store in-memory
+        if !haskey(all_policies, algo.solver_name)
+            all_policies[algo.solver_name] = Dict{Float64, NamedTuple}()
+        end
+        all_policies[algo.solver_name][λ] = (policy=policy, pomdp=pomdp, mdp=mdp)
     end
+
+    # Save all_policies, pomdp, and mdp to file
+    policies_dir = joinpath(config.policies_dir)
+    mkpath(policies_dir)
+    policies_pomdp_mdp_filename = "policies_pomdp_mdp_$(λ)_lambda"
+    @save joinpath(policies_dir, "$(policies_pomdp_mdp_filename).jld2") all_policies pomdp mdp
+
+    return all_policies
 end
 
 # ----------------------------
@@ -108,7 +96,7 @@ function generate_policy(algorithm, pomdp, mdp)
 
     # Heuristic Policy
     if algorithm.solver_name == "Heuristic_Policy"
-        return HeuristicPolicy(pomdp, algorithm.heuristic_config)
+        return HeuristicPolicy(pomdp, algorithm.solver_config)
 
     # Random policy
     elseif algorithm.solver_name == "Random_Policy"
@@ -128,6 +116,10 @@ function generate_policy(algorithm, pomdp, mdp)
 
     # SARSOP and QMDP policies
     else
+        if algorithm.solver isa SARSOP.SARSOPSolver
+            mkpath(dirname(algorithm.solver.policy_filename))
+            mkpath(dirname(algorithm.solver.pomdp_filename))
+        end
         return solve(algorithm.solver, pomdp)
     end
 end
@@ -185,7 +177,7 @@ end
 # ----------------------------
 struct HeuristicPolicy{P<:POMDP} <: Policy
     pomdp::P
-    heuristic_config::HeuristicConfig
+    solver_config::SolverConfig
 end
 
 # Heuristic action
@@ -194,20 +186,20 @@ function POMDPs.action(policy::HeuristicPolicy, b)
 
     # Get the probability of the current sea lice level being above the threshold
     state_space = states(policy.pomdp)
-    threshold = policy.heuristic_config.raw_space_threshold
+    threshold = policy.solver_config.heuristic_threshold
     if policy.pomdp isa SeaLiceLogPOMDP
         threshold = log(threshold)
     end
     prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
 
     # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
-    if prob_above_threshold > policy.heuristic_config.belief_threshold_thermal
+    if prob_above_threshold > policy.solver_config.heuristic_belief_threshold_thermal
         return ThermalTreatment
     # Chemical treatment for mid-level infestations
-    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_chemical
+    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_chemical
         return ChemicalTreatment
     # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose MechanicalTreatment
-    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
+    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_mechanical
         return MechanicalTreatment
     # Otherwise, choose NoTreatment
     else
@@ -223,15 +215,15 @@ function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
 
     # Convert the threshold in log space if needed
     if policy.pomdp isa SeaLiceLogPOMDP
-        threshold = log(policy.heuristic_config.raw_space_threshold)
+        threshold = log(policy.solver_config.heuristic_threshold)
     else
-        threshold = policy.heuristic_config.raw_space_threshold
+        threshold = policy.solver_config.heuristic_threshold
     end
 
     if use_cdf
         # Method 1: Calculate probability of being above threshold
         prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
-        return prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
+        return prob_above_threshold > policy.solver_config.heuristic_belief_threshold_mechanical
     else
         # Method 2: Use mode of belief vector
         mode_sealice_level_index = argmax(b)

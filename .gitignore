@@ -17,3 +17,6 @@ src/Tests/NUS_SARSOP.pomdp
 documentation/
 src/TestVI.jl
 logs/
+.julia/
+.julia_depot/
+.claude/

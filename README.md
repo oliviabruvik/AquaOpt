@@ -1,445 +1,191 @@
 # AquaOpt: Sea Lice Management Optimization
 
-A Julia-based project for optimizing sea lice management strategies in aquaculture using various reinforcement learning and control algorithms.
+AquaOpt is a Julia package for designing and assessing sea lice mitigation strategies on Norwegian salmon farms. The codebase couples low‑dimensional POMDP solvers with a biologically detailed simulator, making it possible to compare classic control baselines against modern POMDP methods while keeping the ecological and regulatory assumptions explicit.
 
-## Project Structure
+## Repository Layout
 
 ```
-AquaOpt/
-├── data/
-│   ├── raw/                    # Raw data files
-│   │   ├── fish_disease.csv    # Fish disease data
-│   │   ├── lice_treatments.csv # Treatment data
-│   │   ├── licedata.csv        # Sea lice data
-│   │   └── salmon_lice.csv     # Salmon lice data
-│   └── processed/              # Processed data files
-│       ├── bayesian_data.csv   # Bayesian analysis data
-│       ├── sealice_data.csv    # Processed sea lice data
-│       └── combined_*.csv      # Combined datasets
-├── results/
-│   ├── experiments/            # Experiment results by date
-│   ├── figures/               # Generated plots and visualizations
-│   ├── policies/              # Saved policy files
-│   ├── data/                  # Simulation results
-│   └── sensitivity_analysis/  # Sensitivity analysis results
-├── src/
-│   ├── AquaOpt.jl             # Main module entry point
-│   ├── Models/                # POMDP model definitions
-│   │   ├── SeaLicePOMDP.jl    # Base POMDP model
-│   │   ├── SeaLiceLogPOMDP.jl # Log-space POMDP model
-│   │   ├── SimulationPOMDP.jl # Simulation environment
-│   │   ├── SimulationLogPOMDP.jl # Log-space simulation
-│   │   └── KalmanFilter.jl    # State estimation filters
-│   ├── Algorithms/            # Algorithm implementations
-│   │   ├── Policies.jl        # Policy implementations
-│   │   ├── Simulation.jl      # Simulation engine
-│   │   ├── Evaluation.jl      # Policy evaluation and metrics
-│   │   └── SensitivityAnalysis.jl # Sensitivity analysis
-│   ├── Plotting/              # Visualization modules
-│   │   ├── Timeseries.jl      # Time series plots and treatment distributions
-│   │   ├── Comparison.jl      # Policy comparison plots
-│   │   ├── Heatmaps.jl        # Heatmap visualizations
-│   │   └── Convergence.jl     # Convergence analysis plots
-│   ├── Data/                  # Data handling
-│   │   ├── Loading.jl         # Data loading utilities
-│   │   └── Cleaning.jl        # Data preprocessing
-│   ├── Utils/                 # Utility modules
-│   │   ├── Config.jl          # Configuration management
-│   │   ├── Logging.jl         # Logging utilities
-│   │   └── Validation.jl      # Input validation
-│   └── MLE/                   # Maximum Likelihood Estimation
-├── notebooks/                 # Jupyter notebooks for analysis
-├── scripts/                   # Execution scripts
-├── tests/                     # Test suite
-├── Project.toml               # Package dependencies
-└── Manifest.toml              # Dependency lock file
+.
+├── src/                     # Core package (models, solvers, plotting, utilities)
+├── scripts/                 # Reproducible analysis + manuscript tables
+├── results/                 # Auto-generated experiment folders (policies, histories, plots)
+├── final_results/, logs/    # Convenience exports from long experiments
+├── paper_plots.jl           # Helper for manuscript-ready plots
+├── Project.toml/Manifest.toml
+└── runs.txt                 # Notes about previously executed runs
 ```
 
-## Overview
+`src/AquaOpt.jl` wires every module together and exposes `main`, `run_experiments`, and plotting utilities so they can be called from scripts or notebooks.
 
-This project implements various algorithms for optimizing sea lice management in aquaculture facilities. It uses Partially Observable Markov Decision Processes (POMDPs) to model the sea lice population dynamics and treatment decisions. The system considers multiple treatment options including chemical treatments, thermal treatments, and no-treatment scenarios.
+## Modeling Summary
 
-## Key Components
+AquaOpt defines three nested models:
 
-### 1. Models (`src/Models/`)
-- **SeaLicePOMDP.jl**: Base POMDP model for sea lice management in raw space
-- **SeaLiceLogPOMDP.jl**: Log-space POMDP model with biological dynamics
-  - Uses `predict_next_abundances` for biologically accurate stage-structured transitions
-  - Incorporates temperature-dependent development rates
-  - Includes reproduction feedback (2.0 new sessile per adult per week)
-  - Matches simulator dynamics to eliminate train/test mismatch
-- **SimulationPOMDP.jl**: High-fidelity simulation environment with full biological model
-  - 4-state system: Adult, Motile, Sessile, Temperature
-  - Temperature-driven stage transitions using logistic development rates
-  - External larval influx from environment
-  - Growth cap at 30 adult lice per fish
-- **KalmanFilter.jl**: State estimation using Extended Kalman Filter (EKF)
+1. `SeaLicePOMDP`: 1-D adult abundance model in natural space.
+2. `SeaLiceLogPOMDP`: identical dynamics solved in log space for numerical stability.
+3. `SeaLiceSimPOMDP`: the high-fidelity simulator used for evaluation with explicit stage structure, biomass, temperature, and farm operations.
 
-### 2. Algorithms (`src/Algorithms/`)
-The project implements several algorithms for policy optimization:
+All models share actions, rewards, and observation assumptions.
 
-1. **Value Iteration (VI)**
-   - Classic dynamic programming approach
-   - Solves the underlying MDP
+### Temperature Forcing
 
-2. **SARSOP**
-   - Point-based POMDP solver
-   - Efficient for large state spaces
+Water temperature for location ℓ ∈ {north, west, south} is a cosine prior:
 
-3. **QMDP**
-   - Approximate POMDP solver
-   - Assumes full observability for next step
-
-4. **Heuristic Policy**
-   - Simple threshold-based policy
-   - Uses belief state for decision making
-
-5. **Random Policy**
-   - Baseline policy for comparison
-
-### 3. Plotting (`src/Plotting/`)
-- **Timeseries.jl**: 
-  - Sea lice levels over time with confidence intervals
-  - Treatment distribution comparisons
-  - Policy belief evolution
-  - Treatment cost analysis
-  - Population dynamics visualization
-- **Comparison.jl**: Policy comparison and Pareto frontiers
-- **Heatmaps.jl**: Treatment decision heatmaps
-- **Convergence.jl**: Algorithm convergence analysis
-
-### 4. Data Handling (`src/Data/`)
-- **Loading.jl**: Data loading and preprocessing utilities
-- **Cleaning.jl**: Data cleaning and transformation functions
-
-### 5. Utilities (`src/Utils/`)
-- **Config.jl**: Configuration management and validation
-- **Logging.jl**: Structured logging and progress tracking
-- **Validation.jl**: Input validation and error handling
-
-## Key Features
-
-### Biological Fidelity
-- **Stage-Structured Population Model**: Tracks adult, motile, and sessile sea lice separately
-- **Temperature-Dependent Development**: Logistic development rates based on water temperature
-  - Sessile → Motile: `d1(T) = 1/(1 + exp(-(d1_intercept + d1_temp_coef × (T - T_mean))))`
-  - Motile → Adult: `d2(T) = 1/(1 + exp(-(d2_intercept + d2_temp_coef × (T - T_mean))))`
-- **Reproduction Feedback**: Adults produce new sessile larvae (2.0/week)
-- **External Influx**: Environmental larval pressure (0.1-0.15 sessile/fish/week)
-- **Location-Specific Parameters**: Different survival rates for North, West, and South locations
-- **Growth Cap**: Adult lice capped at 30 per fish to prevent unrealistic explosions
-
-### Treatment Analysis
-- **Multiple Treatment Types**:
-  - Chemical Treatment (cost: 10 MNOK, 75% adult reduction, 5% fish mortality)
-  - Thermal Treatment (cost: 13 MNOK, 88% adult reduction, 7% fish mortality)
-  - No Treatment (cost: 0, no reduction, 0% mortality)
-- **Treatment Distribution Analysis**: Bar charts comparing treatment frequencies between policies
-- **Cost-Benefit Analysis**: Treatment costs vs. sea lice control effectiveness
-- **Stochastic Effectiveness**: Treatment outcomes vary with Gaussian noise
-
-### Population Dynamics
-- **Sea Lice Stages**: Adult, motile, and sessile sea lice with stage transitions
-- **Regulatory Compliance**: Monitoring against regulatory limits (0.5 adult female lice per fish)
-- **Belief State Evolution**: Extended Kalman Filter for state estimation from noisy observations
-- **Biomass Tracking**: Fish population and weight dynamics with mortality and growth
-
-### Policy Comparison
-- **Multi-Policy Evaluation**: Comparison across VI, SARSOP, QMDP, and heuristic policies
-- **Model Alignment**: Solver and simulator now use identical biological dynamics
-- **Statistical Analysis**: Confidence intervals and statistical significance testing
-- **Sensitivity Analysis**: Parameter sensitivity across different scenarios and locations
-
-## Usage
-
-### Basic Usage
-
-Run the main optimization script:
-```julia
-julia scripts/main.jl
+```
+T(week, ℓ) = T_mean[ℓ] + T_amp[ℓ] * cos(2π * (week - peak_week[ℓ]) / 52)
 ```
 
-### Policy Comparison
+Location parameters (stored in `src/Utils/Config.jl`) enforce realistic profiles, e.g. `north: T_mean=12 °C, T_amp=4.5, peak_week=27`, while the south site reaches `20 °C` on average. The same parameter set also defines development coefficients (`d1_*`, `d2_*`), survival rates (`s1…s4`), and external larval influx.
 
-Compare specific policies (e.g., Heuristic vs SARSOP):
-```julia
-using AquaOpt
+### Stage-Structured Dynamics
 
-# Load your parallel data and config
-# Then create comparison plots
-plot_heuristic_vs_sarsop_sealice_levels_over_time(parallel_data, config)
-plot_treatment_distribution_comparison(parallel_data, config)
+Both the simulator and the abstract POMDP transition through the helper `predict_next_abundances` (`src/Utils/Utils.jl`). For adult (`A_t`), motile (`M_t`), and sessile (`S_t`) lice, with water temperature `T_t`, location-specific parameters, and reproduction rate `ρ`:
+
+```
+d₁(T) = 1 / (1 + exp(-(d1_intercept + d1_temp_coef * (T - T_mean))))
+d₂(T) = 1 / (1 + exp(-(d2_intercept + d2_temp_coef * (T - T_mean))))
+
+S_{t+1} = s1_sessile * S_t + ρ * A_t + external_influx
+M_{t+1} = s3_motile * (1 - d₂) * M_t + s2_scaling * d₁ * S_t
+A_{t+1} = s4_adult * A_t + d₂ * 0.5 * (s3_motile + s4_adult) * M_t
 ```
 
-### Sensitivity Analysis
+Treatments apply multiplicative kill rates to `(A_t, M_t, S_t)` before the equations above. Adult lice are capped at 10 per fish to prevent numerical explosions. Default reproduction is `ρ = 2.0` new sessile larvae per adult female per week.
 
-Run sensitivity analysis across multiple parameters:
-```julia
-julia -e "using AquaOpt; main_sensitivity()"
+### Treatments and Action Set
+
+Actions are defined in `src/Utils/SharedTypes.jl`:
+
+| Action                | Cost (MNOK) | Adult↓ | Motile↓ | Sessile↓ | Mortality | Fish health penalty |
+|-----------------------|-------------|--------|---------|----------|-----------|---------------------|
+| `NoTreatment`         | 0.0         | 0%     | 0%      | 0%       | 0.00      | 0.0                 |
+| `MechanicalTreatment` | 10.0        | 75%    | 84%     | 74%      | 0.05      | 10.0                |
+| `ChemicalTreatment`   | 7.0         | 60%    | 58%     | 37%      | 0.04      | 7.0                 |
+| `ThermalTreatment`    | 13.0        | 88%    | 87%     | 70%      | 0.07      | 15.0                |
+
+Kill rates derive from Aldrin et al. (2023). Mortality and fish health penalties are expressed in percentage points and relative stress units, respectively, and propagate through the reward.
+
+### Observation and Belief Update
+
+Counts follow the Aldrin et al. (2023) sampling design: 20 fish are inspected per week (`n_sample = 20`). True lice per fish (`x`) are converted to total counts `μ_total = n_sample * p_scount * x`, where the optional under-reporting factor `p_scount = logistic(β₀ + β₁(W - 0.1))`.
+
+Negative binomial parameters use `k = n_sample * ρ_stage`, `r = k`, and `p = k / (k + μ_total)`. Default dispersions are `ρ_adult = 0.175`, `ρ_motile = 0.187`, `ρ_sessile = 0.037`. `SeaLicePOMDP` and `SeaLiceLogPOMDP` discretize that likelihood onto their state grids; `SeaLiceSimPOMDP` samples counts directly.
+
+During simulation the belief is maintained by an Unscented or Extended Kalman Filter (`src/Models/KalmanFilter.jl`) whose four-state vector is `[Adult, Motile, Sessile, Temperature]`. The process model is exactly the biological transition plus the temperature recursion, and the observation model is identity with diagonal Gaussian noise derived from simulator standard deviations.
+
+### Reward Structure
+
+Rewards are shared by all models (`SeaLicePOMDP.reward`, `SeaLiceLogPOMDP.reward`, `SeaLiceSimPOMDP.reward`) and use configurable weights `λ = [λ_trt, λ_reg, λ_bio, λ_health, λ_lice]`:
+
+```
+R = - (λ_trt * Cost_treat
+       + λ_reg * RegulatoryPenalty
+       + λ_bio * BiomassLoss
+       + λ_health * TreatmentStress
+       + λ_lice * LiceBurden)
 ```
 
-### Custom Configuration
+- `RegulatoryPenalty`: 100 when adult lice exceed the 0.5 lice/fish limit (provides a large deterrent and can be customized).
+- `BiomassLoss`: mortality from treatment (fraction * 400 tonnes) plus lice-driven growth reduction above 0.5 lice/fish in the low-dimensional models; the simulator additionally reduces growth through its state transition.
+- `TreatmentStress`: action-specific `fish_disease` penalty (table above).
+- `LiceBurden`: `Adult * (1 + 0.2 * max(0, Adult - 0.5))`, capturing non-linear damage.
 
-Create a custom configuration:
-```julia
-using AquaOpt
+Solver defaults (see `SolverConfig`) weight treatment cost heavily, while simulation reward weights (`SimulationConfig.sim_reward_lambdas`) emphasize welfare.
 
-# Define algorithms
-algorithms = [
-    Algorithm(solver_name="Heuristic_Policy"),
-    Algorithm(solver=ValueIterationSolver(max_iterations=30), solver_name="VI_Policy")
-]
+## Solvers and Policies
 
-# Define configuration
-config = Config(num_episodes=1000, steps_per_episode=52)
-pomdp_config = POMDPConfig(log_space=true)
+Defined in `src/Algorithms/Policies.jl` and instantiated via `define_algorithms`:
 
-# Run optimization
-results = test_optimizer(algorithms[1], config, pomdp_config)
+- `NeverTreat_Policy` / `AlwaysTreat_Policy`: deterministic baselines.
+- `Random_Policy`: draws uniformly over the four actions.
+- `Heuristic_Policy`: compares the posterior probability of exceeding a lice threshold (default 0.4 adult lice/fish) against action-specific belief thresholds (0.3 / 0.35 / 0.4 for mechanical/chemical/thermal).
+- `NUS_SARSOP_Policy`: SARSOP from the `SARSOP.jl` package fed with the discretized `SeaLice(Log)POMDP`.
+- `VI_Policy`: discrete value iteration from `DiscreteValueIteration.jl`.
+- `QMDP_Policy`: myopic QMDP approximation.
+
+Low-fidelity policies are wrapped by `AdaptorPolicy` (for simulator rollouts) or `LOFIAdaptorPolicy` (when simulator = solver model) to convert Gaussian beliefs into the discrete belief vectors expected by POMDPTools. For full-observability sanity checks there is also a `FullObservabilityAdaptorPolicy` that feeds true simulator states to the policy.
+
+## Simulation, Evaluation, and State Variables
+
+`SeaLiceSimPOMDP` (see `src/Models/SimulationPOMDP.jl`) augments lice stages with farm context:
+
+```
+EvaluationState = (
+    SeaLiceLevel_pred, Adult, Motile, Sessile, Temperature,
+    ProductionWeek, AnnualWeek, NumberOfFish, AvgFishWeight, Salinity
+)
 ```
 
-## Configuration
+Key transition steps per week:
 
-### Main Configuration (`Config`)
-- `lambda_values`: Trade-off between treatment cost and sea lice levels
-- `num_episodes`: Number of episodes for policy evaluation
-- `steps_per_episode`: Simulation horizon
-- `heuristic_threshold`: Threshold for heuristic policy
-- `process_noise`: Process noise for simulation
-- `observation_noise`: Observation noise for simulation
+1. Apply action-specific kill rates to `Adult/Motile/Sessile`.
+2. Advance biology with `predict_next_abundances`.
+3. Update temperature using the cosine model (location dependent).
+4. Update average weight with a von Bertalanffy-style rule:
+   `W_{t+1} = W_t + k(T, lice) * (w_max - W_t)` where `k = max(0, k_growth * (1 + temp_sensitivity * (T - 10)) * lice_growth_factor)` and `lice_growth_factor = 1 / (1 + exp(5*(Adult - 0.5)))`.
+5. Update fish counts with natural mortality (0.08%/week) and treatment mortality, plus any scripted harvest/move events.
+6. Add Gaussian process noise to lice stages and temperature, then sample noisy observations via the negative binomial model.
 
-### POMDP Configuration (`POMDPConfig`)
-- `costOfTreatment`: Cost of treatment action
-- `growthRate`: Sea lice growth rate
-- `discount_factor`: Discount factor for future rewards
-- `log_space`: Whether to use log-space model
+The simulator’s reward tracks the same components described earlier, but biomass loss is derived from the fish counts and weights instead of a static approximation.
 
-## Results
+Evaluation is orchestrated in `src/Algorithms/Simulation.jl` and `Evaluation.jl`:
 
-Results are automatically saved in the `results/` directory:
+1. `generate_mdp_pomdp_policies` solves each policy for every λ in `ExperimentConfig.lambda_values` and stores them under `results/experiments/<exp>/<algo>/pomdp_mdp`.
+2. `simulate_all_policies` loads those policies, wraps them for simulator compatibility, and runs `num_episodes × steps_per_episode` rollouts with shared seeds.
+3. `extract_reward_metrics` computes treatment counts, average lice levels, biomass loss, regulatory exceedances, and fish disease tallies per episode/history.
+4. `evaluate_simulation_results` aggregates by λ and writes CSV/JLD summaries for manuscript tables.
 
-- **Policies**: Saved as JLD2 files in `results/policies/`
-- **Simulation Data**: Saved in `results/data/`
-- **Plots**: Generated in `results/figures/`
-  - Time series plots in `research_plots/sealice_time_plots/`
-  - Treatment distribution plots in `research_plots/treatment_plots/`
-  - Policy comparison plots in `research_plots/`
-- **Sensitivity Analysis**: Results in `results/sensitivity_analysis/`
+Histories and plots are written inside `results/experiments/<exp>/` so every run remains self-contained.
 
-## Dependencies
+## Plotting and Reports
 
-### Core Dependencies
-- **POMDPs.jl**: POMDP framework
-- **POMDPTools**: POMDP utilities and tools
-- **POMDPModels**: POMDP model implementations
-- **DiscreteValueIteration**: Value iteration solver
-- **NativeSARSOP**: SARSOP solver
-- **QMDP**: QMDP solver
+`src/Plotting/` contains utilities for the manuscript and diagnostics:
 
-### Data and Visualization
-- **DataFrames**: Data manipulation
-- **Plots**: Plotting framework
-- **JLD2**: Data serialization
-- **CSV**: CSV file handling
+- `Timeseries.jl`, `Comparison.jl`, `Heatmaps.jl`: lice trajectories, treatment distributions, policy comparisons, and action heatmaps.
+- `ParallelPlots.jl`, `PlosOnePlots.jl`: figure panels tailored for the manuscript (multiple policies per chart, treatment stack plots, etc.).
+- `PlotUtils.jl`: shared styling and PGFPlotsX helpers.
 
-### Utilities
-- **Parameters**: Parameterized structs
-- **GaussianFilters**: Kalman filter implementations
-- **Distributions**: Probability distributions
-- **Statistics**: Statistical functions
+`paper_plots.jl` shows how to load an experiment’s `parallel_data` and replay the plotting pipeline. Additional scripts:
 
-## Mathematical Formulation of the Sea Lice POMDP
+- `scripts/policy_analysis.jl`: runs `main` in “paper” mode for a chosen location.
+- `scripts/reward_analysis.jl`: sweeps reward weights to produce sensitivity plots.
+- `scripts/region_analysis.jl`: contrasts north/west/south parameterizations.
+- `scripts/aggregate_lambda_summaries.jl`: merges per-λ metrics into manuscript tables.
+- `scripts/generate_methodology_tables.jl`: exports LaTeX tables describing the exact equations above (useful when drafting the Methods section).
+- `scripts/simulation_tests.jl`: quick regression checks on simulator settings.
 
-### 1. Problem Definition
+## Running Experiments
 
-We formulate sea lice management in salmon aquaculture as a Partially Observable Markov Decision Process (POMDP) with the following components:
+1. **Install dependencies**
+   ```bash
+   julia --project=. -e 'using Pkg; Pkg.instantiate()'
+   ```
+2. **Configure reward weights** – supply `reward_lambdas` (solver) and `sim_reward_lambdas` (high-fidelity simulator). Example values from the manuscript:
+   ```julia
+   solver_weights = [0.8, 0.2, 0.0, 0.0, 0.0]
+   sim_weights = [0.7, 0.2, 0.1, 0.9, 2.0]
+   ```
+3. **Run the pipeline**
+   ```bash
+   julia --project=. -e '
+       using AquaOpt;
+       main(log_space=true,
+            experiment_name="paper_run",
+            mode="paper",
+            location="south",
+            ekf_filter=true,
+            plot=true,
+            reward_lambdas=solver_weights,
+            sim_reward_lambdas=sim_weights)
+   '
+   ```
+   `mode` selects solver hyperparameters (`debug`, `light`, `paper` presets in `setup_experiment_configs`).
+4. **Inspect outputs** – metrics (`results/experiments/.../avg_results.csv`), treatment breakdowns (`extract_reward_metrics`), and figures (`figures/`).
 
-#### 1.1 State Space
-The state $s_t \in \mathcal{S}$ at time $t$ is defined as:
-$$s_t = (L_t^A, L_t^M, L_t^S, T_t, W_t^P, W_t^A, N_t, W_t^F, S_t)$$
+## Notes for Manuscript Preparation
 
-where:
-- $L_t^A$: Adult sea lice level (lice per fish)
-- $L_t^M$: Motile sea lice level (lice per fish)  
-- $L_t^S$: Sessile sea lice level (lice per fish)
-- $T_t$: Water temperature (°C)
-- $W_t^P$: Production week (weeks since production start)
-- $W_t^A$: Annual week (week of the year, 1-52)
-- $N_t$: Number of fish in the pen
-- $W_t^F$: Average fish weight (kg)
-- $S_t$: Water salinity (psu, constant)
+- All methodology equations referenced above come directly from `predict_next_abundances` (biological drift), `get_temperature` (forcing), the action table (`ACTION_CONFIGS`), and the shared reward functions in `src/Models/`. The same functions are reused everywhere to avoid solver/simulator mismatch.
+- Parameter tables (`scripts/generate_methodology_tables.jl`) pull from the exact structs documented here, so citing those outputs in the manuscript will remain consistent with the code.
+- Solver metadata, config snapshots, and tracking CSVs are automatically written to `results/experiments/experiments.csv`, which is useful for the Methods section when listing run settings or seeds.
 
-#### 1.2 Action Space
-The action space $\mathcal{A}$ consists of three treatment options:
-$$\mathcal{A} = \{a_0, a_1, a_2\}$$
-
-where:
-- $a_0$: No treatment
-- $a_1$: Chemical treatment (cost: 10 MNOK, effectiveness: 75-84%)
-- $a_2$: Thermal treatment (cost: 15 MNOK, effectiveness: 70-88%)
-
-#### 1.3 Observation Space
-The observation $o_t \in \mathcal{O}$ is:
-$$o_t = (\hat{L}_t^A, \hat{L}_t^M, \hat{L}_t^S, \hat{T}_t, W_t^P, W_t^A, \hat{N}_t, \hat{W}_t^F, S_t)$$
-
-where $\hat{\cdot}$ denotes observed (noisy) values.
-
-### 2. State Transition Dynamics
-
-#### 2.1 Sea Lice Population Dynamics
-The sea lice levels evolve according to a stage-structured population model based on Stige et al. (2025):
-
-**Treatment Effect:**
-$$L_t^{A'} = L_t^A \cdot (1 - \rho_a(a))$$
-$$L_t^{M'} = L_t^M \cdot (1 - \rho_m(a))$$
-$$L_t^{S'} = L_t^S \cdot (1 - \rho_s(a))$$
-
-where $\rho_i(a)$ is the treatment effectiveness for stage $i \in \{A, M, S\}$:
-- Chemical: $\rho_A = 0.75$, $\rho_M = 0.84$, $\rho_S = 0.74$
-- Thermal: $\rho_A = 0.88$, $\rho_M = 0.87$, $\rho_S = 0.70$
-
-**Population Growth (Biological Model):**
-$$L_{t+1}^S = s_1 \cdot L_t^{S'} + r \cdot L_t^{A'} + I_{ext}$$
-$$L_{t+1}^M = s_3 \cdot (1 - d_2(T_t)) \cdot L_t^{M'} + s_2 \cdot d_1(T_t) \cdot L_t^{S'}$$
-$$L_{t+1}^A = \min(s_4 \cdot L_t^{A'} + d_2(T_t) \cdot 0.5 \cdot (s_3 + s_4) \cdot L_t^{M'}, 30.0)$$
-
-where:
-- $s_1$: sessile survival rate (location-dependent: 0.49-0.56)
-- $s_2$: sessile to motile scaling (location-dependent: 2.2-2.5)
-- $s_3$: motile survival rate (location-dependent: 0.75-0.88)
-- $s_4$: adult survival rate (location-dependent: 0.61-0.85)
-- $r = 2.0$: reproduction rate (new sessile per adult per week)
-- $I_{ext}$: external influx (0.10-0.15 sessile/fish/week, location-dependent)
-- $d_1(T) = \frac{1}{1 + \exp(-(d1_{int} + d1_{temp} \cdot (T - T_{mean})))}$: sessile → motile development
-- $d_2(T) = \frac{1}{1 + \exp(-(d2_{int} + d2_{temp} \cdot (T - T_{mean})))}$: motile → adult development
-- Growth capped at 30 adult lice per fish
-
-#### 2.2 Temperature Dynamics
-$$T_{t+1} = T_{mean} + T_{amp} \cdot \cos\left(\frac{2\pi(W_t^A - W_{peak})}{52}\right) + \epsilon_T$$
-
-where:
-- $T_{mean} = 12.0°C$: mean annual temperature
-- $T_{amp} = 4.5°C$: temperature amplitude
-- $W_{peak} = 27$: week of peak temperature
-- $\epsilon_T \sim \mathcal{N}(0, \sigma_T^2)$: temperature noise
-
-#### 2.3 Fish Population and Growth
-**Fish Growth (von Bertalanffy-like):**
-$$W_{t+1}^F = W_t^F + k_0(T_t) \cdot (W_{max} - W_t^F)$$
-
-where:
-- $k_0(T) = \max(k_{growth} \cdot (1 + \alpha_T(T - 10)), 0)$: temperature-dependent growth rate
-- $W_{max} = 5.0$ kg: asymptotic weight
-- $k_{growth} = 0.01$: base growth rate
-- $\alpha_T = 0.03$: temperature sensitivity
-
-**Fish Mortality:**
-$$N_{t+1} = N_t \cdot (1 - \mu_{nat}) \cdot (1 - \mu_{trt}(a)) - H_t + M_t^{in} - M_t^{out}$$
-
-where:
-- $\mu_{nat} = 0.0008$: natural mortality rate
-- $\mu_{trt}(a)$: treatment-induced mortality
-- $H_t$: harvest
-- $M_t^{in}, M_t^{out}$: fish movements
-
-### 3. Observation Model
-
-#### 3.1 Sea Lice Counting
-The observed sea lice counts follow negative binomial distributions:
-
-$$C_t^A \sim \text{NegBin}(r_A, p_A)$$
-$$C_t^M \sim \text{NegBin}(r_M, p_M)$$
-$$C_t^S \sim \text{NegBin}(r_S, p_S)$$
-
-where:
-- $r_i = n \cdot \rho_i$: dispersion parameter
-- $p_i = \frac{n \cdot \rho_i}{n \cdot \rho_i + \mu_i}$: success probability
-- $\mu_i = n \cdot p_{scount} \cdot L_t^i$: expected count
-- $n = 20$: number of fish sampled
-- $\rho_A = 0.175, \rho_M = 0.187, \rho_S = 0.037$: aggregation parameters
-- $p_{scount} = \frac{1}{1 + \exp(-(\beta_0 + \beta_1(W_t^F - W_0)))}$: under-counting correction
-
-The observed lice levels are:
-$$\hat{L}_t^i = \frac{C_t^i}{n}$$
-
-#### 3.2 Other Observations
-$$\hat{T}_t = T_t + \epsilon_T, \quad \epsilon_T \sim \mathcal{N}(0, \sigma_T^2)$$
-$$\hat{N}_t = N_t + \epsilon_N, \quad \epsilon_N \sim \mathcal{N}(0, \sigma_N^2)$$
-$$\hat{W}_t^F = W_t^F + \epsilon_W, \quad \epsilon_W \sim \mathcal{N}(0, \sigma_W^2)$$
-
-### 4. Reward Function
-
-The reward function $R(s_t, a_t, s_{t+1})$ is defined as:
-
-$$R(s_t, a_t, s_{t+1}) = -(\lambda_{trt} \cdot C_{trt}(a_t) + \lambda_{reg} \cdot P_{reg}(s_t) + \lambda_{bio} \cdot L_{bio}(s_t, a_t) + \lambda_{health} \cdot D_{health}(a_t) + \lambda_{lice} \cdot L_{burden}(s_t))$$
-
-where:
-
-**Treatment Cost:**
-$$C_{trt}(a) = \begin{cases}
-0 & \text{if } a = a_0 \text{ (No treatment)} \\
-10 & \text{if } a = a_1 \text{ (Mechanical treatment)} \\
-13 & \text{if } a = a_2 \text{ (Thermal treatment)}
-\end{cases}$$
-
-**Regulatory Penalty:**
-$$P_{reg}(s) = \begin{cases}
-100 & \text{if } L_t^A > 0.5 \\
-0 & \text{otherwise}
-\end{cases}$$
-
-**Biomass Loss (mortality only):**
-$$L_{bio}(s_t, a_t) = \frac{N_t \cdot (1 - (1 - \mu_{nat})(1 - \mu_{trt}(a))) \cdot W_t^F \cdot (W_t^F / 5.0)}{1000}$$
-where:
-- $\mu_{nat} = 0.0005$: natural weekly mortality
-- $\mu_{trt}(a)$: treatment-induced mortality (0%, 5%, or 7%)
-- Weight factor normalizes to harvest weight (5 kg)
-
-**Fish Health Penalty (treatment side effects):**
-$$D_{health}(a) = \begin{cases}
-0 & \text{if } a = a_0 \\
-10 & \text{if } a = a_1 \\
-15 & \text{if } a = a_2
-\end{cases}$$
-
-**Sea Lice Burden (chronic damage):**
-$$L_{burden}(s) = L_t^A \cdot (1.0 + 0.2 \cdot \max(0, L_t^A - 0.5))$$
-
-**Weight Parameters (configurable):**
-- $\lambda_{trt}$: treatment cost weight (e.g., 0.2)
-- $\lambda_{reg}$: regulatory penalty weight (e.g., 0.01-1.0)
-- $\lambda_{bio}$: biomass loss weight (e.g., 0.1)
-- $\lambda_{health}$: health penalty weight (e.g., 0.2)
-- $\lambda_{lice}$: sea lice burden weight (e.g., 0.1)
-
-### 5. Belief State
-
-The belief state $b_t$ represents the probability distribution over states:
-$$b_t(s) = P(s_t = s | o_{1:t}, a_{1:t-1})$$
-
-The belief is updated using Bayes' rule:
-$$b_{t+1}(s_{t+1}) = \eta \cdot P(o_{t+1} | s_{t+1}, a_t) \sum_{s_t} P(s_{t+1} | s_t, a_t) b_t(s_t)$$
-
-where $\eta$ is a normalization constant.
-
-### 6. Policy and Value Function
-
-A policy $\pi$ maps belief states to actions:
-$$\pi: \mathcal{B} \rightarrow \mathcal{A}$$
-
-The value function for a policy $\pi$ is:
-$$V^\pi(b) = \mathbb{E}\left[\sum_{t=0}^{\infty} \gamma^t R(s_t, \pi(b_t), s_{t+1}) | b_0 = b\right]$$
-
-The optimal value function satisfies the Bellman equation:
-$$V^*(b) = \max_{a \in \mathcal{A}} \left[\sum_{s} b(s) \sum_{s'} P(s' | s, a) R(s, a, s') + \gamma \sum_{o} P(o | a, b) V^*(b') \right]$$
-
-where $\gamma = 0.95$ is the discount factor.
-
-### 7. Objective
-
-The objective is to find the optimal policy that maximizes the expected discounted cumulative reward:
-$$\pi^* = \arg\max_{\pi} V^\pi(b_0)$$
-
-This formulation captures the key trade-offs in sea lice management: treatment costs, regulatory compliance, fish health, and biomass preservation, while accounting for the uncertainty in sea lice observations and population dynamics.
-
-
+For any additional provenance, consult `runs.txt` or the `logs/` directory to see when large experiments were executed.

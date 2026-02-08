@@ -83,114 +83,21 @@ function __init__()
     end
 end
 
-function run_experiments(mode, location)
-
-    # Option 1: Balanced multi-objective (all components contribute ~equally to total)
-    # reward_lambdas1 = [1.0, 0.1, 0.3, 0.3, 2.0] # [treatment, regulatory, biomass, health, sea lice]
-    # [0.7, 2.0, 0.1, 0.1, 0.8]
-    # # reward_lambdas1 = [50.0, 0.2, 0.5, 0.5, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # reward_lambdas1 = [0.4, 0.1, 0.1, 0.15, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="north", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="west", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="south", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-
-    # # # Option 2: Cost-focused (prioritize economics over welfare)
-    # reward_lambdas2 = [0.4, 0.02, 0.1, 2.0, 0.8] # [treatment, regulatory, biomass, health, sea lice]
-    # # reward_lambdas2 = [0.4, 0.2, 0.1, 0.0, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="north", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="west", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="south", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-
-    # # Option 3: Welfare-focused (prioritize fish health and avoid over-treatment)
-    # reward_lambdas3 = [0.4, 0.1, 0.1, 0.5, 0.2] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="north", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="west", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ekf", mode=mode, location="south", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    
-
-
-
-    # reward_lambdas1 = [0.4, 0.1, 0.1, 0.15, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="north", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="west", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="south", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-
-    # # Option 2: Cost-focused (prioritize economics over welfare)
-    # # reward_lambdas2 = [0.4, 0.02, 0.1, 2.0, 0.8] # [treatment, regulatory, biomass, health, sea lice]
-    # reward_lambdas2 = [0.4, 0.2, 0.1, 0.0, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="north", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="west", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="south", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-
-    # # Option 3: Welfare-focused (prioritize fish health and avoid over-treatment)
-    # reward_lambdas3 = [0.4, 0.1, 0.1, 0.5, 0.2] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="north", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="west", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location="south", ekf_filter=true, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    
-
-
-
-    reward_lambdas1 = [0.46, 0.12, 0.12, 0.18, 0.12] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-
-    # Option 2: Cost-focused (prioritize economics over welfare)
-    # reward_lambdas2 = [0.4, 0.02, 0.1, 2.0, 0.8] # [treatment, regulatory, biomass, health, sea lice]
-    reward_lambdas2 = [0.55, 0.10, 0.20, 0.05, 0.10] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-
-    # Option 3: Welfare-focused (prioritize fish health and avoid over-treatment)
-    reward_lambdas3 = [0.15, 0.05, 0.10, 0.35, 0.35] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    
-
-
-
-    # reward_lambdas1 = [0.4, 0.1, 0.1, 0.15, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-
-    # # Option 2: Cost-focused (prioritize economics over welfare)
-    # # reward_lambdas2 = [0.4, 0.02, 0.1, 2.0, 0.8] # [treatment, regulatory, biomass, health, sea lice]
-    # reward_lambdas2 = [0.4, 0.2, 0.1, 0.0, 0.1] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
-
-    # # Option 3: Welfare-focused (prioritize fish health and avoid over-treatment)
-    # reward_lambdas3 = [0.4, 0.1, 0.1, 0.5, 0.2] # [treatment, regulatory, biomass, health, sea lice]
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="north", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="west", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location="south", ekf_filter=false, plot=true, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
-    
-
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ukf", mode=mode, location=location, ekf_filter=false, plot=true)
-    # main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location=location, ekf_filter=false, plot=true, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas)
-    # main(first_step_flag="solve", log_space=false, experiment_name="raw_space_ekf", mode=mode, location=location, ekf_filter=true, plot=true)
-    return
-end
-
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light", location="south", ekf_filter=true, plot=false, reward_lambdas::Vector{Float64}, sim_reward_lambdas::Vector{Float64})
+function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=false, reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12], sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12])
 
-    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
-    algorithms = define_algorithms(config, heuristic_config)
-
+    # Set up experiment config and log in experiments.csv file
+    config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
+    save_experiment_config(config)
+    
     @info """\n
     ╔════════════════════════════════════════════════════════════════════════╗
     ║                         NEW EXPERIMENT RUN                              ║
     ╠════════════════════════════════════════════════════════════════════════╣
-    ║  Mode:            $mode_flag
-    ║  Log Space:       $log_space_flag
+    ║  Mode:            $mode
+    ║  Log Space:       $log_space
     ║  EKF Filter:      $ekf_filter
     ║  Reward lambdas:  $reward_lambdas
     ║  Sim R lambdas:   $sim_reward_lambdas
@@ -199,26 +106,14 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
     ╚════════════════════════════════════════════════════════════════════════╝
     """
 
-    # Log experiment configuration in experiments.csv file with all experiments
-    save_experiment_config(config, heuristic_config, first_step_flag)
-
-     # Save config to file in current directory for easy access
-     mkpath(joinpath(config.experiment_dir, "config"))
-     @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
-     open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
-         for field in fieldnames(typeof(config))
-             value = getfield(config, field)
-             println(io, "$field: $value")
-         end
-     end
+    # Define algorithms
+    algorithms = define_algorithms(config)
 
     @info "Solving policies"
-    for algo in algorithms
-        generate_mdp_pomdp_policies(algo, config)
-    end
+    all_policies = solve_policies(algorithms, config)
 
     @info "Simulating policies"
-    parallel_data = simulate_all_policies(algorithms, config)
+    parallel_data = simulate_all_policies(algorithms, config, all_policies)
 
     # If we are simulating on high fidelity model, we want to evaluate the simulation results
     if config.simulation_config.high_fidelity_sim
@@ -228,7 +123,7 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
         end
     else
         print_reward_metrics_for_vi_policy(parallel_data, config)
-        exit()
+        return
     end
 
     # Extract reward metrics
@@ -250,84 +145,59 @@ end
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="light", location="south"; reward_lambdas::Vector{Float64}, sim_reward_lambdas::Vector{Float64})
+function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="debug", location="south"; reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0], sim_reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0])
 
     # Define experiment configuration
     exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_", mode, "_", location, "_", reward_lambdas)
 
     @info "Setting up experiment configuration for experiment: $exp_name"
 
+    # Mode-specific overrides
     if mode == "debug"
-        solver_cfg = SolverConfig(
-            log_space=log_space,
-            reward_lambdas=reward_lambdas, # [1.0, 3.0, 0.5, 0.01, 0.0], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=5.0,
-            VI_max_iterations=5,
-            QMDP_max_iterations=5,
-            discount_factor = 0.95,
-            discretization_step = 0.1,
-            location = location, # "north", "west", or "south"
-            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
-        )
-        sim_cfg = SimulationConfig(
-            num_episodes=10,
-            steps_per_episode=52,
-            ekf_filter=ekf_filter,
-            n_sample=100,
-            sim_reward_lambdas = sim_reward_lambdas,  # [treatment, regulatory, biomass, health, sea_lice]
-        )
-        config = ExperimentConfig(
-            solver_config=solver_cfg,
-            simulation_config=sim_cfg,
-            experiment_name=exp_name,
-        )
+        sarsop_time, vi_iters, qmdp_iters, disc_step = 5.0, 100, 100, 0.1
+        n_episodes, n_steps = 100, 52
     elseif mode == "paper"
-        solver_cfg = SolverConfig(
-            log_space=log_space,
-            reward_lambdas=reward_lambdas, # [1.0, 3.0, 0.5, 0.01, 0.0], # [treatment, regulatory, biomass, health, sea lice]
-            sarsop_max_time=3000.0,
-            VI_max_iterations=300,
-            QMDP_max_iterations=300,
-            discount_factor = 0.95,
-            discretization_step = 0.01,
-            location = location, # "north", "west", or "south"
-            heuristic_belief_threshold_mechanical=0.45,
-            heuristic_belief_threshold_chemical=0.4,
-            heuristic_belief_threshold_thermal=0.475,
-            full_observability_solver = false, # Toggles whether we have full observability in the observation function or not (false). Pairs with high_fidelity_sim = false.
-        )
-        sim_cfg = SimulationConfig(
-            num_episodes=1000,
-            steps_per_episode=100,
-            ekf_filter=ekf_filter,
-            n_sample=100,
-            sim_reward_lambdas = sim_reward_lambdas,  # [treatment, regulatory, biomass, health, sea_lice]
-        )
-        config = ExperimentConfig(
-            solver_config=solver_cfg,
-            simulation_config=sim_cfg,
-            experiment_name=exp_name,
-        )
+        sarsop_time, vi_iters, qmdp_iters, disc_step = 800.0, 800, 800, 0.01
+        n_episodes, n_steps = 1000, 100
+    else
+        error("Invalid mode: $mode. Must be 'debug' or 'paper'")
     end
-        
-    heuristic_config = HeuristicConfig(
-        raw_space_threshold=config.solver_config.heuristic_threshold,
-        belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
-        belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
-        belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
-        rho=config.solver_config.heuristic_rho
-    )
 
-    return config, heuristic_config
+    solver_cfg = SolverConfig(
+        log_space=log_space,
+        reward_lambdas=reward_lambdas,
+        sarsop_max_time=sarsop_time,
+        VI_max_iterations=vi_iters,
+        QMDP_max_iterations=qmdp_iters,
+        discount_factor=0.95,
+        discretization_step=disc_step,
+        location=location,
+        heuristic_belief_threshold_mechanical=0.45,
+        heuristic_belief_threshold_chemical=0.4,
+        heuristic_belief_threshold_thermal=0.475,
+        full_observability_solver=false,
+    )
+    sim_cfg = SimulationConfig(
+        num_episodes=n_episodes,
+        steps_per_episode=n_steps,
+        ekf_filter=ekf_filter,
+        high_fidelity_sim=true,
+        sim_reward_lambdas=sim_reward_lambdas,
+    )
+    config = ExperimentConfig(
+        solver_config=solver_cfg,
+        simulation_config=sim_cfg,
+        experiment_name=exp_name,
+    )
+        
+    return config
 
 end
 
 # ----------------------------
 # Define algorithms
 # ----------------------------
-function define_algorithms(config, heuristic_config)
-
-    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.solver_config.sarsop_max_time) #, verbose=false)
+function define_algorithms(config)
 
     nus_sarsop_solver = SARSOP.SARSOPSolver(
         timeout=config.solver_config.sarsop_max_time,
@@ -344,7 +214,7 @@ function define_algorithms(config, heuristic_config)
         Algorithm(solver_name="NeverTreat_Policy"),
         Algorithm(solver_name="AlwaysTreat_Policy"),
         Algorithm(solver_name="Random_Policy"),
-        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
+        Algorithm(solver_name="Heuristic_Policy", solver_config=config.solver_config),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
@@ -355,10 +225,9 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    first_step_flag = "solve" # "solve", "simulate", "plot"
     log_space_flag = true
     experiment_name_flag = "exp"
-    mode_flag = "light"
+    mode_flag = "debug"
     location_flag = "north"
 
     for arg in ARGS
@@ -368,25 +237,22 @@ if abspath(PROGRAM_FILE) == @__FILE__
             global mode_flag = split(arg, "=")[2]
         elseif occursin("--location=", arg)
             global location_flag = split(arg, "=")[2]
-        elseif occursin("--first_step=", arg)
-            global first_step_flag = String(split(arg, "=")[2])
         elseif arg == "--raw_space"
             global log_space_flag = false
         end
     end
 
-    # main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, location=location_flag)
-    run_experiments(mode_flag, location_flag)
+    main(log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, location=location_flag)
 end
 
 # -------------------------
 # Export main functions for use in notebooks/scripts
 # -------------------------
 # Main workflow functions
-export main, run_experiments, setup_experiment_configs, define_algorithms
+export main, setup_experiment_configs, define_algorithms
 
 # Policy generation functions
-export generate_mdp_pomdp_policies, create_pomdp_mdp, generate_policy
+export solve_policies, create_pomdp_mdp, generate_policy
 
 # Simulation functions
 export simulate_policy, simulate_all_policies, create_sim_pomdp, initialize_belief
@@ -417,7 +283,7 @@ export plos_one_treatment_distribution_comparison
 export plos_one_episode_sealice_levels_over_time
 
 # Configuration types
-export ExperimentConfig, SolverConfig, SimulationConfig, HeuristicConfig, Algorithm, LocationParams, get_location_params
+export ExperimentConfig, SolverConfig, SimulationConfig, Algorithm, LocationParams, get_location_params
 
 # Utility functions
 export predict_next_abundances, get_temperature

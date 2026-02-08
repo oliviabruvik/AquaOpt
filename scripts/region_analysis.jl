@@ -66,6 +66,42 @@ struct RegionData
     parallel_data::DataFrame
 end
 
+const REGION_ANALYSIS_CACHE_FILE = "region_analysis_cache.jld2"
+const REGION_ANALYSIS_CACHE_VERSION = 2
+
+function region_cache_path(region::RegionData)
+    return joinpath(region.config.experiment_dir, REGION_ANALYSIS_CACHE_FILE)
+end
+
+function load_region_cache(region::RegionData)
+    cache_path = region_cache_path(region)
+    isfile(cache_path) || return Dict{Symbol, Any}()
+    cache_version = nothing
+    cache_data = Dict{Symbol, Any}()
+    try
+        @load cache_path cache_version cache_data
+    catch err
+        @warn "Unable to load cached region analysis stats; recomputing" region = region.name path = cache_path exception = (err, catch_backtrace())
+        return Dict{Symbol, Any}()
+    end
+    if cache_version === nothing || cache_version != REGION_ANALYSIS_CACHE_VERSION || cache_data === nothing
+        @warn "Cached region analysis stats are from an incompatible version; recomputing" region = region.name path = cache_path cache_version = cache_version
+        return Dict{Symbol, Any}()
+    end
+    return cache_data
+end
+
+function save_region_cache(region::RegionData, cache_data::Dict{Symbol, Any})
+    cache_path = region_cache_path(region)
+    mkpath(dirname(cache_path))
+    cache_version = REGION_ANALYSIS_CACHE_VERSION
+    try
+        @save cache_path cache_version cache_data
+    catch err
+        @warn "Failed to write region analysis cache (non-fatal)" region = region.name path = cache_path exception = (err, catch_backtrace())
+    end
+end
+
 function usage()
     println("Usage: julia --project scripts/region_analysis.jl [--output-dir DIR]")
     println("  --output-dir, -o  Directory where plots should be saved (default: $(DEFAULT_OUTPUT_DIR))")
@@ -182,6 +218,19 @@ function compute_sealice_stats(parallel_data, config)
     return stats
 end
 
+function _expected_biomass_shortfall(config::ExperimentConfig, s, sp)
+    sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+    ideal_survival_rate = 1 - sim_params.nat_mort_rate
+    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
+    k0_base = sim_params.k_growth * (1.0 + sim_params.temp_sensitivity * (s.Temperature - 10.0))
+    ideal_k0 = max(k0_base, 0.0)
+    expected_weight = s.AvgFishWeight + ideal_k0 * (sim_params.w_max - s.AvgFishWeight)
+    expected_weight = clamp(expected_weight, sim_params.weight_bounds...)
+    expected_biomass = AquaOpt.biomass_tons(expected_weight, expected_fish)
+    next_biomass = AquaOpt.biomass_tons(sp)
+    return max(expected_biomass - next_biomass, 0.0)
+end
+
 function extract_metric_caches(data_filtered, seeds)
     caches = NamedTuple[]
     for seed in seeds
@@ -191,8 +240,7 @@ function extract_metric_caches(data_filtered, seeds)
         states = collect(state_hist(history))
         actions = collect(action_hist(history))
         rewards = collect(reward_hist(history))
-        initial_biomass = isempty(states) ? 0.0 : states[1].AvgFishWeight * states[1].NumberOfFish
-        push!(caches, (; states, actions, rewards, initial_biomass))
+        push!(caches, (; states, actions, rewards))
     end
     return caches
 end
@@ -237,6 +285,44 @@ function compute_treatment_cost_stats(parallel_data, config)
         end
     end
     return stats
+end
+
+function load_or_compute_region_stats(region::RegionData)
+    cache_data = load_region_cache(region)
+    dirty = false
+    sealice_stats = get(cache_data, :sealice_stats, nothing)
+    if sealice_stats === nothing
+        @info "Computing sea lice stats" region = region.name
+        sealice_stats = compute_sealice_stats(region.parallel_data, region.config)
+        cache_data[:sealice_stats] = sealice_stats
+        dirty = true
+    else
+        @info "Loaded cached sea lice stats" region = region.name
+    end
+
+    treatment_stats = get(cache_data, :treatment_stats, nothing)
+    if treatment_stats === nothing
+        @info "Computing treatment cost stats" region = region.name
+        treatment_stats = compute_treatment_cost_stats(region.parallel_data, region.config)
+        cache_data[:treatment_stats] = treatment_stats
+        dirty = true
+    else
+        @info "Loaded cached treatment cost stats" region = region.name
+    end
+    return cache_data, dirty, sealice_stats, treatment_stats
+end
+
+function load_or_compute_sarsop_stats(region::RegionData, lambda_value::Float64, cache_data::Dict{Symbol, Any})
+    sarsop_cache = get!(cache_data, :sarsop_stats, Dict{Float64, Any}())
+    if haskey(sarsop_cache, lambda_value)
+        @info "Loaded cached SARSOP stats" region = region.name lambda = lambda_value
+        return sarsop_cache[lambda_value], false
+    end
+    @info "Computing SARSOP stats" region = region.name lambda = lambda_value
+    stats = compute_sarsop_stage_stats(region, lambda_value)
+    sarsop_cache[lambda_value] = stats
+    cache_data[:sarsop_stats] = sarsop_cache
+    return stats, true
 end
 
 function compute_sarsop_stage_stats(region::RegionData, lambda_value::Float64)
@@ -591,11 +677,11 @@ function sarsop_axis(region::RegionData, stats; ylabel::String, show_xlabel::Boo
     return ax
 end
 
-function build_group_plot(axes::Vector{Axis})
+function build_group_plot(axes::Vector{Axis}; vertical_sep::String="12pt")
     gp = GroupPlot(Options(
         "group style" => Options(
             "group size" => "1 by $(length(axes))",
-            "vertical sep" => "12pt"
+            "vertical sep" => vertical_sep
         ),
         :width => "18cm"
     ))
@@ -614,17 +700,37 @@ function save_output(gp, out_pdf::String; save_tex::Bool=false)
 end
 
 function main()
+    @info "Parsing args"
     regions_input, out_dir = parse_args(ARGS)
+
+    @info "Loading regions"
     regions = [load_region(r) for r in regions_input]
 
-    @info "Computing sea lice stats"
-    sealice_stats = [compute_sealice_stats(r.parallel_data, r.config) for r in regions]
-    
-    @info "Computing treatment cost stats"
-    treatment_stats = [compute_treatment_cost_stats(r.parallel_data, r.config) for r in regions]
-    
-    @info "Computing sarsop stats"
-    sarsop_stats = [compute_sarsop_stage_stats(r, 0.6) for r in regions]
+    cache_data = Vector{Dict{Symbol, Any}}(undef, length(regions))
+    cache_dirty = fill(false, length(regions))
+    sealice_stats = Vector{Any}(undef, length(regions))
+    treatment_stats = Vector{Any}(undef, length(regions))
+    for (idx, region) in enumerate(regions)
+
+        @info "Loading or computing stats for $region"
+        cache, dirty, sealice, treatment = load_or_compute_region_stats(region)
+        cache_data[idx] = cache
+        cache_dirty[idx] = dirty
+        sealice_stats[idx] = sealice
+        treatment_stats[idx] = treatment
+    end
+
+    lambda_value = 0.6
+    sarsop_stats = Vector{Any}(undef, length(regions))
+    for (idx, region) in enumerate(regions)
+        stats, dirty = load_or_compute_sarsop_stats(region, lambda_value, cache_data[idx])
+        sarsop_stats[idx] = stats
+        cache_dirty[idx] = cache_dirty[idx] || dirty
+    end
+
+    for (idx, region) in enumerate(regions)
+        cache_dirty[idx] && save_region_cache(region, cache_data[idx])
+    end
 
     axes_sealice = Axis[]
     axes_cost = Axis[]
@@ -648,9 +754,9 @@ function main()
 
     mkpath(out_dir)
     save_output(build_group_plot(axes_sealice), joinpath(out_dir, "region_sealice_levels_over_time.pdf"))
-    save_output(build_group_plot(axes_cost), joinpath(out_dir, "region_treatment_cost_over_time.pdf"), save_tex=true)
+    save_output(build_group_plot(axes_cost; vertical_sep="40pt"), joinpath(out_dir, "region_treatment_cost_over_time.pdf"), save_tex=true)
     save_output(build_group_plot(axes_sarsop), joinpath(out_dir, "region_sarsop_sealice_stages_lambda_0.6.pdf"))
-    generate_region_table(regions, out_dir; lambda_value=0.6)
+    generate_region_table(regions, out_dir; lambda_value=lambda_value)
 
     println("Region plots saved under $(abspath(out_dir)).")
 end
