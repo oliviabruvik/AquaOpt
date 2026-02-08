@@ -169,8 +169,7 @@ Histories and plots are written inside `results/experiments/<exp>/` so every run
    ```bash
    julia --project=. -e '
        using AquaOpt;
-       main(first_step_flag="solve",
-            log_space=true,
+       main(log_space=true,
             experiment_name="paper_run",
             mode="paper",
             location="south",
@@ -182,8 +181,6 @@ Histories and plots are written inside `results/experiments/<exp>/` so every run
    ```
    `mode` selects solver hyperparameters (`debug`, `light`, `paper` presets in `setup_experiment_configs`).
 4. **Inspect outputs** – metrics (`results/experiments/.../avg_results.csv`), treatment breakdowns (`extract_reward_metrics`), and figures (`figures/`).
-
-To skip solving and reuse existing policies, point `get_latest_matching_config` (in `ExperimentTracking.jl`) to a prior experiment and run with `first_step_flag="simulate"` or `first_step_flag="plot"`.
 
 ## Notes for Manuscript Preparation
 

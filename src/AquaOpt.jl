@@ -111,7 +111,7 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;first_step_flag="solve", log_space=true, experiment_name="exp", mode="light", location="south", ekf_filter=true, plot=false, reward_lambdas::Vector{Float64}, sim_reward_lambdas::Vector{Float64})
+function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=false, reward_lambdas::Vector{Float64}, sim_reward_lambdas::Vector{Float64})
 
     config, heuristic_config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
     algorithms = define_algorithms(config, heuristic_config)
@@ -131,7 +131,7 @@ function main(;first_step_flag="solve", log_space=true, experiment_name="exp", m
     """
 
     # Log experiment configuration in experiments.csv file with all experiments
-    save_experiment_config(config, heuristic_config, first_step_flag)
+    save_experiment_config(config, heuristic_config)
 
      # Save config to file in current directory for easy access
      mkpath(joinpath(config.experiment_dir, "config"))
@@ -181,7 +181,7 @@ end
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="light", location="south"; reward_lambdas::Vector{Float64}, sim_reward_lambdas::Vector{Float64})
+function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="debug", location="south"; reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0], sim_reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0])
 
     # Define experiment configuration
     exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_", mode, "_", location, "_", reward_lambdas)
@@ -260,8 +260,6 @@ end
 # ----------------------------
 function define_algorithms(config, heuristic_config)
 
-    native_sarsop_solver = NativeSARSOP.SARSOPSolver(max_time=config.solver_config.sarsop_max_time) #, verbose=false)
-
     nus_sarsop_solver = SARSOP.SARSOPSolver(
         timeout=config.solver_config.sarsop_max_time,
         verbose=false,
@@ -291,7 +289,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     first_step_flag = "solve" # "solve", "simulate", "plot"
     log_space_flag = true
     experiment_name_flag = "exp"
-    mode_flag = "light"
+    mode_flag = "debug"
     location_flag = "north"
 
     for arg in ARGS
@@ -301,14 +299,12 @@ if abspath(PROGRAM_FILE) == @__FILE__
             global mode_flag = split(arg, "=")[2]
         elseif occursin("--location=", arg)
             global location_flag = split(arg, "=")[2]
-        elseif occursin("--first_step=", arg)
-            global first_step_flag = String(split(arg, "=")[2])
         elseif arg == "--raw_space"
             global log_space_flag = false
         end
     end
 
-    # main(first_step_flag=first_step_flag, log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, location=location_flag)
+    # main(log_space=log_space_flag, experiment_name=experiment_name_flag, mode=mode_flag, location=location_flag)
     run_experiments(mode_flag, location_flag)
 end
 

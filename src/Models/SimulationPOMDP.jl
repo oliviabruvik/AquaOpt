@@ -71,10 +71,7 @@ end
     # Fish count parameters
     nat_mort_rate::Float64 = 0.0008             # weekly natural mortality fraction
     trt_mort_bump::Float64 = 0.005              # extra mortality fraction in treatment weeks
-    harvest_schedule::Function = (week::Int)->0 # fish harvested this week (kg)
-    move_in_fn::Function = (week::Int)->0       # fish moved in (kg)
-    move_out_fn::Function = (week::Int)->0      # fish moved out (kg)
-
+    
     # Parameters from Aldrin et al. 2023
     n_sample::Int = 20                         # number of fish counted (ntc)
     ρ_adult::Float64 = 0.175                   # aggregation parameter for adults
@@ -137,7 +134,7 @@ POMDPs.isterminal(pomdp::SeaLiceSimPOMDP, s::EvaluationState) = false
 # are affected by the treatment and growth rate. The predicted sea lice level the following week will 
 # have an additional e^r term because it is a week later.
 # -------------------------
-function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action)
+function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a)
     ImplicitDistribution(pomdp, s, a) do pomdp, s, a, rng
 
         # Apply treatment effects
@@ -188,11 +185,8 @@ function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action
 
         # Calculate the next number of fish
         survival_rate = (1 - pomdp.nat_mort_rate) * (1 - get_treatment_mortality_rate(a))
-        harvest = pomdp.harvest_schedule(s.ProductionWeek)
-        move_in = pomdp.move_in_fn(s.ProductionWeek)
-        move_out = pomdp.move_out_fn(s.ProductionWeek)
         survived_fish = round(Int, floor(s.NumberOfFish * survival_rate))
-        next_number_of_fish = survived_fish + move_in - move_out - harvest
+        next_number_of_fish = survived_fish
         next_number_of_fish = clamp(next_number_of_fish, pomdp.number_of_fish_bounds...)
 
         return EvaluationState(
