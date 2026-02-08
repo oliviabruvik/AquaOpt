@@ -89,21 +89,21 @@ function run_experiments(mode, location)
 
     # Option 1: Balanced [treatment, regulatory, biomass, health, sea lice]
     reward_lambdas1 = [0.46, 0.12, 0.12, 0.18, 0.12]
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    main(log_space=true, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    main(log_space=true, experiment_name="log_space_ukf", mode=mode, location="west", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    main(log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
 
     # Option 2: Cost-focused (prioritize economics over welfare)
     reward_lambdas2 = [0.55, 0.10, 0.20, 0.05, 0.10]
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
+    main(log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas2, sim_reward_lambdas=reward_lambdas2)
 
     # Option 3: Welfare-focused (prioritize fish health and avoid over-treatment)
     reward_lambdas3 = [0.15, 0.05, 0.10, 0.35, 0.35]
-    main(first_step_flag="solve", log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
+    main(log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
 
     # Raw space and EKF
-    main(first_step_flag="solve", log_space=false, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    main(first_step_flag="solve", log_space=false, experiment_name="log_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    # main(log_space=false, experiment_name="raw_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    # main(log_space=true, experiment_name="log_space_ekf", mode=mode, location="north", ekf_filter=true, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
 
     return
 end
@@ -219,7 +219,7 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         solver_cfg = SolverConfig(
             log_space=log_space,
             reward_lambdas=reward_lambdas,
-            sarsop_max_time=300.0, # TODO: move back from 3000
+            sarsop_max_time=800.0,
             VI_max_iterations=800,
             QMDP_max_iterations=800,
             discount_factor = 0.95,
@@ -272,9 +272,9 @@ function define_algorithms(config, heuristic_config)
     qmdp_solver = QMDPSolver(max_iterations=config.solver_config.QMDP_max_iterations)
 
     algorithms = [
-        #Algorithm(solver_name="NeverTreat_Policy"),
-        #Algorithm(solver_name="AlwaysTreat_Policy"),
-        #Algorithm(solver_name="Random_Policy"),
+        Algorithm(solver_name="NeverTreat_Policy"),
+        Algorithm(solver_name="AlwaysTreat_Policy"),
+        Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
@@ -286,7 +286,6 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    first_step_flag = "solve" # "solve", "simulate", "plot"
     log_space_flag = true
     experiment_name_flag = "exp"
     mode_flag = "debug"
