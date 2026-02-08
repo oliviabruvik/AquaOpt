@@ -109,14 +109,15 @@ function extract_simulation_histories(config, algorithm, parallel_data)
     for λ in config.lambda_values
 
         # Get histories for this lambda
-        data_lambda = filter(row -> row.lambda == λ && row.policy == algorithm.solver_name, parallel_data)
+        data_lambda_idx = parallel_data.lambda .== λ .&& parallel_data.policy .== algorithm.solver_name
+        data_lambda = parallel_data[data_lambda_idx, [:episode_number, :history]]
 
-        episode_histories = Vector{Any}()
+        episode_histories = Vector{typeof(first(data_lambda.history))}()
 
         for episode in 1:config.simulation_config.num_episodes
 
             # Get histories for this episode
-            data_episode = filter(row -> row.episode_number == episode, data_lambda)
+            data_episode = data_lambda[data_lambda.episode_number .== episode, :]
 
             if nrow(data_episode) == 1
                 push!(episode_histories, data_episode.history[1])
