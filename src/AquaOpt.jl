@@ -88,9 +88,10 @@ end
 # ----------------------------
 function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=false, reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12], sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12])
 
-    config, heuristic_config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
-    algorithms = define_algorithms(config, heuristic_config)
-
+    # Set up experiment config and log in experiments.csv file
+    config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
+    save_experiment_config(config)
+    
     @info """\n
     ╔════════════════════════════════════════════════════════════════════════╗
     ║                         NEW EXPERIMENT RUN                              ║
@@ -105,18 +106,8 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     ╚════════════════════════════════════════════════════════════════════════╝
     """
 
-    # Log experiment configuration in experiments.csv file with all experiments
-    save_experiment_config(config, heuristic_config)
-
-    # Save config to file in current directory for easy access
-    mkpath(joinpath(config.experiment_dir, "config"))
-    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
-    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
-        for field in fieldnames(typeof(config))
-            value = getfield(config, field)
-            println(io, "$field: $value")
-        end
-    end
+    # Define algorithms
+    algorithms = define_algorithms(config)
 
     @info "Solving policies"
     # Generate POMDP and MDP once per lambda (shared across algorithms)
@@ -202,22 +193,14 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         experiment_name=exp_name,
     )
         
-    heuristic_config = HeuristicConfig(
-        raw_space_threshold=config.solver_config.heuristic_threshold,
-        belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
-        belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
-        belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
-        rho=config.solver_config.heuristic_rho
-    )
-
-    return config, heuristic_config
+    return config
 
 end
 
 # ----------------------------
 # Define algorithms
 # ----------------------------
-function define_algorithms(config, heuristic_config)
+function define_algorithms(config)
 
     nus_sarsop_solver = SARSOP.SARSOPSolver(
         timeout=config.solver_config.sarsop_max_time,
@@ -234,7 +217,7 @@ function define_algorithms(config, heuristic_config)
         Algorithm(solver_name="NeverTreat_Policy"),
         Algorithm(solver_name="AlwaysTreat_Policy"),
         Algorithm(solver_name="Random_Policy"),
-        Algorithm(solver_name="Heuristic_Policy", heuristic_config=heuristic_config),
+        Algorithm(solver_name="Heuristic_Policy", solver_config=config.solver_config),
         Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
@@ -303,7 +286,7 @@ export plos_one_treatment_distribution_comparison
 export plos_one_episode_sealice_levels_over_time
 
 # Configuration types
-export ExperimentConfig, SolverConfig, SimulationConfig, HeuristicConfig, Algorithm, LocationParams, get_location_params
+export ExperimentConfig, SolverConfig, SimulationConfig, Algorithm, LocationParams, get_location_params
 
 # Utility functions
 export predict_next_abundances, get_temperature

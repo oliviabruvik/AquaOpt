@@ -94,7 +94,7 @@ function generate_policy(algorithm, pomdp, mdp)
 
     # Heuristic Policy
     if algorithm.solver_name == "Heuristic_Policy"
-        return HeuristicPolicy(pomdp, algorithm.heuristic_config)
+        return HeuristicPolicy(pomdp, algorithm.solver_config)
 
     # Random policy
     elseif algorithm.solver_name == "Random_Policy"
@@ -175,7 +175,7 @@ end
 # ----------------------------
 struct HeuristicPolicy{P<:POMDP} <: Policy
     pomdp::P
-    heuristic_config::HeuristicConfig
+    solver_config::SolverConfig
 end
 
 # Heuristic action
@@ -184,20 +184,20 @@ function POMDPs.action(policy::HeuristicPolicy, b)
 
     # Get the probability of the current sea lice level being above the threshold
     state_space = states(policy.pomdp)
-    threshold = policy.heuristic_config.raw_space_threshold
+    threshold = policy.solver_config.heuristic_threshold
     if policy.pomdp isa SeaLiceLogPOMDP
         threshold = log(threshold)
     end
     prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
 
     # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
-    if prob_above_threshold > policy.heuristic_config.belief_threshold_thermal
+    if prob_above_threshold > policy.solver_config.heuristic_belief_threshold_thermal
         return ThermalTreatment
     # Chemical treatment for mid-level infestations
-    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_chemical
+    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_chemical
         return ChemicalTreatment
     # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose MechanicalTreatment
-    elseif prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
+    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_mechanical
         return MechanicalTreatment
     # Otherwise, choose NoTreatment
     else
@@ -213,15 +213,15 @@ function heuristicChooseAction(policy::HeuristicPolicy, b, use_cdf=true)
 
     # Convert the threshold in log space if needed
     if policy.pomdp isa SeaLiceLogPOMDP
-        threshold = log(policy.heuristic_config.raw_space_threshold)
+        threshold = log(policy.solver_config.heuristic_threshold)
     else
-        threshold = policy.heuristic_config.raw_space_threshold
+        threshold = policy.solver_config.heuristic_threshold
     end
 
     if use_cdf
         # Method 1: Calculate probability of being above threshold
         prob_above_threshold = sum(b[i] for (i, s) in enumerate(state_space) if s.SeaLiceLevel > threshold)
-        return prob_above_threshold > policy.heuristic_config.belief_threshold_mechanical
+        return prob_above_threshold > policy.solver_config.heuristic_belief_threshold_mechanical
     else
         # Method 2: Use mode of belief vector
         mode_sealice_level_index = argmax(b)

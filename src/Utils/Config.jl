@@ -169,21 +169,12 @@ end
 end
 
 # ----------------------------
-# Heuristic config struct
-# ----------------------------
-@with_kw struct HeuristicConfig
-    raw_space_threshold::Float64 = 0.4
-    belief_threshold_mechanical::Float64 = 0.3
-    belief_threshold_chemical::Float64 = 0.35
-    belief_threshold_thermal::Float64 = 0.4
-    rho::Float64 = 0.8
-end
-
-# ----------------------------
 # Algorithm struct
 # ----------------------------
+struct HeuristicSolver <: Solver end
+
 @with_kw struct Algorithm{S<:Union{Solver, Nothing}}
-    solver::S = nothing # TODO: set to heuristic solver
+    solver::S = HeuristicSolver()
     solver_name::String = "Heuristic_Policy"
-    heuristic_config::HeuristicConfig = HeuristicConfig()
+    solver_config::SolverConfig = SolverConfig()
 end

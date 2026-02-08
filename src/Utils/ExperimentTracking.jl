@@ -3,7 +3,7 @@ using DataFrames, CSV, Dates
 # ----------------------------
 # Save experiment configuration
 # ----------------------------
-function save_experiment_config(config::ExperimentConfig, heuristic_config::HeuristicConfig, csv_path="results/experiments/experiments.csv")
+function save_experiment_config(config::ExperimentConfig, csv_path="results/experiments/experiments.csv")
     df = DataFrame(
         # Experiment parameters
         experiment_name = config.experiment_name,
@@ -30,10 +30,10 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
         QMDP_max_iterations = config.solver_config.QMDP_max_iterations,
 
         # Heuristic parameters
-        heuristic_threshold = heuristic_config.raw_space_threshold,
-        heuristic_belief_threshold_mechanical = heuristic_config.belief_threshold_mechanical,
-        heuristic_belief_threshold_thermal = heuristic_config.belief_threshold_thermal,
-        heuristic_rho = heuristic_config.rho,
+        heuristic_threshold = config.solver_config.heuristic_threshold,
+        heuristic_belief_threshold_mechanical = config.solver_config.heuristic_belief_threshold_mechanical,
+        heuristic_belief_threshold_thermal = config.solver_config.heuristic_belief_threshold_thermal,
+        heuristic_rho = config.solver_config.heuristic_rho,
 
         # Run management
         experiment_dir = config.experiment_dir,
@@ -42,5 +42,15 @@ function save_experiment_config(config::ExperimentConfig, heuristic_config::Heur
         CSV.write(csv_path, df; append=true, writeheader=false)
     else
         CSV.write(csv_path, df)
+    end
+
+    # Save config to file in current directory for easy access
+    mkpath(joinpath(config.experiment_dir, "config"))
+    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
+    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
+        for field in fieldnames(typeof(config))
+            value = getfield(config, field)
+            println(io, "$field: $value")
+        end
     end
 end

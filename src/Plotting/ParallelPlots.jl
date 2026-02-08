@@ -564,15 +564,6 @@ end
 # ----------------------------
 function plot_heuristic_policy_action_heatmap(config, λ=0.6)
     
-    # Create heuristic policy
-    heuristic_config = HeuristicConfig(
-        raw_space_threshold=config.solver_config.heuristic_threshold,
-        belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
-        belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
-        belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
-        rho=config.solver_config.heuristic_rho
-    )
-    
     # Create POMDP for the heuristic policy
     if config.solver_config.log_space
         pomdp = SeaLiceLogPOMDP(
@@ -605,8 +596,8 @@ function plot_heuristic_policy_action_heatmap(config, λ=0.6)
         )
     end
     
-    policy = HeuristicPolicy(pomdp, heuristic_config)
-    
+    policy = HeuristicPolicy(pomdp, config.solver_config)
+
     # Define temperature and sea lice level ranges
     temp_range = 8.0:0.5:24.0  # Sea temperature range (°C)
     sealice_range = 0.0:0.01:1.0  # Sea lice level range
@@ -828,15 +819,6 @@ function generate_policy_action_data(policy_type, config, λ)
         end
         @load policy_path policy pomdp mdp
     else  # Heuristic
-        # Create heuristic policy
-        heuristic_config = HeuristicConfig(
-            raw_space_threshold=config.solver_config.heuristic_threshold,
-            belief_threshold_mechanical=config.solver_config.heuristic_belief_threshold_mechanical,
-            belief_threshold_chemical=config.solver_config.heuristic_belief_threshold_chemical,
-            belief_threshold_thermal=config.solver_config.heuristic_belief_threshold_thermal,
-            rho=config.solver_config.heuristic_rho
-        )
-        
         # Create POMDP for the heuristic policy
         if config.solver_config.log_space
             pomdp = SeaLiceLogPOMDP(
@@ -873,7 +855,7 @@ function generate_policy_action_data(policy_type, config, λ)
                 base_temperature=base_temperature,
             )
         end
-        policy = HeuristicPolicy(pomdp, heuristic_config)
+        policy = HeuristicPolicy(pomdp, config.solver_config)
     end
     
     for (i, sealice_level) in enumerate(sealice_range)
