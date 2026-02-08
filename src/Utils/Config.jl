@@ -27,56 +27,48 @@ using Parameters
     external_influx::Float64  # Weekly influx of sessile larvae from external sources
 end
 
-# Define location-specific parameter sets
+# Shared biological parameters across all locations.
+# Only T_mean and external_influx differ between north/west/south.
+const SHARED_BIO_PARAMS = (
+    T_amp        = 4.5,
+    peak_week    = 27,
+    d1_intercept = -2.4,
+    d1_temp_coef = 0.37,
+    d2_intercept = -2.1,
+    d2_temp_coef = 0.037,
+    s1_sessile   = 0.49,
+    s2_scaling   = 2.3,
+    s3_motile    = 0.88,
+    s4_adult     = 0.61,
+)
+
+# Pre-built location parameter sets keyed by location name
+const LOCATION_PARAMS = Dict(
+    "north" => LocationParams(;
+        SHARED_BIO_PARAMS...,
+        T_mean = 8.0,
+        external_influx = 0.1,
+    ),
+    "west" => LocationParams(;
+        SHARED_BIO_PARAMS...,
+        T_mean = 10.0,
+        external_influx = 0.12,
+    ),
+    "south" => LocationParams(;
+        SHARED_BIO_PARAMS...,
+        T_mean = 12.0,
+        external_influx = 0.15,
+    ),
+)
+
+"""
+Look up biological parameters for a given location ("north", "west", or "south").
+"""
 function get_location_params(location::String)
-    if location == "north"
-        return LocationParams(
-            T_mean = 8.0,
-            T_amp = 4.5,
-            peak_week = 27,
-            d1_intercept = -2.4,
-            d1_temp_coef = 0.37,
-            d2_intercept = -2.1,
-            d2_temp_coef = 0.037,
-            s1_sessile = 0.49,
-            s2_scaling = 2.3,
-            s3_motile = 0.88,
-            s4_adult = 0.61,
-            external_influx = 0.1
-        )
-    elseif location == "west"
-        return LocationParams(
-            T_mean = 10.0,
-            T_amp = 4.5,
-            peak_week = 27,
-            d1_intercept = -2.4,
-            d1_temp_coef = 0.37,
-            d2_intercept = -2.1,
-            d2_temp_coef = 0.037,
-            s1_sessile = 0.49,
-            s2_scaling = 2.3,
-            s3_motile = 0.88,
-            s4_adult = 0.61,
-            external_influx = 0.12
-        )
-    elseif location == "south"
-        return LocationParams(
-            T_mean = 12.0,
-            T_amp = 4.5,
-            peak_week = 27,
-            d1_intercept = -2.4,
-            d1_temp_coef = 0.37,
-            d2_intercept = -2.1,
-            d2_temp_coef = 0.037,
-            s1_sessile = 0.49,
-            s2_scaling = 2.3,
-            s3_motile = 0.88,
-            s4_adult = 0.61,
-            external_influx = 0.15 # Reduced from 0.2
-        )
-    else
+    if !haskey(LOCATION_PARAMS, location)
         error("Invalid location: $location. Must be 'north', 'west', or 'south'")
     end
+    return LOCATION_PARAMS[location]
 end
 
 # ----------------------------
@@ -114,7 +106,7 @@ end
 # ----------------------------
 # Simulation Configuration (for evaluating policies)
 # ----------------------------
-@with_kw mutable struct SimulationConfig
+@with_kw struct SimulationConfig
     # Simulation run parameters
     num_episodes::Int = 10
     steps_per_episode::Int = 20
@@ -159,7 +151,7 @@ end
 # ----------------------------
 # Experiment struct (combines solver and simulation configs)
 # ----------------------------
-@with_kw mutable struct ExperimentConfig
+@with_kw struct ExperimentConfig
     # Configurations
     solver_config::SolverConfig = SolverConfig()
     simulation_config::SimulationConfig = SimulationConfig()

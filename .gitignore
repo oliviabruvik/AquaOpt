@@ -19,3 +19,4 @@ src/TestVI.jl
 logs/
 .julia/
 .julia_depot/
+.claude/

@@ -35,73 +35,71 @@ end
 
 # Treatment effectiveness based on results from Table 5 of 
 # https://ars.els-cdn.com/content/image/1-s2.0-S0044848623005239-mmc1.pdf
-if !isdefined(Main, :ACTION_CONFIGS)
-    const ACTION_CONFIGS = Dict(
-        NoTreatment => ActionConfig(
-            action = NoTreatment,
-            cost = 0.0,
-            adult_reduction = 0.0,
-            motile_reduction = 0.0,
-            sessile_reduction = 0.0,
-            name = "No Treatment",
-            description = "No treatment applied",
-            duration_days = 0,
-            frequency_limit = 0,
-            fish_disease = 0.0,
-            mortality_rate = 0.0,
-            weight_loss = 0.0,
-            regulatory_penalty = 100.0
-        ),
-        
-        MechanicalTreatment => ActionConfig(
-            action = MechanicalTreatment,
-            cost = 10.0,  # MNOK per treatment
-            adult_reduction = 0.75,
-            motile_reduction = 0.84,
-            sessile_reduction = 0.74,
-            name = "Mechanical Treatment",
-            description = "Standard mechanical treatment for sea lice control",
-            duration_days = 7,
-            frequency_limit = 4,  # Maximum 4 treatments per year
-            fish_disease = 0.35,
-            mortality_rate = 0.006,
-            weight_loss = 0.01,
-            regulatory_penalty = 100.0
-        ),
+const ACTION_CONFIGS = Dict(
+    NoTreatment => ActionConfig(
+        action = NoTreatment,
+        cost = 0.0,
+        adult_reduction = 0.0,
+        motile_reduction = 0.0,
+        sessile_reduction = 0.0,
+        name = "No Treatment",
+        description = "No treatment applied",
+        duration_days = 0,
+        frequency_limit = 0,
+        fish_disease = 0.0,
+        mortality_rate = 0.0,
+        weight_loss = 0.0,
+        regulatory_penalty = 100.0
+    ),
+    
+    MechanicalTreatment => ActionConfig(
+        action = MechanicalTreatment,
+        cost = 10.0,  # MNOK per treatment
+        adult_reduction = 0.75,
+        motile_reduction = 0.84,
+        sessile_reduction = 0.74,
+        name = "Mechanical Treatment",
+        description = "Standard mechanical treatment for sea lice control",
+        duration_days = 7,
+        frequency_limit = 4,  # Maximum 4 treatments per year
+        fish_disease = 0.35,
+        mortality_rate = 0.006,
+        weight_loss = 0.01,
+        regulatory_penalty = 100.0
+    ),
 
-        ChemicalTreatment => ActionConfig(
-            action = ChemicalTreatment,
-            cost = 9.0,  # MNOK per treatment
-            adult_reduction = 0.60,
-            motile_reduction = 0.58,
-            sessile_reduction = 0.37,
-            name = "Chemical Treatment",
-            description = "Standard chemical treatment for sea lice control",
-            duration_days = 7,
-            frequency_limit = 4,  # Maximum 4 treatments per year
-            fish_disease = 0.3,
-            mortality_rate = 0.004,
-            weight_loss = 0.005,
-            regulatory_penalty = 100.0
-        ),
-        
-        ThermalTreatment => ActionConfig(
-            action = ThermalTreatment,
-            cost = 13.0,  # MNOK per treatment (higher cost) Increased from 12
-            adult_reduction = 0.88,
-            motile_reduction = 0.87,
-            sessile_reduction = 0.70,
-            name = "Thermal Treatment",
-            description = "Thermal treatment for sea lice control",
-            duration_days = 5,
-            frequency_limit = 6,  # Maximum 6 treatments per year
-            fish_disease = 0.4,
-            mortality_rate = 0.008,
-            weight_loss = 0.015,
-            regulatory_penalty = 100.0
-        )
+    ChemicalTreatment => ActionConfig(
+        action = ChemicalTreatment,
+        cost = 9.0,  # MNOK per treatment
+        adult_reduction = 0.60,
+        motile_reduction = 0.58,
+        sessile_reduction = 0.37,
+        name = "Chemical Treatment",
+        description = "Standard chemical treatment for sea lice control",
+        duration_days = 7,
+        frequency_limit = 4,  # Maximum 4 treatments per year
+        fish_disease = 0.3,
+        mortality_rate = 0.004,
+        weight_loss = 0.005,
+        regulatory_penalty = 100.0
+    ),
+    
+    ThermalTreatment => ActionConfig(
+        action = ThermalTreatment,
+        cost = 13.0,  # MNOK per treatment (higher cost) Increased from 12
+        adult_reduction = 0.88,
+        motile_reduction = 0.87,
+        sessile_reduction = 0.70,
+        name = "Thermal Treatment",
+        description = "Thermal treatment for sea lice control",
+        duration_days = 5,
+        frequency_limit = 6,  # Maximum 6 treatments per year
+        fish_disease = 0.4,
+        mortality_rate = 0.008,
+        weight_loss = 0.015,
+        regulatory_penalty = 100.0
     )
-end
+)
 
 # Utility functions for working with ActionConfig
 function get_action_config(action::Action)
@@ -155,27 +153,6 @@ function get_stochastic_treatment_effectiveness(action::Action, rng::AbstractRNG
     sessile_eff = clamp(sessile_eff, 0.0, 1.0)
     
     return (adult_eff, motile_eff, sessile_eff)
-end
-
-# -------------------------
-# Harvest schedule
-# -------------------------
-function harvest_schedule(week::Int)
-    return 0
-end
-
-# -------------------------
-# Move in function
-# -------------------------
-function move_in_fn(week::Int)
-    return 0
-end
-
-# -------------------------
-# Move out function
-# -------------------------
-function move_out_fn(week::Int)
-    return 0
 end
 
 # -------------------------

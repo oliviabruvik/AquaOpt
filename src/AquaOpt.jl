@@ -102,8 +102,8 @@ function run_experiments(mode, location)
     main(log_space=true, experiment_name="log_space_ukf", mode=mode, location="south", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas3, sim_reward_lambdas=reward_lambdas3)
 
     # Raw space and EKF
-    # main(log_space=false, experiment_name="raw_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
-    # main(log_space=true, experiment_name="log_space_ekf", mode=mode, location="north", ekf_filter=true, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    main(log_space=false, experiment_name="raw_space_ukf", mode=mode, location="north", ekf_filter=false, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
+    main(log_space=true, experiment_name="log_space_ekf", mode=mode, location="north", ekf_filter=true, plot=plot_flag, reward_lambdas=reward_lambdas1, sim_reward_lambdas=reward_lambdas1)
 
     return
 end
@@ -120,8 +120,8 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     ╔════════════════════════════════════════════════════════════════════════╗
     ║                         NEW EXPERIMENT RUN                              ║
     ╠════════════════════════════════════════════════════════════════════════╣
-    ║  Mode:            $mode_flag
-    ║  Log Space:       $log_space_flag
+    ║  Mode:            $mode
+    ║  Log Space:       $log_space
     ║  EKF Filter:      $ekf_filter
     ║  Reward lambdas:  $reward_lambdas
     ║  Sim R lambdas:   $sim_reward_lambdas
@@ -133,15 +133,15 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     # Log experiment configuration in experiments.csv file with all experiments
     save_experiment_config(config, heuristic_config)
 
-     # Save config to file in current directory for easy access
-     mkpath(joinpath(config.experiment_dir, "config"))
-     @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
-     open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
-         for field in fieldnames(typeof(config))
-             value = getfield(config, field)
-             println(io, "$field: $value")
-         end
-     end
+    # Save config to file in current directory for easy access
+    mkpath(joinpath(config.experiment_dir, "config"))
+    @save joinpath(config.experiment_dir, "config", "experiment_config.jld2") config
+    open(joinpath(config.experiment_dir, "config", "experiment_config.txt"), "w") do io
+        for field in fieldnames(typeof(config))
+            value = getfield(config, field)
+            println(io, "$field: $value")
+        end
+    end
 
     @info "Solving policies"
     for algo in algorithms
@@ -159,7 +159,7 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
         end
     else
         print_reward_metrics_for_vi_policy(parallel_data, config)
-        exit()
+        return
     end
 
     # Extract reward metrics
