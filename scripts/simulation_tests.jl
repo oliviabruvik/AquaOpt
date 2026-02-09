@@ -114,19 +114,8 @@ all_policies = JLD2.load(policies_path)["all_policies"]
 parallel_data = simulate_all_policies(algorithms, config, all_policies)
 
 # Evaluate simulation results
-if config.simulation_config.high_fidelity_sim
-    for algo in algorithms
-        @info "Evaluating $(algo.solver_name)"
-        histories = extract_simulation_histories(config, algo, parallel_data)
-        evaluate_simulation_results(config, algo, histories)
-    end
-
-    # Extract and display reward metrics
-    processed_data = extract_reward_metrics(parallel_data, config)
-    display_reward_metrics(processed_data, config, false)
-else
-    print_reward_metrics_for_vi_policy(parallel_data, config)
-end
+processed_data = extract_reward_metrics(parallel_data, config)
+display_reward_metrics(processed_data, config, false)
 
 plot_plos_one_plots(parallel_data, config)
 

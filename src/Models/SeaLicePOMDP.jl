@@ -1,5 +1,4 @@
 using DataFrames
-import Distributions: Normal, Uniform
 using JLD2
 
 using POMDPs

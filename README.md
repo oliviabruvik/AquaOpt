@@ -133,7 +133,6 @@ Evaluation is orchestrated in `src/Algorithms/Simulation.jl` and `Evaluation.jl`
 1. `solve_policies` solves each policy once and writes a single `policies_pomdp_mdp.jld2` bundle under `results/experiments/<exp>/policies`.
 2. `simulate_all_policies` uses those policies, wraps them for simulator compatibility, and runs `num_episodes × steps_per_episode` rollouts with shared seeds.
 3. `extract_reward_metrics` computes treatment counts, average lice levels, biomass loss, regulatory exceedances, and fish disease tallies per episode/history.
-4. `evaluate_simulation_results` aggregates per policy and writes CSV/JLD summaries for manuscript tables.
 
 Histories and plots are written inside `results/experiments/<exp>/` so every run remains self-contained.
 

@@ -6,6 +6,43 @@ using DataFrames
 using PGFPlotsX
 using POMDPTools
 using Dates
+using PGFPlotsX: @pgf, Axis, Plot, Coordinates, GroupPlot, Options
+
+# push!(PGFPlotsX.CUSTOM_PREAMBLE, raw"\usetikzlibrary{intersections}")
+# push!(PGFPlotsX.CUSTOM_PREAMBLE, raw"\usepgfplotslibrary{fillbetween}")
+
+# Preamble: enable fillbetween and modern pgfplots behavior
+PGFPlotsX.DEFAULT_PREAMBLE = [
+    raw"\usepackage{pgfplots}",
+    raw"\usepgfplotslibrary{fillbetween}",
+    raw"\usepgfplotslibrary{groupplots}",
+    raw"\usetikzlibrary{intersections}",
+    raw"\pgfplotsset{compat=newest}",
+    raw"\pgfplotsset{legend style={text=white,fill=none,draw=none}}"
+]
+
+# Transparent axis & legend bundle (string keys for special pgf keys)
+const AXIS_TRANSPARENT = (
+    "axis background/.style" => Options("fill" => "none"),                 # transparent axis rect
+    "legend style"           => Options("fill" => "none", "draw" => "none", "text" => "white"),# transparent legend box with white text
+    "axis on top"            => true
+)
+
+# Save a transparent PNG via poppler (pdftocairo -transp). Requires: brew install poppler
+function save_transparent_png(pdf_path::AbstractString, ax::Axis; dpi::Int=300)
+    PGFPlotsX.save(pdf_path, ax)  # writes the PDF first
+    stem = replace(pdf_path, r"\.pdf$" => "")
+    run(`pdftocairo -png -transp -r $dpi $pdf_path $stem`)
+    return stem * ".png"
+end
+
+# Save a transparent PNG for GroupPlot objects
+function save_transparent_png(pdf_path::AbstractString, ax::GroupPlot; dpi::Int=300)
+    PGFPlotsX.save(pdf_path, ax)  # writes the PDF first
+    stem = replace(pdf_path, r"\.pdf$" => "")
+    run(`pdftocairo -png -transp -r $dpi $pdf_path $stem`)
+    return stem * ".png"
+end
 
 # Consistent palette + labeling for the Plos One figures
 const PLOS_POLICY_STYLE_ORDERED = [
@@ -1332,15 +1369,10 @@ end
 # ----------------------------
 # Shows Adult, Sessile, Motile, and Predicted sea lice levels over time with 95% CI bands
 # ----------------------------
-function plos_one_algo_sealice_levels_over_time(config, algo_name)
+function plos_one_algo_sealice_levels_over_time(data, config, algo_name)
 
-    policy_name = algo_name
-
-    # Load the results from the JLD2 file
-    @load joinpath(config.results_dir, "$(policy_name)_avg_results.jld2") avg_results
-    @load joinpath(config.simulations_dir, "$(policy_name)", "$(policy_name)_histories.jld2") histories
-
-    histories_lambda = histories
+    data_policy = filter(row -> row.policy == algo_name, data)
+    histories = collect(data_policy.history)
 
     # Calculate mean and 95% CI band for each time step for all sea lice stages
     time_steps = 1:config.simulation_config.steps_per_episode
@@ -1365,7 +1397,7 @@ function plos_one_algo_sealice_levels_over_time(config, algo_name)
         step_motile = Float64[]
         step_predicted = Float64[]
 
-        for episode_history in histories_lambda
+        for episode_history in histories
             states = collect(state_hist(episode_history))
             observations = collect(observation_hist(episode_history))
 
@@ -1568,15 +1600,4 @@ function plos_one_treatment_distribution_comparison(parallel_data, config)
     return ax
 end
 
-function _expected_biomass_shortfall(sim_params::SeaLiceSimPOMDP, s, sp)
-    ideal_survival_rate = 1 - sim_params.nat_mort_rate
-    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
-    k0_base = sim_params.k_growth * (1.0 + sim_params.temp_sensitivity * (s.Temperature - 10.0))
-    ideal_k0 = max(k0_base, 0.0)
-    expected_weight = s.AvgFishWeight + ideal_k0 * (sim_params.w_max - s.AvgFishWeight)
-    expected_weight = clamp(expected_weight, sim_params.weight_bounds...)
-    expected_biomass = biomass_tons(expected_weight, expected_fish)
-    next_biomass = biomass_tons(sp)
-    return max(expected_biomass - next_biomass, 0.0)
-end
 

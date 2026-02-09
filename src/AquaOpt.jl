@@ -111,30 +111,21 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     @info "Simulating policies"
     parallel_data = simulate_all_policies(algorithms, config, all_policies)
 
-    # If we are simulating on high fidelity model, we want to evaluate the simulation results
-    if config.simulation_config.high_fidelity_sim
-        for algo in algorithms
-            histories = extract_simulation_histories(config, algo, parallel_data)
-            evaluate_simulation_results(config, algo, histories)
-        end
-    else
-        print_reward_metrics_for_vi_policy(parallel_data, config)
-        return
-    end
-
     # Extract reward metrics
     processed_data = extract_reward_metrics(parallel_data, config)
 
     # Display reward metrics
     display_reward_metrics(processed_data, config, true, true)
 
-    if plot
-        # Plot the results
-        plot_plos_one_plots(processed_data, config)
-    end
+    if config.simulation_config.high_fidelity_sim
+        if plot
+            # Plot the results
+            plot_plos_one_plots(processed_data, config)
+        end
 
-    # Treatment frequency
-    print_treatment_frequency(processed_data, config)
+        # Treatment frequency
+        print_treatment_frequency(processed_data, config)
+    end
 
 end
 
@@ -153,7 +144,7 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         sarsop_time, vi_iters, qmdp_iters, disc_step = 5.0, 100, 100, 0.1
         n_episodes, n_steps = 100, 52
     elseif mode == "paper"
-        sarsop_time, vi_iters, qmdp_iters, disc_step = 800.0, 800, 800, 0.01
+        sarsop_time, vi_iters, qmdp_iters, disc_step = 3000.0, 800, 800, 0.01
         n_episodes, n_steps = 1000, 100
     else
         error("Invalid mode: $mode. Must be 'debug' or 'paper'")
@@ -251,12 +242,10 @@ export main, setup_experiment_configs, define_algorithms
 export solve_policies, create_pomdp_mdp, generate_policy
 
 # Simulation functions
-export simulate_policy, simulate_all_policies, create_sim_pomdp, initialize_belief
+export simulate_all_policies, create_sim_pomdp, initialize_belief
 
 # Evaluation functions
-export evaluate_simulation_results, extract_simulation_histories
 export extract_reward_metrics, display_reward_metrics
-export print_reward_metrics_for_vi_policy
 
 # Plotting functions
 export plot_plos_one_plots

@@ -55,7 +55,7 @@ function plot_plos_one_plots(parallel_data, config; policies_to_plot=nothing, ti
         show_legend=_time_plot_legend_enabled(legend_selection, :treatment_probability),
     )
     plos_one_sarsop_dominant_action(parallel_data, config)
-    plos_one_algo_sealice_levels_over_time(config, "NUS_SARSOP_Policy")
+    plos_one_algo_sealice_levels_over_time(parallel_data, config, "NUS_SARSOP_Policy")
     plos_one_episode_sealice_levels_over_time(
         parallel_data,
         config;

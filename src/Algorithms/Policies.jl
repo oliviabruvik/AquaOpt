@@ -171,6 +171,10 @@ end
 # TODO: add some stochasticity
 function POMDPs.action(policy::HeuristicPolicy, b)
 
+    @assert policy.solver_config.heuristic_belief_threshold_thermal >
+            policy.solver_config.heuristic_belief_threshold_mechanical >
+            policy.solver_config.heuristic_belief_threshold_chemical "Heuristic thresholds must be strictly descending: thermal > mechanical > chemical"
+
     # Get the probability of the current sea lice level being above the threshold
     state_space = states(policy.pomdp)
     threshold = policy.solver_config.heuristic_threshold
@@ -182,12 +186,12 @@ function POMDPs.action(policy::HeuristicPolicy, b)
     # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
     if prob_above_threshold > policy.solver_config.heuristic_belief_threshold_thermal
         return ThermalTreatment
-    # Chemical treatment for mid-level infestations
-    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_chemical
-        return ChemicalTreatment
     # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose MechanicalTreatment
     elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_mechanical
         return MechanicalTreatment
+    # Chemical treatment for lower-level infestations
+    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_chemical
+        return ChemicalTreatment
     # Otherwise, choose NoTreatment
     else
         return NoTreatment
@@ -239,7 +243,9 @@ function POMDPs.action(policy::AdaptorPolicy, b)
 
     # Predict the next state (always in raw space from the biological model)
     # Belief means are ordered [Adult, Motile, Sessile, Temperature]
-    pred_adult, pred_motile, pred_sessile = predict_next_abundances(b.μ[1][1], b.μ[2][1], b.μ[3][1], b.μ[4][1], policy.location, policy.reproduction_rate)
+    pred_adult, pred_motile, pred_sessile = predict_next_abundances(
+        b.μ[BELIEF_IDX_ADULT][1], b.μ[BELIEF_IDX_MOTILE][1], b.μ[BELIEF_IDX_SESSILE][1], b.μ[BELIEF_IDX_TEMPERATURE][1],
+        policy.location, policy.reproduction_rate)
     adult_variance = b.Σ[1,1]  # Variance in raw space
 
     # Clamp predictions to be positive
@@ -277,24 +283,26 @@ function POMDPs.action(policy::AdaptorPolicy, b)
         adult_sd = sqrt(max(adult_variance, 0.0))
     end
 
-    # Get next action from policy
-    # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
+    # Discretize the belief over the state space
+    state_space = states(policy.pomdp)
+    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
+
+    # For VI: compute belief-weighted Q-values (same principle as QMDP)
     if policy.lofi_policy isa ValueIterationPolicy
-        closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
-        pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
-        if policy.pomdp isa SeaLiceLogPOMDP
-            pred_adult_state = SeaLiceLogState(pred_adult_state)
-        else
-            pred_adult_state = SeaLiceState(pred_adult_state)
+        best_action = NoTreatment
+        best_value = -Inf
+        for a in actions(policy.pomdp)
+            q_val = sum(bvec[i] * value(policy.lofi_policy, s, a)
+                        for (i, s) in enumerate(state_space))
+            if q_val > best_value
+                best_value = q_val
+                best_action = a
+            end
         end
-        @assert pred_adult_state.SeaLiceLevel - pred_adult < policy.pomdp.discretization_step
-        @assert pred_adult_state in states(policy.pomdp)
-        return action(policy.lofi_policy, pred_adult_state)
+        return best_action
     end
 
-    # Discretize alpha vectors (representation of utility over belief states per action)
-    state_space = states(policy.lofi_policy.pomdp)
-    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
+    # For QMDP/SARSOP: use alpha vector dot product with belief
     return action(policy.lofi_policy, bvec)
 end
 
@@ -307,16 +315,21 @@ struct LOFIAdaptorPolicy{LP <: Policy, P <: POMDP} <: Policy
 end
 
 function POMDPs.action(policy::LOFIAdaptorPolicy{<:ValueIterationPolicy}, b)
-    mode_idx = argmax(b.b)
     all_states = states(policy.pomdp)
-    state_with_highest_probability = all_states[mode_idx]
+    @assert length(b.b) == length(all_states)
 
-    # Assertions
-    @assert state_with_highest_probability in states(policy.pomdp)
-    @assert length(b.b) == length(states(policy.pomdp))
-    
-    # Get next action from policy
-    return action(policy.lofi_policy, state_with_highest_probability)
+    # Belief-weighted Q-values (same principle as QMDP)
+    best_action = NoTreatment
+    best_value = -Inf
+    for a in actions(policy.pomdp)
+        q_val = sum(b.b[i] * value(policy.lofi_policy, s, a)
+                    for (i, s) in enumerate(all_states))
+        if q_val > best_value
+            best_value = q_val
+            best_action = a
+        end
+    end
+    return best_action
 end
 
 # Adaptor action
@@ -349,8 +362,7 @@ function POMDPs.action(policy::FullObservabilityAdaptorPolicy, s)
         pred_adult = log(pred_adult)
     end
 
-    # Get next action from policy
-    # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
+    # Get next action from policy (point estimate b/c full observability)
     if policy.lofi_policy isa ValueIterationPolicy
         closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
         pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]

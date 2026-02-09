@@ -576,9 +576,9 @@ function policy_metrics_rows(df::DataFrame)
         row = [
             format_text(replace(policy, "_" => "\\_")),
             format_metric(df[idx, :mean_reward]),
-            format_metric(df[idx, :mean_mean_adult_sea_lice_level]),
-            format_metric(df[idx, :mean_num_regulatory_penalties]),
-            format_metric(df[idx, :mean_lost_biomass_1000kg]),
+            format_metric(df[idx, :mean_sea_lice]),
+            format_metric(df[idx, :mean_reg_penalties]),
+            format_metric(df[idx, :mean_lost_biomass]),
         ]
         push!(rows, row)
     end

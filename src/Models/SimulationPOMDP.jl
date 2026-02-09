@@ -1,7 +1,6 @@
 
 
 using DataFrames
-import Distributions: Normal, Uniform
 using JLD2
 
 using POMDPs
@@ -339,6 +338,54 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     # At 0.5: 0.50
     # At 1.0: 1.00 × 1.10 = 1.10 (milder)
     # At 2.0: 2.00 × 1.30 = 2.60 (much milder than 3.50)
+    sea_lice_penalty = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5))
+
+    # === TOTAL REWARD ===
+    return -(
+        λ_trt * treatment_cost +
+        λ_reg * regulatory_penalty +
+        λ_bio * total_biomass_loss +
+        λ_health * fish_health_penalty +
+        λ_sea_lice * sea_lice_penalty
+    )
+end
+
+# -------------------------
+# Observation-based reward function
+# POMDPs.jl prefers reward(m, s, a, sp, o) when available during simulation.
+# The regulatory penalty is based on the observed (sampled) lice count,
+# matching real-world enforcement where regulators assess compliance
+# from sampled counts, not the true underlying population.
+# -------------------------
+function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp::EvaluationState, o::EvaluationObservation)
+
+    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = pomdp.reward_lambdas
+
+    # === 1. DIRECT TREATMENT COSTS ===
+    treatment_cost = get_treatment_cost(a)
+
+    # === 2. REGULATORY PENALTY based on OBSERVATION (sampled count) ===
+    if o.Adult > pomdp.regulation_limit
+        regulatory_penalty = 100.0
+    else
+        regulatory_penalty = 0.0
+    end
+
+    # === 3. BIOMASS LOSS (expected growth shortfall — physical, not observed) ===
+    next_biomass = biomass_tons(sp)
+    ideal_survival_rate = 1 - pomdp.nat_mort_rate
+    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
+    k0_base = pomdp.k_growth * (1.0 + pomdp.temp_sensitivity * (s.Temperature - 10.0))
+    ideal_k0 = max(k0_base, 0.0)
+    expected_weight = s.AvgFishWeight + ideal_k0 * (pomdp.w_max - s.AvgFishWeight)
+    expected_weight = clamp(expected_weight, pomdp.weight_bounds...)
+    expected_biomass = biomass_tons(expected_weight, expected_fish)
+    total_biomass_loss = max(expected_biomass - next_biomass, 0.0)
+
+    # === 4. FISH HEALTH (treatment side effects only) ===
+    fish_health_penalty = get_fish_disease(a)
+
+    # === 5. SEA LICE BURDEN (chronic parasite damage — physical, not observed) ===
     sea_lice_penalty = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5))
 
     # === TOTAL REWARD ===

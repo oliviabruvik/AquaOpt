@@ -34,77 +34,6 @@ function _expected_biomass_shortfall(sim_params::SeaLiceSimPOMDP, s, sp)
 end
 
 # ----------------------------
-# Calculate averages
-# ----------------------------
-function evaluate_simulation_results(config, algorithm, histories)
-
-    avg_results = DataFrame(
-        avg_treatment_cost=Float64[],
-        avg_sealice=Float64[],
-        avg_reward=Float64[],
-    )
-
-    episode_costs, episode_abundances, episode_rewards = [], [], []
-
-    for episode in 1:config.simulation_config.num_episodes
-
-        # Get episode history
-        episode_history = histories[episode]
-
-        # Get action, state, and reward histories
-        actions = collect(action_hist(episode_history))
-        states = collect(state_hist(episode_history))
-        rewards = collect(reward_hist(episode_history))
-
-        # Get total treatment cost
-        episode_cost = sum(get_treatment_cost(a) for a in actions)
-
-        # Get mean abundance
-        episode_abundance = mean(s.SeaLiceLevel for s in states)
-
-        # Get mean reward
-        episode_reward = mean(rewards)
-
-        # Add to episode lists
-        push!(episode_costs, episode_cost)
-        push!(episode_abundances, episode_abundance)
-        push!(episode_rewards, episode_reward)
-    end
-
-    # Calculate the average reward, cost, and sea lice level
-    avg_reward, avg_treatment_cost, avg_abundance = mean(episode_rewards), mean(episode_costs), mean(episode_abundances)
-    push!(avg_results, (avg_treatment_cost, avg_abundance, avg_reward))
-
-    # Save results
-    mkpath(config.results_dir)
-    @save joinpath(config.results_dir, "$(algorithm.solver_name)_avg_results.jld2") avg_results
-    CSV.write(joinpath(config.results_dir, "$(algorithm.solver_name)_avg_results.csv"), avg_results)
-    
-    return avg_results
-end
-
-# ----------------------------
-# Extract histories for a specific algorithm from parallel simulation results
-# Takes in config, algorithm and parallel data
-# Returns a vector of episode histories
-# ----------------------------
-function extract_simulation_histories(config, algorithm, parallel_data)
-
-    data_policy = filter(row -> row.policy == algorithm.solver_name, parallel_data)
-
-    episode_histories = collect(data_policy.history)
-
-    # Create directory for simulation histories
-    histories_dir = joinpath(config.simulations_dir, "$(algorithm.solver_name)")
-    mkpath(histories_dir)
-    histories_filepath = joinpath(histories_dir, "$(algorithm.solver_name)_histories.jld2")
-    histories = episode_histories
-    @save histories_filepath histories
-
-    return histories
-end
-
-# ----------------------------
 # Display the mean and confidence interval for each policy
 # ----------------------------
 function display_rewards_across_policies(parallel_data, config)
@@ -125,18 +54,20 @@ function extract_reward_metrics(data, config)
 
     # Create a copy of the data to avoid mutating the input
     processed_data = copy(data)
+    high_fidelity = config.simulation_config.high_fidelity_sim
 
     # Add new columns to the DataFrame copy
     processed_data.mean_rewards_across_sims = zeros(Float64, nrow(processed_data))
     processed_data.treatment_cost = zeros(Float64, nrow(processed_data))
     processed_data.treatments = Vector{Dict{Action, Int}}(undef, nrow(processed_data))
     processed_data.num_regulatory_penalties = zeros(Float64, nrow(processed_data))
-    processed_data.fish_disease = zeros(Float64, nrow(processed_data))
-    processed_data.lost_biomass_1000kg = zeros(Float64, nrow(processed_data))
-    processed_data.mean_adult_sea_lice_level = zeros(Float64, nrow(processed_data))
 
-    # For each episode, extract the number of treatments, regulatory penalties, lost biomass, and fish disease
-    sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+    if high_fidelity
+        processed_data.fish_disease = zeros(Float64, nrow(processed_data))
+        processed_data.lost_biomass_1000kg = zeros(Float64, nrow(processed_data))
+        processed_data.mean_adult_sea_lice_level = zeros(Float64, nrow(processed_data))
+        sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+    end
 
     for (i, row) in enumerate(eachrow(processed_data))
 
@@ -152,26 +83,29 @@ function extract_reward_metrics(data, config)
             treatments[a] = get(treatments, a, 0) + 1
         end
 
-        # Get total lost biomass
-        lost_biomass_1000kg = 0.0
-        if length(states) > 1
-            n_pairs = min(length(states) - 1, length(actions))
-            for t in 1:n_pairs
-                lost_biomass_1000kg += _expected_biomass_shortfall(sim_params, states[t], states[t+1])
-            end
-        end
-
-        # Get total fish disease
-        fish_disease = sum(get_fish_disease(a) + 100.0 * s.SeaLiceLevel for (s, a) in zip(states, actions))
-
         # Add to dataframe copy
         processed_data.treatment_cost[i] = sum(get_treatment_cost(a) for a in actions)
         processed_data.treatments[i] = treatments
-        processed_data.num_regulatory_penalties[i] = sum(s.Adult > config.solver_config.regulation_limit ? 1.0 : 0.0 for s in states)
-        processed_data.lost_biomass_1000kg[i] = lost_biomass_1000kg
-        processed_data.fish_disease[i] = fish_disease
-        processed_data.mean_adult_sea_lice_level[i] = mean(s.Adult for s in states)
         processed_data.mean_rewards_across_sims[i] = mean(rewards)
+
+        if high_fidelity
+            # Regulatory penalty based on observations (sampled counts), matching real-world enforcement
+            observations = collect(h[:o])
+            processed_data.num_regulatory_penalties[i] = sum(o.Adult > config.solver_config.regulation_limit ? 1.0 : 0.0 for o in observations)
+            processed_data.mean_adult_sea_lice_level[i] = mean(s.Adult for s in states)
+            processed_data.fish_disease[i] = sum(get_fish_disease(a) + 100.0 * s.SeaLiceLevel for (s, a) in zip(states, actions))
+
+            lost_biomass_1000kg = 0.0
+            if length(states) > 1
+                n_pairs = min(length(states) - 1, length(actions))
+                for t in 1:n_pairs
+                    lost_biomass_1000kg += _expected_biomass_shortfall(sim_params, states[t], states[t+1])
+                end
+            end
+            processed_data.lost_biomass_1000kg[i] = lost_biomass_1000kg
+        else
+            processed_data.num_regulatory_penalties[i] = sum(s.SeaLiceLevel > config.solver_config.regulation_limit ? 1.0 : 0.0 for s in states)
+        end
     end
 
     return processed_data
@@ -184,150 +118,98 @@ end
 function display_reward_metrics(parallel_data, config, display_ci=false, print_sd=false)
 
     data_grouped_by_policy = groupby(parallel_data, :policy)
+    col_syms = Set(Symbol.(names(parallel_data)))
+    has_treatments = :treatments in col_syms
 
-    # Check if treatments column exists in the data
-    if :treatments in names(parallel_data)
-            # Process each column separately to avoid duplicate column names
-            if display_ci
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :reward => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :treatment_cost => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_treatment_cost,
-                    :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_adult_sea_lice_level,
-                    :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_adult_sea_lice_level,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_num_regulatory_penalties,
-                    :lost_biomass_1000kg => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_lost_biomass_1000kg,
-                    :lost_biomass_1000kg => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_lost_biomass_1000kg,
-                    :fish_disease => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_fish_disease,
-                    :fish_disease => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_fish_disease,
-                    :treatments => (x -> round(mean_and_ci([get(t, NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, NoTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, MechanicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_MechanicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ChemicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ChemicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ThermalTreatment
-                )
-            else
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_adult_sea_lice_level,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :lost_biomass_1000kg => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_lost_biomass_1000kg,
-                    :fish_disease => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_fish_disease,
-                    :treatments => (x -> round(mean_and_ci([get(t, NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment
-                )
-            end
-        else
-            # Process without treatments column
-            if display_ci
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :reward => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :treatment_cost => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_treatment_cost,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_num_regulatory_penalties,
-                    :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_adult_sea_lice_level,
-                    :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_adult_sea_lice_level,
-                    :lost_biomass_1000kg => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_lost_biomass_1000kg,
-                    :lost_biomass_1000kg => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_lost_biomass_1000kg,
-                    :fish_disease => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_fish_disease,
-                    :fish_disease => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_fish_disease
-                )
-            else
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_adult_sea_lice_level,
-                    :lost_biomass_1000kg => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_lost_biomass_1000kg,
-                    :fish_disease => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_fish_disease
-                )
-            end
+    function push_ci!(agg_pairs, col, mean_sym, ci_sym; digits=2, f=identity)
+        push!(agg_pairs, col => (x -> round(mean_and_ci(f(x)).mean, digits=digits)) => mean_sym)
+        push!(agg_pairs, col => (x -> round(mean_and_ci(f(x)).ci, digits=digits)) => ci_sym)
+    end
+
+    # Build aggregation pairs — always include CI
+    agg_pairs = Any[]
+    push_ci!(agg_pairs, :reward, :mean_reward, :ci_reward)
+    push_ci!(agg_pairs, :mean_rewards_across_sims, :mean_sim_reward, :ci_sim_reward)
+    push_ci!(agg_pairs, :treatment_cost, :mean_treatment_cost, :ci_treatment_cost)
+    push_ci!(agg_pairs, :num_regulatory_penalties, :mean_reg_penalties, :ci_reg_penalties)
+
+    # High-fidelity-only metrics
+    for (col, base) in [
+        (:mean_adult_sea_lice_level, :sea_lice),
+        (:lost_biomass_1000kg, :lost_biomass),
+        (:fish_disease, :fish_disease),
+    ]
+        col in col_syms && push_ci!(agg_pairs, col, Symbol("mean_", base), Symbol("ci_", base))
+    end
+
+    if has_treatments
+        for (action, base) in [
+            (NoTreatment, :no_treatment),
+            (MechanicalTreatment, :mechanical),
+            (ChemicalTreatment, :chemical),
+            (ThermalTreatment, :thermal),
+        ]
+            f = x -> [get(t, action, 0) for t in x]
+            push_ci!(agg_pairs, :treatments, Symbol("mean_", base), Symbol("ci_", base); f=f)
         end
+    end
 
-        # Order by mean reward
-        result = sort(result, :mean_reward, rev=true)
+    result = combine(data_grouped_by_policy, agg_pairs...)
+    result = sort(result, :mean_reward, rev=true)
+
+    # Display result — optionally hide CI columns
+    if display_ci
         println(result)
+    else
+        ci_cols = filter(n -> startswith(String(n), "ci_"), names(result))
+        println(select(result, Not(ci_cols)))
+    end
 
-        if print_sd
-            # Create pivot table format
-            println("\n" * "="^80)
-            
-            # Print header
-            println(@sprintf("%-20s %12s %12s %12s %12s %12s", 
-                            "Policy", "Mean Reward", "Treatment Cost", "Reg. Penalties", "Sea Lice Level", "Fish Disease"))
-            println("-"^80)
-            
-            # Print each policy's results
-            display_ci = true
-            result = combine(
-                data_grouped_by_policy,
-                :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                :reward => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_reward,
-                :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                :mean_rewards_across_sims => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_rewards_across_sims,
-                :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                :treatment_cost => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_treatment_cost,
-                :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                :num_regulatory_penalties => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_num_regulatory_penalties,
-                :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_adult_sea_lice_level,
-                :mean_adult_sea_lice_level => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_adult_sea_lice_level,
-                :lost_biomass_1000kg => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_lost_biomass_1000kg,
-                :lost_biomass_1000kg => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_lost_biomass_1000kg,
-                :fish_disease => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_fish_disease,
-                :fish_disease => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_fish_disease
-            )
-            for row in eachrow(result)
-                policy_name = row.policy
-                mean_reward = display_ci ? @sprintf("%.3f±%.3f", row.mean_reward, row.ci_reward) : @sprintf("%.3f", row.mean_reward)
-                treatment_cost = display_ci ? @sprintf("%.3f±%.3f", row.mean_treatment_cost, row.ci_treatment_cost) : @sprintf("%.3f", row.mean_treatment_cost)
-                reg_penalties = display_ci ? @sprintf("%.3f±%.3f", row.mean_num_regulatory_penalties, row.ci_num_regulatory_penalties) : @sprintf("%.3f", row.mean_num_regulatory_penalties)
-                sea_lice = display_ci ? @sprintf("%.3f±%.3f", row.mean_mean_adult_sea_lice_level, row.ci_mean_adult_sea_lice_level) : @sprintf("%.3f", row.mean_mean_adult_sea_lice_level)
-                fish_disease = display_ci ? @sprintf("%.1f±%.1f", row.mean_fish_disease, row.ci_fish_disease) : @sprintf("%.1f", row.mean_fish_disease)
+    # Print formatted summary table with ± CI
+    if print_sd
+        has_sea_lice = :mean_sea_lice in names(result)
+        has_fish_disease = :mean_fish_disease in names(result)
 
-                println(@sprintf("%-20s %12s %12s %12s %12s %12s", 
-                            policy_name, mean_reward, treatment_cost, reg_penalties, sea_lice, fish_disease))
+        fmt_ci(m, c, digits) = @sprintf("%.*f±%.*f", digits, m, digits, c)
+
+        println("\n" * "="^80)
+        summary_cols = [
+            (:mean_reward, :ci_reward, "Mean Reward", 3),
+            (:mean_treatment_cost, :ci_treatment_cost, "Treatment Cost", 3),
+            (:mean_reg_penalties, :ci_reg_penalties, "Reg. Penalties", 3),
+        ]
+        has_sea_lice && push!(summary_cols, (:mean_sea_lice, :ci_sea_lice, "Sea Lice Level", 3))
+        has_fish_disease && push!(summary_cols, (:mean_fish_disease, :ci_fish_disease, "Fish Disease", 1))
+
+        header = ["Policy"; [c[3] for c in summary_cols]]
+        println(join([@sprintf("%-20s", header[1]); [@sprintf("%14s", h) for h in header[2:end]]], ""))
+        println("-"^(20 + 14 * length(summary_cols)))
+
+        for row in eachrow(result)
+            parts = [@sprintf("%-20s", row.policy)]
+            for (mcol, ccol, _, digits) in summary_cols
+                push!(parts, @sprintf("%14s", fmt_ci(row[mcol], row[ccol], digits)))
             end
-            
-            # If treatments column exists, print treatment distribution
-            if :treatments in names(parallel_data)
-                println("\nTreatment Distribution:")
-                println("-"^50)
-                println(@sprintf("%-20s %12s %12s %12s %12s", "Policy", "No Treatment", "Mechanical", "Chemical", "Thermal"))
-                println("-"^50)
-                
-                for row in eachrow(result)
-                    policy_name = row.policy
-                    no_treatment = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_NoTreatment, row.ci_num_NoTreatment) : @sprintf("%.1f", row.mean_num_NoTreatment)
-                    mechanical = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_MechanicalTreatment, row.ci_num_MechanicalTreatment) : @sprintf("%.1f", row.mean_num_MechanicalTreatment)
-                    chemical = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_ChemicalTreatment, row.ci_num_ChemicalTreatment) : @sprintf("%.1f", row.mean_num_ChemicalTreatment)
-                    thermal = display_ci ? @sprintf("%.1f±%.1f", row.mean_num_ThermalTreatment, row.ci_num_ThermalTreatment) : @sprintf("%.1f", row.mean_num_ThermalTreatment)
-                    
-                    println(@sprintf("%-20s %12s %12s %12s %12s", 
-                                policy_name, no_treatment, mechanical, chemical, thermal))
-                end
+            println(join(parts, ""))
+        end
+
+        if has_treatments
+            println("\nTreatment Distribution:")
+            println("-"^(20 + 12 * 4))
+            println(@sprintf("%-20s %12s %12s %12s %12s", "Policy", "No Treatment", "Mechanical", "Chemical", "Thermal"))
+            println("-"^(20 + 12 * 4))
+
+            for row in eachrow(result)
+                println(@sprintf("%-20s %12s %12s %12s %12s",
+                            row.policy,
+                            fmt_ci(row.mean_no_treatment, row.ci_no_treatment, 1),
+                            fmt_ci(row.mean_mechanical, row.ci_mechanical, 1),
+                            fmt_ci(row.mean_chemical, row.ci_chemical, 1),
+                            fmt_ci(row.mean_thermal, row.ci_thermal, 1)))
             end
         end
-        
+    end
+
     println("\n")
 
     # Save results to csv
@@ -336,113 +218,6 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
 
 end
 
-function print_reward_metrics_for_vi_policy(data, config)
-
-     # Add new columns to the DataFrame
-     data.mean_rewards_across_sims = zeros(Float64, nrow(data))
-     data.treatment_cost = zeros(Float64, nrow(data))
-     data.treatments = Vector{Dict{Action, Int}}(undef, nrow(data))
-     data.num_regulatory_penalties = zeros(Float64, nrow(data))
- 
-     # For each episode, extract the number of treatments, regulatory penalties, lost biomass, and fish disease
-     for (i, row) in enumerate(eachrow(data))
- 
-         # Get the history
-         h = row.history
-         states = collect(h[:s])
-         actions = collect(h[:a])
-         rewards = collect(h[:r])
- 
-         # Get distribution of treatments
-         treatments = Dict{Action, Int}()
-         for a in actions
-             treatments[a] = get(treatments, a, 0) + 1
-         end
-         # Add to dataframe
-         data.treatment_cost[i] = sum(get_treatment_cost(a) for a in actions)
-         data.treatments[i] = treatments
-         data.num_regulatory_penalties[i] = sum(s.SeaLiceLevel > config.solver_config.regulation_limit ? 1.0 : 0.0 for s in states)
-         data.mean_rewards_across_sims[i] = mean(rewards)
-     end
-
-     parallel_data = data
-     display_ci = true
- 
-    data_grouped_by_policy = groupby(parallel_data, :policy)
-
-    # Check if treatments column exists in the data
-    if :treatments in names(parallel_data)
-            # Process each column separately to avoid duplicate column names
-            if display_ci
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :reward => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :treatment_cost => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_treatment_cost,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_num_regulatory_penalties,
-                    :treatments => (x -> round(mean_and_ci([get(t, NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, NoTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, MechanicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_MechanicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ChemicalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ChemicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).ci, digits=2)) => :ci_num_ThermalTreatment
-                )
-            else
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :treatments => (x -> round(mean_and_ci([get(t, NoTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_NoTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, MechanicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_MechanicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ChemicalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ChemicalTreatment,
-                    :treatments => (x -> round(mean_and_ci([get(t, ThermalTreatment, 0) for t in x]).mean, digits=2)) => :mean_num_ThermalTreatment
-                )
-            end
-        else
-            # Process without treatments column
-            if display_ci
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :reward => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :treatment_cost => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_treatment_cost,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).ci, digits=2)) => :ci_num_regulatory_penalties,
-                )
-            else
-                result = combine(
-                    data_grouped_by_policy,
-                    :reward => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_reward,
-                    :mean_rewards_across_sims => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_mean_rewards_across_sims,
-                    :treatment_cost => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_treatment_cost,
-                    :num_regulatory_penalties => (x -> round(mean_and_ci(x).mean, digits=2)) => :mean_num_regulatory_penalties,
-                )
-            end
-        end
-
-        # Order by mean reward
-        result = sort(result, :mean_reward, rev=true)
-        println(result)
-
-        # Create pivot table format
-        println("\n" * "="^80)
-
-        # Save results to csv
-        mkpath(config.results_dir)
-        CSV.write(joinpath(config.results_dir, "reward_metrics.csv"), result)
-
-end
 
 # ----------------------------
 # Print the count of each treatment for each policy
@@ -583,16 +358,16 @@ function print_histories(data, config)
                     sp_pred = round(sp.SeaLiceLevel, digits=2)
 
                     # Belief
-                    b_adult = round(b.μ[1], digits=2)
-                    b_motile = round(b.μ[2], digits=2)
-                    b_sessile = round(b.μ[3], digits=2)
-                    b_temp = round(b.μ[4], digits=2)
+                    b_adult = round(b.μ[BELIEF_IDX_ADULT], digits=2)
+                    b_motile = round(b.μ[BELIEF_IDX_MOTILE], digits=2)
+                    b_sessile = round(b.μ[BELIEF_IDX_SESSILE], digits=2)
+                    b_temp = round(b.μ[BELIEF_IDX_TEMPERATURE], digits=2)
 
                     # New belief
-                    bp_adult = round(bp.μ[1], digits=2)
-                    bp_motile = round(bp.μ[2], digits=2)
-                    bp_sessile = round(bp.μ[3], digits=2)
-                    bp_temp = round(bp.μ[4], digits=2)
+                    bp_adult = round(bp.μ[BELIEF_IDX_ADULT], digits=2)
+                    bp_motile = round(bp.μ[BELIEF_IDX_MOTILE], digits=2)
+                    bp_sessile = round(bp.μ[BELIEF_IDX_SESSILE], digits=2)
+                    bp_temp = round(bp.μ[BELIEF_IDX_TEMPERATURE], digits=2)
 
                     # Create table with state, observation, belief, and new state information
                     # Save to file with filepath

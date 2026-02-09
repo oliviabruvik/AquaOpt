@@ -9,6 +9,13 @@ using Random
 # TODO: uncertainty in kalman filter a bit bigger than in the simulation
 # TODO: simLog
 
+# Belief state vector indices — single source of truth for the ordering
+# used by the Kalman filter, step function, and all belief access sites.
+const BELIEF_IDX_ADULT = 1
+const BELIEF_IDX_MOTILE = 2
+const BELIEF_IDX_SESSILE = 3
+const BELIEF_IDX_TEMPERATURE = 4
+
 # --------------------------------------------
 # Updater wrapper struct
 # --------------------------------------------
@@ -83,13 +90,12 @@ end
 # --------------------------------------------
 # Belief initialization
 # --------------------------------------------
-function POMDPs.initialize_belief(updater::KalmanUpdater, dists::NTuple{4, Distribution})
-    
-    # TODO: add full state distribution with 0 noise
-    μ0 = mean.([dists[1], dists[2], dists[3], dists[4]])
-    σ2s = std.([dists[1], dists[2], dists[3], dists[4]]).^2
+function POMDPs.initialize_belief(updater::KalmanUpdater, dists::NamedTuple{(:adult, :motile, :sessile, :temperature)})
+
+    μ0 = mean.([dists.adult, dists.motile, dists.sessile, dists.temperature])
+    σ2s = std.([dists.adult, dists.motile, dists.sessile, dists.temperature]).^2
     Σ0 = Diagonal(σ2s)
-    
+
     return GaussianBelief(μ0, Σ0)
 end
 
