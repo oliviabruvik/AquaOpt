@@ -26,9 +26,6 @@ include("Algorithms/Evaluation.jl")
 # Include plotting files
 # -------------------------
 include("Plotting/PlotUtils.jl")
-include("Plotting/Heatmaps.jl")
-include("Plotting/Timeseries.jl")
-include("Plotting/Comparison.jl")
 include("Plotting/ParallelPlots.jl")
 include("Plotting/PlosOnePlots.jl")
 include("Plotting/Plots.jl")
@@ -86,7 +83,7 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=false, reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12], sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12])
+function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=true, reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12], sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12])
 
     # Set up experiment config and log in experiments.csv file
     config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
@@ -265,8 +262,6 @@ export print_reward_metrics_for_vi_policy
 # Plotting functions
 export plot_plos_one_plots, plot_parallel_plots, plot_results
 export plot_beliefs_over_time, plot_beliefs_over_time_plotsjl
-export plot_sealice_levels_over_time
-export plot_policy_sealice_levels_over_time, plot_policy_treatment_cost_over_time
 
 export plos_one_plot_kalman_filter_belief_trajectory
 export plos_one_sealice_levels_over_time
