@@ -171,6 +171,10 @@ end
 # TODO: add some stochasticity
 function POMDPs.action(policy::HeuristicPolicy, b)
 
+    @assert policy.solver_config.heuristic_belief_threshold_thermal >
+            policy.solver_config.heuristic_belief_threshold_mechanical >
+            policy.solver_config.heuristic_belief_threshold_chemical "Heuristic thresholds must be strictly descending: thermal > mechanical > chemical"
+
     # Get the probability of the current sea lice level being above the threshold
     state_space = states(policy.pomdp)
     threshold = policy.solver_config.heuristic_threshold
@@ -182,12 +186,12 @@ function POMDPs.action(policy::HeuristicPolicy, b)
     # If the probability of the current sea lice level being above the threshold is greater than the thermal threshold, choose ThermalTreatment
     if prob_above_threshold > policy.solver_config.heuristic_belief_threshold_thermal
         return ThermalTreatment
-    # Chemical treatment for mid-level infestations
-    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_chemical
-        return ChemicalTreatment
     # If the probability of the current sea lice level being above the threshold is greater than the mechanical threshold, choose MechanicalTreatment
     elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_mechanical
         return MechanicalTreatment
+    # Chemical treatment for lower-level infestations
+    elseif prob_above_threshold > policy.solver_config.heuristic_belief_threshold_chemical
+        return ChemicalTreatment
     # Otherwise, choose NoTreatment
     else
         return NoTreatment
