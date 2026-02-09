@@ -118,19 +118,6 @@ function display_rewards_across_policies(parallel_data, config)
 end
 
 # ----------------------------
-# Display summary reward per policy
-# ----------------------------
-function display_reward_per_policy(parallel_data, algorithms)
-
-    for algo in algorithms
-        println("Policy: $(algo.solver_name)")
-        data_filtered = filter(row -> row.policy == algo.solver_name, parallel_data)
-        result = mean_and_ci(data_filtered.reward)
-        println("  Mean reward: $(round(result.mean, digits=3)) ± $(round(result.ci, digits=3))")
-    end
-end
-
-# ----------------------------
 # Extract the number of treatments, regulatory penalties, lost biomass, and fish disease for each policy from the histories and add as columns to the parallel_data dataframe
 # Returns a new DataFrame without modifying the input
 # ----------------------------

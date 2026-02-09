@@ -26,7 +26,6 @@ include("Algorithms/Evaluation.jl")
 # Include plotting files
 # -------------------------
 include("Plotting/PlotUtils.jl")
-include("Plotting/ParallelPlots.jl")
 include("Plotting/PlosOnePlots.jl")
 include("Plotting/Plots.jl")
 
@@ -260,9 +259,7 @@ export extract_reward_metrics, display_reward_metrics
 export print_reward_metrics_for_vi_policy
 
 # Plotting functions
-export plot_plos_one_plots, plot_parallel_plots, plot_results
-export plot_beliefs_over_time, plot_beliefs_over_time_plotsjl
-
+export plot_plos_one_plots
 export plos_one_plot_kalman_filter_belief_trajectory
 export plos_one_sealice_levels_over_time
 export plos_one_reward_over_time, plos_one_biomass_loss_over_time
