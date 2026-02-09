@@ -8,10 +8,30 @@ _time_plot_legend_enabled(selection, key::Symbol) = selection === nothing ? true
 # ----------------------------
 # Plot Plos One Plots
 # ----------------------------
-function plot_plos_one_plots(parallel_data, config; policies_to_plot=nothing, time_plot_legends=nothing)
+function plot_plos_one_plots(parallel_data, config, algorithms; policies_to_plot=nothing, time_plot_legends=nothing)
     @info "Plotting Plos One Plots"
     legend_selection = _normalize_time_plot_legends(time_plot_legends)
-    plos_one_plot_kalman_filter_belief_trajectory(parallel_data, "NUS_SARSOP_Policy", config)
+    algo_names = Set(a.solver_name for a in algorithms)
+    # Default policies_to_plot to the algorithms list
+    if policies_to_plot === nothing
+        policies_to_plot = algo_names
+    end
+
+    # Determine which SARSOP variant is available (if any)
+    sarsop_name = if "NUS_SARSOP_Policy" in algo_names
+        "NUS_SARSOP_Policy"
+    elseif "Native_SARSOP_Policy" in algo_names
+        "Native_SARSOP_Policy"
+    else
+        nothing
+    end
+
+    if sarsop_name !== nothing
+        plos_one_plot_kalman_filter_belief_trajectory(parallel_data, sarsop_name, config)
+        plos_one_algo_sealice_levels_over_time(parallel_data, config, sarsop_name)
+        plos_one_sarsop_dominant_action(parallel_data, config, sarsop_name)
+    end
+
     plos_one_sealice_levels_over_time(
         parallel_data,
         config;
@@ -54,8 +74,6 @@ function plot_plos_one_plots(parallel_data, config; policies_to_plot=nothing, ti
         policies_to_plot=policies_to_plot,
         show_legend=_time_plot_legend_enabled(legend_selection, :treatment_probability),
     )
-    plos_one_sarsop_dominant_action(parallel_data, config)
-    plos_one_algo_sealice_levels_over_time(parallel_data, config, "NUS_SARSOP_Policy")
     plos_one_episode_sealice_levels_over_time(
         parallel_data,
         config;

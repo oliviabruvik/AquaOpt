@@ -64,7 +64,7 @@ function create_sim_pomdp(config)
 
         if config.solver_config.log_space
             return SeaLiceLogPOMDP(
-                reward_lambdas=config.solver_config.reward_lambdas,
+                reward_lambdas=config.simulation_config.sim_reward_lambdas,
                 discount_factor=config.solver_config.discount_factor,
                 discretization_step=config.solver_config.discretization_step,
                 adult_sd=config.solver_config.adult_sd,
@@ -107,7 +107,8 @@ function simulate_all_policies(algorithms, config, all_policies)
 
     # Create updater
     if config.simulation_config.high_fidelity_sim
-        updater = build_kf(sim_pomdp, ekf_filter=config.simulation_config.ekf_filter)
+        kf_updater = build_kf(sim_pomdp, ekf_filter=config.simulation_config.ekf_filter)
+        updater = EnrichedUpdater(kf_updater)
     else
         updater = DiscreteUpdater(sim_pomdp)
     end

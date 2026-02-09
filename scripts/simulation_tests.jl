@@ -117,6 +117,6 @@ parallel_data = simulate_all_policies(algorithms, config, all_policies)
 processed_data = extract_reward_metrics(parallel_data, config)
 display_reward_metrics(processed_data, config, false)
 
-plot_plos_one_plots(parallel_data, config)
+plot_plos_one_plots(parallel_data, config, algorithms)
 
 @info "Simulation complete!"

@@ -132,6 +132,65 @@ function predict_next_abundances(adult, motile, sessile, temp, location="north",
 end
 
 # -------------------------
+# Discretize a continuous distribution over a sorted vector of bin centers.
+# Returns a probability vector (one per bin center) that sums to 1.
+# Unlike discretize_distribution, this works on plain Float64 values
+# rather than state objects with a .SeaLiceLevel field.
+# -------------------------
+function discretize_values(dist::Distribution, values::AbstractVector{<:Real})
+    n = length(values)
+    probs = zeros(n)
+
+    for i in 1:n
+        if i == 1
+            if n > 1
+                upper = (values[1] + values[2]) / 2
+                probs[i] = cdf(dist, upper)
+            else
+                probs[i] = 1.0
+            end
+        elseif i == n
+            lower = (values[n-1] + values[n]) / 2
+            probs[i] = 1.0 - cdf(dist, lower)
+        else
+            lower = (values[i-1] + values[i]) / 2
+            upper = (values[i] + values[i+1]) / 2
+            probs[i] = cdf(dist, upper) - cdf(dist, lower)
+        end
+        if !isfinite(probs[i])
+            probs[i] = 0.0
+        end
+    end
+
+    probs = max.(probs, 0.0)
+    total = sum(probs)
+    if total > 0
+        probs ./= total
+    else
+        probs .= 1.0 / n
+    end
+
+    return probs
+end
+
+# -------------------------
+# Map annual week to season index: 1=Spring, 2=Summer, 3=Autumn, 4=Winter
+# Spring (weeks 13-25): smolt migration period with stricter lice limits
+# -------------------------
+function week_to_season(annual_week::Int)
+    w = mod(annual_week, 52)
+    if 13 <= w <= 25
+        return 1  # Spring
+    elseif 26 <= w <= 38
+        return 2  # Summer
+    elseif 39 <= w <= 51
+        return 3  # Autumn
+    else
+        return 4  # Winter (weeks 0-12)
+    end
+end
+
+# -------------------------
 # Helper: logistic and NB parameterization
 # -------------------------
 logistic(x) = 1 / (1 + exp(-x))

@@ -51,7 +51,8 @@ const PLOS_POLICY_STYLE_ORDERED = [
     ("Random_Policy",     (; label = "Random",       line = "orange!85!black",  fill = "orange!25!white")),
     ("Heuristic_Policy", (; label = "Heuristic",     line = "teal!75!black",    fill = "teal!25!white")),
     ("QMDP_Policy",       (; label = "QMDP",         line = "magenta!70!black", fill = "magenta!25!white")),
-    ("NUS_SARSOP_Policy", (; label = "SARSOP",       line = "blue!80!black",    fill = "blue!25!white")),
+    ("NUS_SARSOP_Policy", (; label = "NUS SARSOP",   line = "blue!80!black",    fill = "blue!25!white")),
+    ("Native_SARSOP_Policy", (; label = "SARSOP",   line = "cyan!70!black",    fill = "cyan!25!white")),
     ("VI_Policy",         (; label = "VI",           line = "violet!80!black",  fill = "violet!25!white")),
 ]
 const PLOS_POLICY_STYLE_LOOKUP = Dict(name => style for (name, style) in PLOS_POLICY_STYLE_ORDERED)
@@ -71,6 +72,11 @@ const PLOS_STAGE_STYLE_ORDERED = [
     (:predicted, (; label = "Belief (predicted)",  line = "black!70",        fill = "black!10")),
 ]
 const PLOS_STAGE_STYLE_LOOKUP = Dict(key => style for (key, style) in PLOS_STAGE_STYLE_ORDERED)
+
+# Unwrap EnrichedBelief to GaussianBelief for GaussianFilters.unpack()
+_unwrap_beliefs(beliefs) =
+    !isempty(beliefs) && first(beliefs) isa EnrichedBelief ?
+    [b.gaussian_belief for b in beliefs] : beliefs
 
 const PLOS_FONT = "\\small"
 const PLOS_LABEL_STYLE = "color=black, font=\\small"
@@ -200,7 +206,7 @@ function plos_one_plot_kalman_filter_belief_trajectory(data, algo_name, config)
     history = data.history[1]
 
     # Extract beliefs
-    beliefs = belief_hist(history)
+    beliefs = _unwrap_beliefs(belief_hist(history))
     belief_means, belief_covariances = unpack(beliefs)
 
     # Extract belief variances (diagonal of covariance matrices)
@@ -938,16 +944,16 @@ end
 # Policy Action Heatmap: Shows which actions SARSOP policy chooses
 # based on sea temperature and current sea lice levels
 # ----------------------------
-function plos_one_sarsop_dominant_action(parallel_data, config)
-    
+function plos_one_sarsop_dominant_action(parallel_data, config, algo_name::String)
+
     # Load the SARSOP policy
     policy_path = joinpath(config.policies_dir, "policies_pomdp_mdp.jld2")
     if !isfile(policy_path)
         error("Policy file not found: $policy_path")
     end
-    
+
     @load policy_path all_policies
-    policy_bundle = all_policies["NUS_SARSOP_Policy"]
+    policy_bundle = all_policies[algo_name]
     policy = policy_bundle.policy
     pomdp = policy_bundle.pomdp
     
@@ -1062,7 +1068,7 @@ function plot_kalman_filter_trajectory_with_uncertainty(data, algo_name, config)
     history = data.history[1]
     
     # Extract beliefs
-    beliefs = belief_hist(history)
+    beliefs = _unwrap_beliefs(belief_hist(history))
     belief_means, belief_covariances = unpack(beliefs)
     
     # Extract belief variances (diagonal of covariance matrices)
@@ -1182,7 +1188,7 @@ function plot_kalman_filter_belief_trajectory_two_panel(data, algo_name, config)
     history = data.history[1]
 
     # Beliefs
-    beliefs = belief_hist(history)
+    beliefs = _unwrap_beliefs(belief_hist(history))
     belief_means, belief_covariances = unpack(beliefs)
 
     # Diagonal variances -> std
@@ -1515,7 +1521,8 @@ function plos_one_treatment_distribution_comparison(parallel_data, config)
     # Define all policies with colors matching other plots
     policy_info = [
         ("Heuristic_Policy", "teal", "Heuristic"),
-        ("NUS_SARSOP_Policy", "blue", "SARSOP"),
+        ("NUS_SARSOP_Policy", "blue", "NUS SARSOP"),
+        ("Native_SARSOP_Policy", "cyan", "SARSOP"),
         ("VI_Policy", "purple", "VI"),
         ("QMDP_Policy", "violet", "QMDP"),
         ("Random_Policy", "orange", "Random"),

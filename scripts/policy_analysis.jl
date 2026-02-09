@@ -26,7 +26,7 @@ using Printf
 
 # Hardcoded experiment path and policies
 const EXPERIMENT_PATH = "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
-const POLICIES_TO_PLOT = ["Random_Policy", "Heuristic_Policy", "QMDP_Policy", "NUS_SARSOP_Policy", "VI_Policy"]
+const POLICIES_TO_PLOT = ["Random_Policy", "Heuristic_Policy", "QMDP_Policy", "Native_SARSOP_Policy", "VI_Policy"]
 const DEFAULT_OUTPUT_DIR = "final_results/policy_outputs"
 const TIME_PLOT_LEGEND_GROUPS = [
     :sealice => ["sealice", "sea_lice"],
@@ -161,7 +161,7 @@ function load_parallel_data(experiment_root::String)
     return ensure_dataframe(data)
 end
 
-function summarize_experiment(config, parallel_data;
+function summarize_experiment(config, parallel_data, algorithms;
         output_dir::Union{Nothing,String}=nothing,
         generate_plots::Bool=true,
         policies_to_plot=nothing,
@@ -179,7 +179,8 @@ function summarize_experiment(config, parallel_data;
         temp_config.figures_dir = target_dir
         plot_plos_one_plots(
             processed_data,
-            temp_config;
+            temp_config,
+            algorithms;
             policies_to_plot=policies_to_plot,
             time_plot_legends=time_plot_legends,
         )
@@ -194,10 +195,12 @@ end
 function main()
     opts = parse_cli_args(ARGS)
     config = load_experiment_config(opts.experiment_path)
+    algorithms = define_algorithms(config)
     parallel_data = load_parallel_data(opts.experiment_path)
     summarize_experiment(
         config,
-        parallel_data;
+        parallel_data,
+        algorithms;
         output_dir = opts.output_dir,
         generate_plots = opts.generate_plots,
         policies_to_plot = opts.policies_to_plot,
