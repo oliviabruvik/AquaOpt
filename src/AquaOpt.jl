@@ -117,14 +117,8 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     # Display reward metrics
     display_reward_metrics(processed_data, config, true, true)
 
-    if config.simulation_config.high_fidelity_sim
-        if plot
-            # Plot the results
-            plot_plos_one_plots(processed_data, config, algorithms)
-        end
-
-        # Treatment frequency
-        print_treatment_frequency(processed_data, config)
+    if config.simulation_config.high_fidelity_sim && plot
+        plot_plos_one_plots(processed_data, config, algorithms)
     end
 
 end

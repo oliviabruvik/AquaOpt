@@ -81,6 +81,7 @@ end
     adult_sd::Float64 = 0.05
     log_space::Bool = false
     regulation_limit::Float64 = 0.5
+    season_regulation_limits::Vector{Float64} = [0.2, 0.5, 0.5, 0.5]  # [Spring, Summer, Autumn, Winter]
     location::String = "north"
     discretization_step::Float64 = 0.1
     full_observability_solver::Bool = false

@@ -29,6 +29,7 @@ struct EvaluationState
     NumberOfFish::Int64 # The number of fish in the pen
     AvgFishWeight::Float64 # The average weight of the fish in the pen (kg)
     Salinity::Float64 # The salinity of the water (psu)
+    Cooldown::Int # 0=no recent treatment, 1=treated last step
 end
 
 "Observation representing the predicted observed sea lice level the following week and the current observed sea lice level."
@@ -43,6 +44,7 @@ struct EvaluationObservation
     NumberOfFish::Int64 # The number of fish in the pen
     AvgFishWeight::Float64 # The average weight of the fish in the pen (kg)
     Salinity::Float64 # The salinity of the water (psu)
+    Cooldown::Int # 0=no recent treatment, 1=treated last step
 end
 
 # -------------------------
@@ -58,6 +60,10 @@ end
 
     # Regulation parameters
     regulation_limit::Float64 = 0.5
+    season_regulation_limits::Vector{Float64} = [0.2, 0.5, 0.5, 0.5]  # [Spring, Summer, Autumn, Winter]
+
+    # Cooldown stress multiplier
+    cooldown_stress_multiplier::Float64 = 1.5
 
     # Weight parameters
     w_max::Float64 = 5.0                        # asymptotic harvest weight (kg)
@@ -185,6 +191,9 @@ function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a)
         next_number_of_fish = survived_fish
         next_number_of_fish = clamp(next_number_of_fish, pomdp.number_of_fish_bounds...)
 
+        # Cooldown: 1 if treatment was applied this step, 0 otherwise
+        next_cooldown = (a != NoTreatment) ? 1 : 0
+
         return EvaluationState(
             next_pred, # SeaLiceLevel
             next_adult, # Adult
@@ -196,6 +205,7 @@ function POMDPs.transition(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a)
             next_number_of_fish, # NumberOfFish
             next_average_weight, # AvgFishWeight
             s.Salinity, # Salinity is constant
+            next_cooldown, # Cooldown
         )
     end
 end
@@ -276,6 +286,7 @@ function POMDPs.observation(pomdp::SeaLiceSimPOMDP, a::Action, sp::EvaluationSta
             observed_number_of_fish,
             observed_average_weight,
             sp.Salinity, # Salinity is fully observable
+            sp.Cooldown, # Cooldown is fully observable
         )
     end
 end
@@ -296,15 +307,11 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     # === 1. DIRECT TREATMENT COSTS ===
     treatment_cost = get_treatment_cost(a)
 
-    # === 2. REGULATORY PENALTY (exponential above limit) ===
-    # Reflects escalating consequences: fines, production caps, license restrictions
-    if s.Adult > pomdp.regulation_limit
-        excess_ratio = s.Adult / pomdp.regulation_limit
-        # Penalty grows as: 100 * (excess%)^2 * ratio
-        # At 0.6 (20% over): 100 * 0.2^2 * 1.2 = 4.8
-        # At 0.75 (50% over): 100 * 0.5^2 * 1.5 = 37.5
-        # At 1.0 (100% over): 100 * 1.0^2 * 2.0 = 200
-        regulatory_penalty = 100.0 # * ((excess_ratio - 1.0)^2) * excess_ratio
+    # === 2. REGULATORY PENALTY — season-dependent threshold ===
+    season = week_to_season(s.AnnualWeek)
+    reg_limit = pomdp.season_regulation_limits[season]
+    if s.Adult > reg_limit
+        regulatory_penalty = 100.0
     else
         regulatory_penalty = 0.0
     end
@@ -326,18 +333,12 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
 
     total_biomass_loss = max(expected_biomass - next_biomass, 0.0)
 
-    # === 4. FISH HEALTH (treatment side effects only) ===
-    # Stress, injuries, disease susceptibility from treatments
-    # Does NOT include sea lice damage (that's in sea_lice_penalty)
-    fish_health_penalty = get_fish_disease(a)
+    # === 4. FISH HEALTH — cooldown-dependent stress multiplier ===
+    base_stress = get_fish_disease(a)
+    stress_multiplier = s.Cooldown == 1 ? pomdp.cooldown_stress_multiplier : 1.0
+    fish_health_penalty = base_stress * stress_multiplier
 
     # === 5. SEA LICE BURDEN (chronic parasite damage) ===
-    # Separate from growth: osmoregulatory stress, secondary infections, welfare
-    # Scales non-linearly (exponentially worse at high levels)
-    # At 0.1: 0.10
-    # At 0.5: 0.50
-    # At 1.0: 1.00 × 1.10 = 1.10 (milder)
-    # At 2.0: 2.00 × 1.30 = 2.60 (much milder than 3.50)
     sea_lice_penalty = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5))
 
     # === TOTAL REWARD ===
@@ -364,8 +365,10 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     # === 1. DIRECT TREATMENT COSTS ===
     treatment_cost = get_treatment_cost(a)
 
-    # === 2. REGULATORY PENALTY based on OBSERVATION (sampled count) ===
-    if o.Adult > pomdp.regulation_limit
+    # === 2. REGULATORY PENALTY based on OBSERVATION — season-dependent threshold ===
+    season = week_to_season(s.AnnualWeek)
+    reg_limit = pomdp.season_regulation_limits[season]
+    if o.Adult > reg_limit
         regulatory_penalty = 100.0
     else
         regulatory_penalty = 0.0
@@ -382,8 +385,10 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     expected_biomass = biomass_tons(expected_weight, expected_fish)
     total_biomass_loss = max(expected_biomass - next_biomass, 0.0)
 
-    # === 4. FISH HEALTH (treatment side effects only) ===
-    fish_health_penalty = get_fish_disease(a)
+    # === 4. FISH HEALTH — cooldown-dependent stress multiplier ===
+    base_stress = get_fish_disease(a)
+    stress_multiplier = s.Cooldown == 1 ? pomdp.cooldown_stress_multiplier : 1.0
+    fish_health_penalty = base_stress * stress_multiplier
 
     # === 5. SEA LICE BURDEN (chronic parasite damage — physical, not observed) ===
     sea_lice_penalty = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5))
@@ -432,6 +437,7 @@ function POMDPs.initialstate(pomdp::SeaLiceSimPOMDP)
             200000, # NumberOfFish at the start of production
             0.1, # AvgFishWeight at the start of production (initial weight)
             30.0, # Salinity at the start of production
+            0, # Cooldown — no treatment at start
         )
     end
 end

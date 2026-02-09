@@ -89,9 +89,16 @@ function extract_reward_metrics(data, config)
         processed_data.mean_rewards_across_sims[i] = mean(rewards)
 
         if high_fidelity
-            # Regulatory penalty based on observations (sampled counts), matching real-world enforcement
+            # Regulatory penalty based on observations (sampled counts) with season-dependent limits
             observations = collect(h[:o])
-            processed_data.num_regulatory_penalties[i] = sum(o.Adult > config.solver_config.regulation_limit ? 1.0 : 0.0 for o in observations)
+            processed_data.num_regulatory_penalties[i] = sum(
+                begin
+                    season = week_to_season(s.AnnualWeek)
+                    reg_limit = sim_params.season_regulation_limits[season]
+                    o.Adult > reg_limit ? 1.0 : 0.0
+                end
+                for (s, o) in zip(states, observations)
+            )
             processed_data.mean_adult_sea_lice_level[i] = mean(s.Adult for s in states)
             processed_data.fish_disease[i] = sum(get_fish_disease(a) + 100.0 * s.SeaLiceLevel for (s, a) in zip(states, actions))
 
@@ -104,7 +111,14 @@ function extract_reward_metrics(data, config)
             end
             processed_data.lost_biomass_1000kg[i] = lost_biomass_1000kg
         else
-            processed_data.num_regulatory_penalties[i] = sum(s.SeaLiceLevel > config.solver_config.regulation_limit ? 1.0 : 0.0 for s in states)
+            # Season-dependent regulation for solver POMDPs
+            processed_data.num_regulatory_penalties[i] = sum(
+                begin
+                    reg_limit = config.solver_config.season_regulation_limits[s.Season]
+                    s.SeaLiceLevel > reg_limit ? 1.0 : 0.0
+                end
+                for s in states
+            )
         end
     end
 

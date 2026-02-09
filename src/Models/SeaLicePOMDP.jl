@@ -377,6 +377,60 @@ function POMDPs.reward(pomdp::SeaLicePOMDP, s::SeaLiceState, a::Action)
 end
 
 # -------------------------
+# Observation-based reward function
+# POMDPs.jl prefers reward(m, s, a, sp, o) when available during simulation.
+# The regulatory penalty is based on the observed (sampled) lice count,
+# matching real-world enforcement where regulators assess compliance
+# from sampled counts, not the true underlying population.
+# -------------------------
+function POMDPs.reward(pomdp::SeaLicePOMDP, s::SeaLiceState, a::Action, sp::SeaLiceState, o::SeaLiceObservation)
+
+    λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = pomdp.reward_lambdas
+
+    adult_level = s.SeaLiceLevel
+
+    # === 1. DIRECT TREATMENT COSTS ===
+    treatment_cost = get_treatment_cost(a)
+
+    # === 2. REGULATORY PENALTY — based on OBSERVATION, season-dependent threshold ===
+    reg_limit = pomdp.season_regulation_limits[s.Season]
+    if o.SeaLiceLevel > reg_limit
+        regulatory_penalty = 100.0
+    else
+        regulatory_penalty = 0.0
+    end
+
+    # === 3. BIOMASS LOSS — from actual biomass state ===
+    mortality_biomass_loss = get_treatment_mortality_rate(a) * s.BiomassLevel
+
+    if adult_level > 0.5
+        lice_severity = min((adult_level - 0.5) / 1.5, 1.0)
+        growth_biomass_loss = s.BiomassLevel * pomdp.max_growth_loss_fraction * lice_severity
+    else
+        growth_biomass_loss = 0.0
+    end
+
+    total_biomass_loss = mortality_biomass_loss + growth_biomass_loss
+
+    # === 4. FISH HEALTH — cooldown-dependent stress multiplier ===
+    base_stress = get_fish_disease(a)
+    stress_multiplier = s.Cooldown == 1 ? pomdp.cooldown_stress_multiplier : 1.0
+    fish_health_penalty = base_stress * stress_multiplier
+
+    # === 5. SEA LICE BURDEN (chronic parasite damage) ===
+    sea_lice_penalty = adult_level * (1.0 + 0.2 * max(0, adult_level - 0.5))
+
+    # === TOTAL REWARD ===
+    return -(
+        λ_trt * treatment_cost +
+        λ_reg * regulatory_penalty +
+        λ_bio * total_biomass_loss +
+        λ_health * fish_health_penalty +
+        λ_sea_lice * sea_lice_penalty
+    )
+end
+
+# -------------------------
 # Initial state
 # -------------------------
 function POMDPs.initialstate(pomdp::SeaLicePOMDP)
