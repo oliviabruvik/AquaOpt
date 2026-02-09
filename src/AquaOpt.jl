@@ -264,7 +264,6 @@ export print_reward_metrics_for_vi_policy
 
 # Plotting functions
 export plot_plos_one_plots, plot_parallel_plots, plot_results
-export plot_treatment_heatmap, plot_simulation_treatment_heatmap
 export plot_beliefs_over_time, plot_beliefs_over_time_plotsjl
 export plot_sealice_levels_over_time
 export plot_policy_sealice_levels_over_time, plot_policy_treatment_cost_over_time
