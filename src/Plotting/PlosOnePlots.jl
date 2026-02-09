@@ -6,6 +6,43 @@ using DataFrames
 using PGFPlotsX
 using POMDPTools
 using Dates
+using PGFPlotsX: @pgf, Axis, Plot, Coordinates, GroupPlot, Options
+
+# push!(PGFPlotsX.CUSTOM_PREAMBLE, raw"\usetikzlibrary{intersections}")
+# push!(PGFPlotsX.CUSTOM_PREAMBLE, raw"\usepgfplotslibrary{fillbetween}")
+
+# Preamble: enable fillbetween and modern pgfplots behavior
+PGFPlotsX.DEFAULT_PREAMBLE = [
+    raw"\usepackage{pgfplots}",
+    raw"\usepgfplotslibrary{fillbetween}",
+    raw"\usepgfplotslibrary{groupplots}",
+    raw"\usetikzlibrary{intersections}",
+    raw"\pgfplotsset{compat=newest}",
+    raw"\pgfplotsset{legend style={text=white,fill=none,draw=none}}"
+]
+
+# Transparent axis & legend bundle (string keys for special pgf keys)
+const AXIS_TRANSPARENT = (
+    "axis background/.style" => Options("fill" => "none"),                 # transparent axis rect
+    "legend style"           => Options("fill" => "none", "draw" => "none", "text" => "white"),# transparent legend box with white text
+    "axis on top"            => true
+)
+
+# Save a transparent PNG via poppler (pdftocairo -transp). Requires: brew install poppler
+function save_transparent_png(pdf_path::AbstractString, ax::Axis; dpi::Int=300)
+    PGFPlotsX.save(pdf_path, ax)  # writes the PDF first
+    stem = replace(pdf_path, r"\.pdf$" => "")
+    run(`pdftocairo -png -transp -r $dpi $pdf_path $stem`)
+    return stem * ".png"
+end
+
+# Save a transparent PNG for GroupPlot objects
+function save_transparent_png(pdf_path::AbstractString, ax::GroupPlot; dpi::Int=300)
+    PGFPlotsX.save(pdf_path, ax)  # writes the PDF first
+    stem = replace(pdf_path, r"\.pdf$" => "")
+    run(`pdftocairo -png -transp -r $dpi $pdf_path $stem`)
+    return stem * ".png"
+end
 
 # Consistent palette + labeling for the Plos One figures
 const PLOS_POLICY_STYLE_ORDERED = [

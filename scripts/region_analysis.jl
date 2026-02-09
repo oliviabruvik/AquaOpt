@@ -32,9 +32,14 @@ using Statistics
 using POMDPTools: state_hist, action_hist, reward_hist, observation_hist
 
 # Hardcoded experiment paths
-const WEST_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T23:17:39.432_log_space_ukf_paper_west_[0.46, 0.12, 0.12, 0.18, 0.12]"
-const NORTH_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
-const SOUTH_EXPERIMENT = "results/experiments/2025-11-20/2025-11-20T00:17:15.348_log_space_ukf_paper_south_[0.46, 0.12, 0.12, 0.18, 0.12]"
+# const WEST_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T23:17:39.432_log_space_ukf_paper_west_[0.46, 0.12, 0.12, 0.18, 0.12]"
+# const NORTH_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
+# const SOUTH_EXPERIMENT = "results/experiments/2025-11-20/2025-11-20T00:17:15.348_log_space_ukf_paper_south_[0.46, 0.12, 0.12, 0.18, 0.12]"
+
+const WEST_EXPERIMENT = "results/experiments/2025-11-24/2025-11-24T17:37:27.490_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]"
+const NORTH_EXPERIMENT = "results/experiments/2025-11-24/2025-11-24T17:37:27.490_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]"
+const SOUTH_EXPERIMENT = "results/experiments/2025-11-24/2025-11-24T17:37:27.490_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]"
+
 const DEFAULT_OUTPUT_DIR = "final_results/region_outputs"
 const REGION_TABLE_POLICIES = [
     (label = "Always Treat", csv_name = "AlwaysTreat_Policy"),
