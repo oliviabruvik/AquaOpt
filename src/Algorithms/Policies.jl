@@ -283,24 +283,26 @@ function POMDPs.action(policy::AdaptorPolicy, b)
         adult_sd = sqrt(max(adult_variance, 0.0))
     end
 
-    # Get next action from policy
-    # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
+    # Discretize the belief over the state space
+    state_space = states(policy.pomdp)
+    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
+
+    # For VI: compute belief-weighted Q-values (same principle as QMDP)
     if policy.lofi_policy isa ValueIterationPolicy
-        closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
-        pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
-        if policy.pomdp isa SeaLiceLogPOMDP
-            pred_adult_state = SeaLiceLogState(pred_adult_state)
-        else
-            pred_adult_state = SeaLiceState(pred_adult_state)
+        best_action = NoTreatment
+        best_value = -Inf
+        for a in actions(policy.pomdp)
+            q_val = sum(bvec[i] * value(policy.lofi_policy, s, a)
+                        for (i, s) in enumerate(state_space))
+            if q_val > best_value
+                best_value = q_val
+                best_action = a
+            end
         end
-        @assert pred_adult_state.SeaLiceLevel - pred_adult < policy.pomdp.discretization_step
-        @assert pred_adult_state in states(policy.pomdp)
-        return action(policy.lofi_policy, pred_adult_state)
+        return best_action
     end
 
-    # Discretize alpha vectors (representation of utility over belief states per action)
-    state_space = states(policy.lofi_policy.pomdp)
-    bvec = discretize_distribution(Normal(pred_adult, adult_sd), state_space)
+    # For QMDP/SARSOP: use alpha vector dot product with belief
     return action(policy.lofi_policy, bvec)
 end
 
@@ -313,16 +315,21 @@ struct LOFIAdaptorPolicy{LP <: Policy, P <: POMDP} <: Policy
 end
 
 function POMDPs.action(policy::LOFIAdaptorPolicy{<:ValueIterationPolicy}, b)
-    mode_idx = argmax(b.b)
     all_states = states(policy.pomdp)
-    state_with_highest_probability = all_states[mode_idx]
+    @assert length(b.b) == length(all_states)
 
-    # Assertions
-    @assert state_with_highest_probability in states(policy.pomdp)
-    @assert length(b.b) == length(states(policy.pomdp))
-    
-    # Get next action from policy
-    return action(policy.lofi_policy, state_with_highest_probability)
+    # Belief-weighted Q-values (same principle as QMDP)
+    best_action = NoTreatment
+    best_value = -Inf
+    for a in actions(policy.pomdp)
+        q_val = sum(b.b[i] * value(policy.lofi_policy, s, a)
+                    for (i, s) in enumerate(all_states))
+        if q_val > best_value
+            best_value = q_val
+            best_action = a
+        end
+    end
+    return best_action
 end
 
 # Adaptor action
@@ -355,8 +362,7 @@ function POMDPs.action(policy::FullObservabilityAdaptorPolicy, s)
         pred_adult = log(pred_adult)
     end
 
-    # Get next action from policy
-    # TODO: write wrapper around ValueIterationPolicy action function that takes a belief vector and converts it to a state
+    # Get next action from policy (point estimate b/c full observability)
     if policy.lofi_policy isa ValueIterationPolicy
         closest_idx = argmin(abs.(policy.pomdp.sea_lice_range .- pred_adult))
         pred_adult_state = policy.pomdp.sea_lice_range[closest_idx]
