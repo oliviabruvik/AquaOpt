@@ -248,8 +248,6 @@ function build_table(entries::Vector{ExperimentSummary})
     isempty(entries) && error("No experiments provided.")
     col_spec = "ll" * join(fill("c", length(POLICY_ORDER)), "")
     lines = String[]
-    push!(lines, "\\begin{table}[htbp]")
-    push!(lines, "\\centering")
     push!(lines, "\\footnotesize")
     push!(lines, "\\begin{tabular}{$col_spec}")
     push!(lines, "\\toprule")
@@ -278,9 +276,6 @@ function build_table(entries::Vector{ExperimentSummary})
 
     push!(lines, "\\bottomrule")
     push!(lines, "\\end{tabular}")
-    push!(lines, "\\caption{Average number of treatments per policy for each reward-weight combination.}")
-    push!(lines, "\\label{tab:policy_treatment_summary}")
-    push!(lines, "\\end{table}")
     return join(lines, "\n")
 end
 
@@ -295,41 +290,45 @@ end
 
 function build_lambda_table(entries::Dict{String, ExperimentSummary};
         row_order::Vector{String}=LAMBDA_REGION_ORDER,
-        caption::String="Reward parameters for different salmon farming regions.",
-        label::String="tab:lambda_params",
+        caption::String="", label::String="",  # unused, wrappers in paper
         row_header::String="Region")
-    col_spec = "@{} l " * join(fill("c", length(LAMBDA_COMPONENTS)), " ") * " @{}"
+    # Column keys (no underscores for pgfplotstable inline header)
+    col_keys = ["scenario", "ltrt", "lreg", "lbio", "lfd", "llice"]
+    col_displays = [row_header,
+        raw"$\lambda_{\text{trt}}$", raw"$\lambda_{\text{reg}}$",
+        raw"$\lambda_{\text{bio}}$", raw"$\lambda_{\text{fd}}$",
+        raw"$\lambda_{\text{lice}}$"]
+
     lines = String[]
-    push!(lines, "\\begin{table}[htbp!]")
-    push!(lines, "\\centering")
-    push!(lines, "\\caption{$caption}")
-    push!(lines, "\\label{$label}")
-    push!(lines, "\\begin{tabular}{$col_spec}")
-    push!(lines, "\\toprule")
+    push!(lines, "\\pgfplotstabletypeset[")
+    push!(lines, "    col sep=&,")
+    push!(lines, "    row sep=\\\\,")
+    push!(lines, "    columns={$(join(col_keys, ", "))},")
+    push!(lines, "    columns/scenario/.style={string type, column type=l, column name={$(col_displays[1])}},")
+    for (i, key) in enumerate(col_keys[2:end])
+        push!(lines, "    columns/$key/.style={string type, column type=c, column name={$(col_displays[i+1])}},")
+    end
+    push!(lines, "    every head row/.style={before row=\\toprule, after row=\\midrule},")
+    push!(lines, "    every last row/.style={after row=\\bottomrule},")
+    push!(lines, "]{")
 
-    header_row = [row_header]
-    append!(header_row, [comp.label for comp in LAMBDA_COMPONENTS])
-    push!(lines, join(header_row, " & ") * " \\\\")
-    push!(lines, "\\midrule")
+    # Header row
+    push!(lines, "    " * join(col_keys, " & ") * " \\\\")
 
+    # Data rows
     for key in row_order
-        row = [key]
         entry = get(entries, key, nothing)
         if entry === nothing
-            append!(row, fill("--", length(LAMBDA_COMPONENTS)))
+            push!(lines, "    $key & " * join(fill("--", 5), " & ") * " \\\\")
         else
             lambdas = entry.config.solver_config.reward_lambdas
-            for comp in LAMBDA_COMPONENTS
-                value = comp.idx <= length(lambdas) ? lambdas[comp.idx] : missing
-                push!(row, format_lambda_value(value))
-            end
+            vals = [comp.idx <= length(lambdas) ? format_lambda_value(lambdas[comp.idx]) : "--"
+                    for comp in LAMBDA_COMPONENTS]
+            push!(lines, "    $key & " * join(vals, " & ") * " \\\\")
         end
-        push!(lines, join(row, " & ") * " \\\\")
     end
 
-    push!(lines, "\\bottomrule")
-    push!(lines, "\\end{tabular}")
-    push!(lines, "\\end{table}")
+    push!(lines, "}")
     return join(lines, "\n")
 end
 
@@ -351,8 +350,6 @@ function build_lambda_treatment_table(entries::Dict{String, ExperimentSummary};
     n_scenarios = length(ordered)
     col_spec = "l" * repeat("cccc", n_scenarios)
     lines = String[]
-    push!(lines, "\\begin{table}[htbp]")
-    push!(lines, "\\centering")
     push!(lines, "\\footnotesize")
     push!(lines, "\\begin{tabular}{$col_spec}")
     push!(lines, "\\toprule")
@@ -396,9 +393,6 @@ function build_lambda_treatment_table(entries::Dict{String, ExperimentSummary};
 
     push!(lines, "\\bottomrule")
     push!(lines, "\\end{tabular}")
-    push!(lines, "\\caption{Average treatment counts per policy across lambda configurations.}")
-    push!(lines, "\\label{tab:lambda_treatment_summary}")
-    push!(lines, "\\end{table}")
     return join(lines, "\n")
 end
 

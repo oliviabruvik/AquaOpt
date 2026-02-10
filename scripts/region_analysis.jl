@@ -237,11 +237,6 @@ end
 function generate_region_table(regions::Vector{RegionData}, out_dir::String)
     output_path = joinpath(out_dir, "region_policy_comparison.tex")
     lines = String[
-        "\\begin{table}[htbp!]",
-        "\\centering",
-        "\\begin{adjustwidth}{-2.25in}{0in}",
-        "\\caption{Comparison of Policies Across North, West, and South of Norway (common reward weights = \$(0.46,0.12,0.12,0.18,0.12)\$)}",
-        "\\label{tab:norway-methods-comparable}",
         "\\begin{threeparttable}",
         "  \\begin{adjustbox}{max width=\\linewidth}",
         "  \\begin{tabular}{@{}llcccccc@{}}",
@@ -282,8 +277,6 @@ function generate_region_table(regions::Vector{RegionData}, out_dir::String)
         "      \\item[*]{Mean \$\\pm\$ standard error over the seeds in the corresponding run. Bold values denote the best performance (highest reward or lowest cost/penalties/lice/biomass loss/fish disease) within each region. Runs used: North, West, and South correspond to the \\texttt{log\\_space\\_ukf\\_paper\\_{north,west,south}\\_[0.46,0.12,0.12,0.18,0.12]} chemical-change experiments.}",
         "    \\end{tablenotes}",
         "\\end{threeparttable}",
-        "\\end{adjustwidth}",
-        "\\end{table}",
     ])
     mkpath(dirname(output_path))
     open(output_path, "w") do io
