@@ -50,7 +50,7 @@ end
 # Extract the number of treatments, regulatory penalties, lost biomass, and fish disease for each policy from the histories and add as columns to the parallel_data dataframe
 # Returns a new DataFrame without modifying the input
 # ----------------------------
-function extract_reward_metrics(data, config)
+function extract_reward_metrics(data, config, sim_pomdp=nothing)
 
     # Create a copy of the data to avoid mutating the input
     processed_data = copy(data)
@@ -66,7 +66,16 @@ function extract_reward_metrics(data, config)
         processed_data.fish_disease = zeros(Float64, nrow(processed_data))
         processed_data.lost_biomass_1000kg = zeros(Float64, nrow(processed_data))
         processed_data.mean_adult_sea_lice_level = zeros(Float64, nrow(processed_data))
-        sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
+        # Financial columns (all MNOK)
+        processed_data.harvest_revenue_MNOK = zeros(Float64, nrow(processed_data))
+        processed_data.total_treatment_cost_MNOK = zeros(Float64, nrow(processed_data))
+        processed_data.total_regulatory_cost_MNOK = zeros(Float64, nrow(processed_data))
+        processed_data.total_biomass_loss_MNOK = zeros(Float64, nrow(processed_data))
+        processed_data.total_welfare_cost_MNOK = zeros(Float64, nrow(processed_data))
+        processed_data.total_lice_cost_MNOK = zeros(Float64, nrow(processed_data))
+        processed_data.net_profit_MNOK = zeros(Float64, nrow(processed_data))
+        # Use provided sim_pomdp or create one with config params
+        sim_params = sim_pomdp !== nothing ? sim_pomdp : create_sim_pomdp(config)
     end
 
     for (i, row) in enumerate(eachrow(processed_data))
@@ -110,6 +119,50 @@ function extract_reward_metrics(data, config)
                 end
             end
             processed_data.lost_biomass_1000kg[i] = lost_biomass_1000kg
+
+            # === Financial summary (all in MNOK) ===
+            salmon_price = sim_params.salmon_price_MNOK_per_tonne
+
+            # Harvest revenue: final biomass × salmon price
+            sp_states = collect(h[:sp])
+            final_state = last(sp_states)
+            processed_data.harvest_revenue_MNOK[i] = biomass_tons(final_state) * salmon_price
+
+            # Treatment costs (already in MNOK)
+            processed_data.total_treatment_cost_MNOK[i] = processed_data.treatment_cost[i]
+
+            # Regulatory violation costs
+            processed_data.total_regulatory_cost_MNOK[i] = processed_data.num_regulatory_penalties[i] * sim_params.regulatory_violation_cost_MNOK
+
+            # Biomass loss in MNOK
+            processed_data.total_biomass_loss_MNOK[i] = lost_biomass_1000kg * salmon_price
+
+            # Welfare costs (with cooldown stress multiplier)
+            total_welfare = 0.0
+            for t in eachindex(actions)
+                base_stress = get_fish_disease(actions[t])
+                cooldown = states[t].Cooldown
+                stress_mult = cooldown == 1 ? sim_params.cooldown_stress_multiplier : 1.0
+                total_welfare += base_stress * stress_mult * sim_params.welfare_cost_MNOK
+            end
+            processed_data.total_welfare_cost_MNOK[i] = total_welfare
+
+            # Sea lice burden costs
+            total_lice = 0.0
+            for s in states
+                adult = s.Adult
+                total_lice += adult * (1.0 + 0.2 * max(0, adult - 0.5)) * sim_params.chronic_lice_cost_MNOK
+            end
+            processed_data.total_lice_cost_MNOK[i] = total_lice
+
+            # Net profit = harvest revenue - all costs
+            processed_data.net_profit_MNOK[i] = processed_data.harvest_revenue_MNOK[i] - (
+                processed_data.total_treatment_cost_MNOK[i] +
+                processed_data.total_regulatory_cost_MNOK[i] +
+                processed_data.total_biomass_loss_MNOK[i] +
+                processed_data.total_welfare_cost_MNOK[i] +
+                processed_data.total_lice_cost_MNOK[i]
+            )
         else
             # Season-dependent regulation for solver POMDPs
             processed_data.num_regulatory_penalties[i] = sum(
@@ -179,12 +232,13 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
         println(select(result, Not(ci_cols)))
     end
 
+    # Format mean±CI helper
+    fmt_ci(m, c, digits) = @sprintf("%.*f±%.*f", digits, m, digits, c)
+
     # Print formatted summary table with ± CI
     if print_sd
         has_sea_lice = :mean_sea_lice in names(result)
         has_fish_disease = :mean_fish_disease in names(result)
-
-        fmt_ci(m, c, digits) = @sprintf("%.*f±%.*f", digits, m, digits, c)
 
         println("\n" * "="^80)
         summary_cols = [
@@ -226,8 +280,55 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
 
     println("\n")
 
-    # Save results to csv
+    # Ensure results directory exists before saving any CSVs
     mkpath(config.results_dir)
+
+    # --- Financial summary (high-fidelity only) ---
+    if :net_profit_MNOK in col_syms
+        # Already aggregated above; build financial-specific aggregation
+        fin_pairs = Any[]
+        for (col, sym) in [
+            (:harvest_revenue_MNOK, :harvest_rev),
+            (:total_treatment_cost_MNOK, :trt_cost),
+            (:total_regulatory_cost_MNOK, :reg_cost),
+            (:total_biomass_loss_MNOK, :bio_cost),
+            (:total_welfare_cost_MNOK, :welfare_cost),
+            (:total_lice_cost_MNOK, :lice_cost),
+            (:net_profit_MNOK, :net_profit),
+        ]
+            push!(fin_pairs, col => (x -> round(mean_and_ci(x).mean, digits=2)) => Symbol("mean_", sym))
+            push!(fin_pairs, col => (x -> round(mean_and_ci(x).ci, digits=2)) => Symbol("ci_", sym))
+        end
+        fin_result = combine(data_grouped_by_policy, fin_pairs...)
+        fin_result = sort(fin_result, :mean_net_profit, rev=true)
+
+        println("="^110)
+        println("PRODUCTION CYCLE FINANCIAL SUMMARY (MNOK)")
+        println("="^110)
+        header = @sprintf("%-20s %12s %12s %12s %12s %12s %12s %14s",
+            "Policy", "Harvest Rev", "Trt Cost", "Reg Cost", "Bio Loss", "Welfare", "Lice Cost", "Net Profit")
+        println(header)
+        println("-"^110)
+
+        for row in eachrow(fin_result)
+            println(@sprintf("%-20s %12s %12s %12s %12s %12s %12s %14s",
+                row.policy,
+                fmt_ci(row.mean_harvest_rev, row.ci_harvest_rev, 2),
+                fmt_ci(row.mean_trt_cost, row.ci_trt_cost, 2),
+                fmt_ci(row.mean_reg_cost, row.ci_reg_cost, 2),
+                fmt_ci(row.mean_bio_cost, row.ci_bio_cost, 2),
+                fmt_ci(row.mean_welfare_cost, row.ci_welfare_cost, 2),
+                fmt_ci(row.mean_lice_cost, row.ci_lice_cost, 2),
+                fmt_ci(row.mean_net_profit, row.ci_net_profit, 2)))
+        end
+        println("="^110)
+        println("\n")
+
+        # Save financial summary to CSV
+        CSV.write(joinpath(config.results_dir, "financial_summary.csv"), fin_result)
+    end
+
+    # Save results to csv
     CSV.write(joinpath(config.results_dir, "reward_metrics.csv"), result)
 
 end

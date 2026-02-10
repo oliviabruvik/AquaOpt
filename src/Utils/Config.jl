@@ -86,6 +86,12 @@ end
     discretization_step::Float64 = 0.1
     full_observability_solver::Bool = false
 
+    # Financial parameters — country-specific, passed to all POMDPs
+    salmon_price_MNOK_per_tonne::Float64 = 0.07  # ~70 NOK/kg Norwegian salmon spot price
+    regulatory_violation_cost_MNOK::Float64 = 10.0  # Forced emergency treatment + production disruption + license risk
+    welfare_cost_MNOK::Float64 = 1.0  # Per stress-score unit
+    chronic_lice_cost_MNOK::Float64 = 0.5  # Per burden-unit/week
+
     # Reward weights for solving
     reward_lambdas::Vector{Float64} = [0.8, 0.2, 0.0, 0.0, 0.0] # [treatment, regulatory, biomass, health, sea lice]
 

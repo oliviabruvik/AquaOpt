@@ -49,12 +49,12 @@ const ACTION_CONFIGS = Dict(
         fish_disease = 0.0,
         mortality_rate = 0.0,
         weight_loss = 0.0,
-        regulatory_penalty = 100.0
+        regulatory_penalty = 10.0  # MNOK — forced treatment + production disruption + license risk
     ),
     
     MechanicalTreatment => ActionConfig(
         action = MechanicalTreatment,
-        cost = 10.0,  # MNOK per treatment
+        cost = 2.5,  # MNOK per treatment
         adult_reduction = 0.75,         # Source: Aldrin et al. 2023
         motile_reduction = 0.84,        # Source: Aldrin et al. 2023
         sessile_reduction = 0.74,       # Source: Aldrin et al. 2023
@@ -65,12 +65,12 @@ const ACTION_CONFIGS = Dict(
         fish_disease = 0.35,
         mortality_rate = 0.006,
         weight_loss = 0.01,
-        regulatory_penalty = 100.0
+        regulatory_penalty = 10.0  # MNOK — forced treatment + production disruption + license risk
     ),
 
     ChemicalTreatment => ActionConfig(
         action = ChemicalTreatment,
-        cost = 9.0,  # MNOK per treatment
+        cost = 1.5,  # MNOK per treatment
         adult_reduction = 0.60,         # Source: Aldrin et al. 2023
         motile_reduction = 0.58,        # Source: Aldrin et al. 2023
         sessile_reduction = 0.37,       # Source: Aldrin et al. 2023
@@ -81,12 +81,12 @@ const ACTION_CONFIGS = Dict(
         fish_disease = 0.3,
         mortality_rate = 0.004,
         weight_loss = 0.005,
-        regulatory_penalty = 100.0
+        regulatory_penalty = 10.0  # MNOK — forced treatment + production disruption + license risk
     ),
     
     ThermalTreatment => ActionConfig(
         action = ThermalTreatment,
-        cost = 13.0,  # MNOK per treatment (higher cost) Increased from 12
+        cost = 4.0,  # MNOK per treatment (higher cost) Increased from 12
         adult_reduction = 0.88,         # Source: Aldrin et al. 2023
         motile_reduction = 0.87,        # Source: Aldrin et al. 2023
         sessile_reduction = 0.70,       # Source: Aldrin et al. 2023
@@ -97,7 +97,7 @@ const ACTION_CONFIGS = Dict(
         fish_disease = 0.4,
         mortality_rate = 0.008,
         weight_loss = 0.015,
-        regulatory_penalty = 100.0
+        regulatory_penalty = 10.0  # MNOK — forced treatment + production disruption + license risk
     )
 )
 

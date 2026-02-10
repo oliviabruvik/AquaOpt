@@ -82,10 +82,23 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=true, reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12], sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12])
+function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=true,
+    reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12],
+    sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12],
+    season_regulation_limits::Vector{Float64}=[0.2, 0.5, 0.5, 0.5],
+    regulatory_violation_cost_MNOK::Float64=10.0,
+    salmon_price_MNOK_per_tonne::Float64=0.07,
+    welfare_cost_MNOK::Float64=1.0,
+    chronic_lice_cost_MNOK::Float64=0.5)
 
     # Set up experiment config and log in experiments.csv file
-    config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
+    config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location;
+        reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas,
+        season_regulation_limits=season_regulation_limits,
+        regulatory_violation_cost_MNOK=regulatory_violation_cost_MNOK,
+        salmon_price_MNOK_per_tonne=salmon_price_MNOK_per_tonne,
+        welfare_cost_MNOK=welfare_cost_MNOK,
+        chronic_lice_cost_MNOK=chronic_lice_cost_MNOK)
     save_experiment_config(config)
     
     @info """\n
@@ -98,6 +111,9 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     ║  Reward lambdas:  $reward_lambdas
     ║  Sim R lambdas:   $sim_reward_lambdas
     ║  Location:        $location
+    ║  Reg limits:      $season_regulation_limits
+    ║  Violation cost:  $(regulatory_violation_cost_MNOK) MNOK
+    ║  Salmon price:    $(salmon_price_MNOK_per_tonne) MNOK/t
     ║  ExperimentDir: $(config.experiment_dir)
     ╚════════════════════════════════════════════════════════════════════════╝
     """
@@ -109,10 +125,10 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     all_policies = solve_policies(algorithms, config)
 
     @info "Simulating policies"
-    parallel_data = simulate_all_policies(algorithms, config, all_policies)
+    parallel_data, sim_pomdp = simulate_all_policies(algorithms, config, all_policies)
 
     # Extract reward metrics
-    processed_data = extract_reward_metrics(parallel_data, config)
+    processed_data = extract_reward_metrics(parallel_data, config, sim_pomdp)
 
     # Display reward metrics
     display_reward_metrics(processed_data, config, true, true)
@@ -126,7 +142,14 @@ end
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="debug", location="south"; reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0], sim_reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0])
+function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="debug", location="south";
+    reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0],
+    sim_reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0],
+    season_regulation_limits::Vector{Float64}=[0.2, 0.5, 0.5, 0.5],
+    regulatory_violation_cost_MNOK::Float64=10.0,
+    salmon_price_MNOK_per_tonne::Float64=0.07,
+    welfare_cost_MNOK::Float64=1.0,
+    chronic_lice_cost_MNOK::Float64=0.5)
 
     # Define experiment configuration
     exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_", mode, "_", location, "_", reward_lambdas)
@@ -152,6 +175,11 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         QMDP_max_iterations=qmdp_iters,
         discount_factor=0.95,
         location=location,
+        season_regulation_limits=season_regulation_limits,
+        salmon_price_MNOK_per_tonne=salmon_price_MNOK_per_tonne,
+        regulatory_violation_cost_MNOK=regulatory_violation_cost_MNOK,
+        welfare_cost_MNOK=welfare_cost_MNOK,
+        chronic_lice_cost_MNOK=chronic_lice_cost_MNOK,
         heuristic_belief_threshold_mechanical=0.45,
         heuristic_belief_threshold_chemical=0.4,
         heuristic_belief_threshold_thermal=0.475,

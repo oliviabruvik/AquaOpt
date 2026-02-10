@@ -65,6 +65,12 @@ end
     # Cooldown stress multiplier
     cooldown_stress_multiplier::Float64 = 1.5
 
+    # Financial parameters — all reward components output MNOK
+    salmon_price_MNOK_per_tonne::Float64 = 0.07  # ~70 NOK/kg Norwegian salmon spot price
+    regulatory_violation_cost_MNOK::Float64 = 10.0  # Forced emergency treatment + production disruption + license risk
+    welfare_cost_MNOK::Float64 = 1.0  # Per stress-score unit: veterinary, secondary infections, reduced performance
+    chronic_lice_cost_MNOK::Float64 = 0.5  # Per burden-unit/week: growth reduction, feed conversion loss
+
     # Weight parameters
     w_max::Float64 = 5.0                        # asymptotic harvest weight (kg)
     k_growth::Float64 = 0.01                    # weekly von Bertalanffy/logistic-like rate
@@ -307,23 +313,19 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     # === 1. DIRECT TREATMENT COSTS ===
     treatment_cost = get_treatment_cost(a)
 
-    # === 2. REGULATORY PENALTY — season-dependent threshold ===
+    # === 2. REGULATORY PENALTY (MNOK) — season-dependent threshold ===
     season = week_to_season(s.AnnualWeek)
     reg_limit = pomdp.season_regulation_limits[season]
-    if s.Adult > reg_limit
-        regulatory_penalty = 100.0
-    else
-        regulatory_penalty = 0.0
-    end
+    regulatory_penalty = s.Adult > reg_limit ? pomdp.regulatory_violation_cost_MNOK : 0.0
 
-    # === 3. BIOMASS LOSS (expected growth shortfall) ===
+    # === 3. BIOMASS LOSS (MNOK) — expected growth shortfall ===
     next_biomass = biomass_tons(sp)
 
     # Predict what biomass should be next week if no mortality occurs.
     # 1) Project fish count forward with only natural/treatment survival.
     ideal_survival_rate = 1 - pomdp.nat_mort_rate
     expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
-    
+
     # 2) Project average weight using the same growth rule as the transition.
     k0_base = pomdp.k_growth * (1.0 + pomdp.temp_sensitivity * (s.Temperature - 10.0))
     ideal_k0 = max(k0_base, 0.0)
@@ -331,28 +333,28 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     expected_weight = clamp(expected_weight, pomdp.weight_bounds...)
     expected_biomass = biomass_tons(expected_weight, expected_fish)
 
-    total_biomass_loss = max(expected_biomass - next_biomass, 0.0)
+    biomass_loss_MNOK = max(expected_biomass - next_biomass, 0.0) * pomdp.salmon_price_MNOK_per_tonne
 
-    # === 4. FISH HEALTH — cooldown-dependent stress multiplier ===
+    # === 4. FISH HEALTH (MNOK) — cooldown-dependent stress multiplier ===
     base_stress = get_fish_disease(a)
     stress_multiplier = s.Cooldown == 1 ? pomdp.cooldown_stress_multiplier : 1.0
-    fish_health_penalty = base_stress * stress_multiplier
+    fish_health_MNOK = base_stress * stress_multiplier * pomdp.welfare_cost_MNOK
 
-    # === 5. SEA LICE BURDEN (chronic parasite damage) ===
-    sea_lice_penalty = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5))
+    # === 5. SEA LICE BURDEN (MNOK) — chronic parasite damage ===
+    sea_lice_MNOK = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5)) * pomdp.chronic_lice_cost_MNOK
 
-    # === TOTAL REWARD ===
+    # === TOTAL REWARD (all components in MNOK) ===
     return -(
         λ_trt * treatment_cost +
         λ_reg * regulatory_penalty +
-        λ_bio * total_biomass_loss +
-        λ_health * fish_health_penalty +
-        λ_sea_lice * sea_lice_penalty
+        λ_bio * biomass_loss_MNOK +
+        λ_health * fish_health_MNOK +
+        λ_sea_lice * sea_lice_MNOK
     )
 end
 
 # -------------------------
-# Observation-based reward function
+# Observation-based reward function (all components in MNOK)
 # POMDPs.jl prefers reward(m, s, a, sp, o) when available during simulation.
 # The regulatory penalty is based on the observed (sampled) lice count,
 # matching real-world enforcement where regulators assess compliance
@@ -362,19 +364,15 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
 
     λ_trt, λ_reg, λ_bio, λ_health, λ_sea_lice = pomdp.reward_lambdas
 
-    # === 1. DIRECT TREATMENT COSTS ===
+    # === 1. DIRECT TREATMENT COSTS (MNOK) ===
     treatment_cost = get_treatment_cost(a)
 
-    # === 2. REGULATORY PENALTY based on OBSERVATION — season-dependent threshold ===
+    # === 2. REGULATORY PENALTY (MNOK) — based on OBSERVATION, season-dependent threshold ===
     season = week_to_season(s.AnnualWeek)
     reg_limit = pomdp.season_regulation_limits[season]
-    if o.Adult > reg_limit
-        regulatory_penalty = 100.0
-    else
-        regulatory_penalty = 0.0
-    end
+    regulatory_penalty = o.Adult > reg_limit ? pomdp.regulatory_violation_cost_MNOK : 0.0
 
-    # === 3. BIOMASS LOSS (expected growth shortfall — physical, not observed) ===
+    # === 3. BIOMASS LOSS (MNOK) — expected growth shortfall, physical not observed ===
     next_biomass = biomass_tons(sp)
     ideal_survival_rate = 1 - pomdp.nat_mort_rate
     expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
@@ -383,23 +381,23 @@ function POMDPs.reward(pomdp::SeaLiceSimPOMDP, s::EvaluationState, a::Action, sp
     expected_weight = s.AvgFishWeight + ideal_k0 * (pomdp.w_max - s.AvgFishWeight)
     expected_weight = clamp(expected_weight, pomdp.weight_bounds...)
     expected_biomass = biomass_tons(expected_weight, expected_fish)
-    total_biomass_loss = max(expected_biomass - next_biomass, 0.0)
+    biomass_loss_MNOK = max(expected_biomass - next_biomass, 0.0) * pomdp.salmon_price_MNOK_per_tonne
 
-    # === 4. FISH HEALTH — cooldown-dependent stress multiplier ===
+    # === 4. FISH HEALTH (MNOK) — cooldown-dependent stress multiplier ===
     base_stress = get_fish_disease(a)
     stress_multiplier = s.Cooldown == 1 ? pomdp.cooldown_stress_multiplier : 1.0
-    fish_health_penalty = base_stress * stress_multiplier
+    fish_health_MNOK = base_stress * stress_multiplier * pomdp.welfare_cost_MNOK
 
-    # === 5. SEA LICE BURDEN (chronic parasite damage — physical, not observed) ===
-    sea_lice_penalty = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5))
+    # === 5. SEA LICE BURDEN (MNOK) — chronic parasite damage, physical not observed ===
+    sea_lice_MNOK = s.Adult * (1.0 + 0.2 * max(0, s.Adult - 0.5)) * pomdp.chronic_lice_cost_MNOK
 
-    # === TOTAL REWARD ===
+    # === TOTAL REWARD (all components in MNOK) ===
     return -(
         λ_trt * treatment_cost +
         λ_reg * regulatory_penalty +
-        λ_bio * total_biomass_loss +
-        λ_health * fish_health_penalty +
-        λ_sea_lice * sea_lice_penalty
+        λ_bio * biomass_loss_MNOK +
+        λ_health * fish_health_MNOK +
+        λ_sea_lice * sea_lice_MNOK
     )
 end
 

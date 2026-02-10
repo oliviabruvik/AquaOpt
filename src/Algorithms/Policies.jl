@@ -20,33 +20,44 @@ function create_pomdp_mdp(config)
     sessile_ratio = sim_cfg.sessile_mean / adult_mean
     base_temperature = get_location_params(config.solver_config.location).T_mean
 
-    if config.solver_config.log_space
+    sc = config.solver_config
+    if sc.log_space
         pomdp = SeaLiceLogPOMDP(
-            reward_lambdas=config.solver_config.reward_lambdas,
-            discount_factor=config.solver_config.discount_factor,
-            discretization_step=config.solver_config.discretization_step,
-            adult_sd=config.solver_config.adult_sd,
-            regulation_limit=config.solver_config.regulation_limit,
-            full_observability_solver=config.solver_config.full_observability_solver,
-            location=config.solver_config.location,
-            reproduction_rate=config.solver_config.reproduction_rate,
+            reward_lambdas=sc.reward_lambdas,
+            discount_factor=sc.discount_factor,
+            discretization_step=sc.discretization_step,
+            adult_sd=sc.adult_sd,
+            regulation_limit=sc.regulation_limit,
+            season_regulation_limits=sc.season_regulation_limits,
+            full_observability_solver=sc.full_observability_solver,
+            location=sc.location,
+            reproduction_rate=sc.reproduction_rate,
             motile_ratio=motile_ratio,
             sessile_ratio=sessile_ratio,
             base_temperature=base_temperature,
+            salmon_price_MNOK_per_tonne=sc.salmon_price_MNOK_per_tonne,
+            regulatory_violation_cost_MNOK=sc.regulatory_violation_cost_MNOK,
+            welfare_cost_MNOK=sc.welfare_cost_MNOK,
+            chronic_lice_cost_MNOK=sc.chronic_lice_cost_MNOK,
         )
     else
         pomdp = SeaLicePOMDP(
-            reward_lambdas=config.solver_config.reward_lambdas,
-            discount_factor=config.solver_config.discount_factor,
-            discretization_step=config.solver_config.discretization_step,
-            adult_sd=config.solver_config.adult_sd,
-            regulation_limit=config.solver_config.regulation_limit,
-            full_observability_solver=config.solver_config.full_observability_solver,
-            location=config.solver_config.location,
-            reproduction_rate=config.solver_config.reproduction_rate,
+            reward_lambdas=sc.reward_lambdas,
+            discount_factor=sc.discount_factor,
+            discretization_step=sc.discretization_step,
+            adult_sd=sc.adult_sd,
+            regulation_limit=sc.regulation_limit,
+            season_regulation_limits=sc.season_regulation_limits,
+            full_observability_solver=sc.full_observability_solver,
+            location=sc.location,
+            reproduction_rate=sc.reproduction_rate,
             motile_ratio=motile_ratio,
             sessile_ratio=sessile_ratio,
             base_temperature=base_temperature,
+            salmon_price_MNOK_per_tonne=sc.salmon_price_MNOK_per_tonne,
+            regulatory_violation_cost_MNOK=sc.regulatory_violation_cost_MNOK,
+            welfare_cost_MNOK=sc.welfare_cost_MNOK,
+            chronic_lice_cost_MNOK=sc.chronic_lice_cost_MNOK,
         )
     end
 

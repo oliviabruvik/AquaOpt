@@ -39,11 +39,12 @@ end
 function create_sim_pomdp(config)
     # Simulate policies on a POMDP with a larger state space
     # for a realistic evaluation of performance.
+    sc = config.solver_config
     if config.simulation_config.high_fidelity_sim
         return SeaLiceSimPOMDP(
             reward_lambdas=config.simulation_config.sim_reward_lambdas,
-            reproduction_rate=config.solver_config.reproduction_rate,
-            discount_factor=config.solver_config.discount_factor,
+            reproduction_rate=sc.reproduction_rate,
+            discount_factor=sc.discount_factor,
             # SimPOMDP parameters
             adult_mean=config.simulation_config.adult_mean,
             motile_mean=config.simulation_config.motile_mean,
@@ -52,7 +53,13 @@ function create_sim_pomdp(config)
             motile_sd=config.simulation_config.motile_sd,
             sessile_sd=config.simulation_config.sessile_sd,
             temp_sd=config.simulation_config.temp_sd,
-            location=config.solver_config.location,
+            location=sc.location,
+            # Country-specific parameters
+            season_regulation_limits=sc.season_regulation_limits,
+            salmon_price_MNOK_per_tonne=sc.salmon_price_MNOK_per_tonne,
+            regulatory_violation_cost_MNOK=sc.regulatory_violation_cost_MNOK,
+            welfare_cost_MNOK=sc.welfare_cost_MNOK,
+            chronic_lice_cost_MNOK=sc.chronic_lice_cost_MNOK,
         )
     else
         # Use the same POMDP type that policies were trained on
@@ -60,30 +67,40 @@ function create_sim_pomdp(config)
         adult_mean = max(sim_cfg.adult_mean, 1e-6)
         motile_ratio = sim_cfg.motile_mean / adult_mean
         sessile_ratio = sim_cfg.sessile_mean / adult_mean
-        base_temperature = get_location_params(config.solver_config.location).T_mean
+        base_temperature = get_location_params(sc.location).T_mean
 
-        if config.solver_config.log_space
+        if sc.log_space
             return SeaLiceLogPOMDP(
                 reward_lambdas=config.simulation_config.sim_reward_lambdas,
-                discount_factor=config.solver_config.discount_factor,
-                discretization_step=config.solver_config.discretization_step,
-                adult_sd=config.solver_config.adult_sd,
-                regulation_limit=config.solver_config.regulation_limit,
-                full_observability_solver=config.solver_config.full_observability_solver,
-                location=config.solver_config.location,
-                reproduction_rate=config.solver_config.reproduction_rate,
+                discount_factor=sc.discount_factor,
+                discretization_step=sc.discretization_step,
+                adult_sd=sc.adult_sd,
+                regulation_limit=sc.regulation_limit,
+                season_regulation_limits=sc.season_regulation_limits,
+                full_observability_solver=sc.full_observability_solver,
+                location=sc.location,
+                reproduction_rate=sc.reproduction_rate,
                 motile_ratio=motile_ratio,
                 sessile_ratio=sessile_ratio,
                 base_temperature=base_temperature,
+                salmon_price_MNOK_per_tonne=sc.salmon_price_MNOK_per_tonne,
+                regulatory_violation_cost_MNOK=sc.regulatory_violation_cost_MNOK,
+                welfare_cost_MNOK=sc.welfare_cost_MNOK,
+                chronic_lice_cost_MNOK=sc.chronic_lice_cost_MNOK,
             )
         else
             return SeaLicePOMDP(
                 reward_lambdas=config.simulation_config.sim_reward_lambdas,
-                discount_factor=config.solver_config.discount_factor,
-                discretization_step=config.solver_config.discretization_step,
-                adult_sd=config.solver_config.adult_sd,
-                regulation_limit=config.solver_config.regulation_limit,
-                full_observability_solver=config.solver_config.full_observability_solver,
+                discount_factor=sc.discount_factor,
+                discretization_step=sc.discretization_step,
+                adult_sd=sc.adult_sd,
+                regulation_limit=sc.regulation_limit,
+                season_regulation_limits=sc.season_regulation_limits,
+                full_observability_solver=sc.full_observability_solver,
+                salmon_price_MNOK_per_tonne=sc.salmon_price_MNOK_per_tonne,
+                regulatory_violation_cost_MNOK=sc.regulatory_violation_cost_MNOK,
+                welfare_cost_MNOK=sc.welfare_cost_MNOK,
+                chronic_lice_cost_MNOK=sc.chronic_lice_cost_MNOK,
             )
         end
     end
@@ -162,7 +179,7 @@ function simulate_all_policies(algorithms, config, all_policies)
     @save data_filepath data
     @info "Saved parallel simulation data to $(data_filepath)"
 
-    return data
+    return data, sim_pomdp
 
 end
 
