@@ -24,10 +24,28 @@ using DataFrames
 using JLD2
 using Printf
 
-# Hardcoded experiment path and policies
-const EXPERIMENT_PATH = "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
-const POLICIES_TO_PLOT = ["Random_Policy", "Heuristic_Policy", "QMDP_Policy", "NUS_SARSOP_Policy", "VI_Policy"]
-const DEFAULT_OUTPUT_DIR = "final_results/policy_outputs"
+const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
+
+function load_manifest(path::String)
+    manifest = Dict{String,String}()
+    for line in readlines(path)
+        startswith(line, '#') && continue
+        isempty(strip(line)) && continue
+        parts = split(line, '\t')
+        manifest[parts[1]] = parts[2]
+    end
+    return manifest
+end
+
+# Load baseline experiment path from manifest
+const EXPERIMENT_PATH = if isfile(MANIFEST_PATH)
+    @info "Using manifest: $MANIFEST_PATH"
+    load_manifest(MANIFEST_PATH)["baseline_norway_north"]
+else
+    error("Manifest not found at $MANIFEST_PATH. Run run_experiments.jl first.")
+end
+const POLICIES_TO_PLOT = ["Random_Policy", "Heuristic_Policy", "QMDP_Policy", "Native_SARSOP_Policy", "VI_Policy"]
+const DEFAULT_OUTPUT_DIR = "results/latest/policy_outputs"
 const TIME_PLOT_LEGEND_GROUPS = [
     :sealice => ["sealice", "sea_lice"],
     :reward => ["reward", "reward_per_step"],
@@ -132,20 +150,24 @@ function parse_cli_args(args::Vector{String})
     return AnalyzeOptions(exp_path, resolved_output, generate_plots, POLICIES_TO_PLOT, time_plot_legends)
 end
 
-function adjust_config_paths!(config, experiment_root::String)
-    config.experiment_dir = experiment_root
-    config.policies_dir = joinpath(experiment_root, "policies")
-    config.simulations_dir = joinpath(experiment_root, "simulation_histories")
-    config.results_dir = joinpath(experiment_root, "avg_results")
-    config.figures_dir = joinpath(experiment_root, "figures")
-    return config
+function adjust_config_paths(config, experiment_root::String)
+    return ExperimentConfig(
+        solver_config = config.solver_config,
+        simulation_config = config.simulation_config,
+        experiment_name = config.experiment_name,
+        experiment_dir = experiment_root,
+        policies_dir = joinpath(experiment_root, "policies"),
+        simulations_dir = joinpath(experiment_root, "simulation_histories"),
+        results_dir = joinpath(experiment_root, "avg_results"),
+        figures_dir = joinpath(experiment_root, "figures"),
+    )
 end
 
 function load_experiment_config(experiment_root::String)
     cfg_path = joinpath(experiment_root, "config", "experiment_config.jld2")
     isfile(cfg_path) || error("Could not find config file at $cfg_path")
     @load cfg_path config
-    return adjust_config_paths!(config, experiment_root)
+    return adjust_config_paths(config, experiment_root)
 end
 
 function ensure_dataframe(data)
@@ -161,7 +183,7 @@ function load_parallel_data(experiment_root::String)
     return ensure_dataframe(data)
 end
 
-function summarize_experiment(config, parallel_data;
+function summarize_experiment(config, parallel_data, algorithms;
         output_dir::Union{Nothing,String}=nothing,
         generate_plots::Bool=true,
         policies_to_plot=nothing,
@@ -175,15 +197,24 @@ function summarize_experiment(config, parallel_data;
     if generate_plots
         target_dir = isnothing(output_dir) ? config.figures_dir : output_dir
         mkpath(target_dir)
-        temp_config = deepcopy(config)
-        temp_config.figures_dir = target_dir
+        temp_config = ExperimentConfig(
+            solver_config = config.solver_config,
+            simulation_config = config.simulation_config,
+            experiment_name = config.experiment_name,
+            experiment_dir = config.experiment_dir,
+            policies_dir = config.policies_dir,
+            simulations_dir = config.simulations_dir,
+            results_dir = config.results_dir,
+            figures_dir = target_dir,
+        )
         plot_plos_one_plots(
             processed_data,
-            temp_config;
+            temp_config,
+            algorithms;
             policies_to_plot=policies_to_plot,
             time_plot_legends=time_plot_legends,
         )
-        println("Plots saved to $(temp_config.figures_dir).")
+        println("Plots saved to $(target_dir).")
     else
         println("Skipping plot generation (--no-plots flag).")
     end
@@ -194,10 +225,12 @@ end
 function main()
     opts = parse_cli_args(ARGS)
     config = load_experiment_config(opts.experiment_path)
+    algorithms = define_algorithms(config)
     parallel_data = load_parallel_data(opts.experiment_path)
     summarize_experiment(
         config,
-        parallel_data;
+        parallel_data,
+        algorithms;
         output_dir = opts.output_dir,
         generate_plots = opts.generate_plots,
         policies_to_plot = opts.policies_to_plot,

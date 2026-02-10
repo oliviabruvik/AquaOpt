@@ -82,10 +82,23 @@ end
 # ----------------------------
 # Main function
 # ----------------------------
-function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=true, reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12], sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12])
+function main(;log_space=true, experiment_name="exp", mode="debug", location="south", ekf_filter=true, plot=true,
+    reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12],
+    sim_reward_lambdas::Vector{Float64}=[0.46, 0.12, 0.12, 0.18, 0.12],
+    season_regulation_limits::Vector{Float64}=[0.2, 0.5, 0.5, 0.5],
+    regulatory_violation_cost_MNOK::Float64=10.0,
+    salmon_price_MNOK_per_tonne::Float64=0.07,
+    welfare_cost_MNOK::Float64=1.0,
+    chronic_lice_cost_MNOK::Float64=0.5)
 
     # Set up experiment config and log in experiments.csv file
-    config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location; reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas)
+    config = setup_experiment_configs(experiment_name, log_space, ekf_filter, mode, location;
+        reward_lambdas=reward_lambdas, sim_reward_lambdas=sim_reward_lambdas,
+        season_regulation_limits=season_regulation_limits,
+        regulatory_violation_cost_MNOK=regulatory_violation_cost_MNOK,
+        salmon_price_MNOK_per_tonne=salmon_price_MNOK_per_tonne,
+        welfare_cost_MNOK=welfare_cost_MNOK,
+        chronic_lice_cost_MNOK=chronic_lice_cost_MNOK)
     save_experiment_config(config)
     
     @info """\n
@@ -98,6 +111,9 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     ║  Reward lambdas:  $reward_lambdas
     ║  Sim R lambdas:   $sim_reward_lambdas
     ║  Location:        $location
+    ║  Reg limits:      $season_regulation_limits
+    ║  Violation cost:  $(regulatory_violation_cost_MNOK) MNOK
+    ║  Salmon price:    $(salmon_price_MNOK_per_tonne) MNOK/t
     ║  ExperimentDir: $(config.experiment_dir)
     ╚════════════════════════════════════════════════════════════════════════╝
     """
@@ -109,30 +125,32 @@ function main(;log_space=true, experiment_name="exp", mode="debug", location="so
     all_policies = solve_policies(algorithms, config)
 
     @info "Simulating policies"
-    parallel_data = simulate_all_policies(algorithms, config, all_policies)
+    parallel_data, sim_pomdp = simulate_all_policies(algorithms, config, all_policies)
 
     # Extract reward metrics
-    processed_data = extract_reward_metrics(parallel_data, config)
+    processed_data = extract_reward_metrics(parallel_data, config, sim_pomdp)
 
     # Display reward metrics
     display_reward_metrics(processed_data, config, true, true)
 
-    if config.simulation_config.high_fidelity_sim
-        if plot
-            # Plot the results
-            plot_plos_one_plots(processed_data, config)
-        end
-
-        # Treatment frequency
-        print_treatment_frequency(processed_data, config)
+    if config.simulation_config.high_fidelity_sim && plot
+        plot_plos_one_plots(processed_data, config, algorithms)
     end
 
+    return config
 end
 
 # ----------------------------
 # Set up and save experiment configuration
 # ----------------------------
-function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="debug", location="south"; reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0], sim_reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0])
+function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, mode="debug", location="south";
+    reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0],
+    sim_reward_lambdas::Vector{Float64}=[1.0, 3.0, 0.5, 0.01, 0.0],
+    season_regulation_limits::Vector{Float64}=[0.2, 0.5, 0.5, 0.5],
+    regulatory_violation_cost_MNOK::Float64=10.0,
+    salmon_price_MNOK_per_tonne::Float64=0.07,
+    welfare_cost_MNOK::Float64=1.0,
+    chronic_lice_cost_MNOK::Float64=0.5)
 
     # Define experiment configuration
     exp_name = string(Dates.today(), "/", Dates.now(), "_", experiment_name, "_", mode, "_", location, "_", reward_lambdas)
@@ -141,10 +159,10 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
 
     # Mode-specific overrides
     if mode == "debug"
-        sarsop_time, vi_iters, qmdp_iters, disc_step = 5.0, 100, 100, 0.1
+        sarsop_time, vi_iters, qmdp_iters = 5.0, 10, 10
         n_episodes, n_steps = 100, 52
     elseif mode == "paper"
-        sarsop_time, vi_iters, qmdp_iters, disc_step = 3000.0, 800, 800, 0.01
+        sarsop_time, vi_iters, qmdp_iters = 3000.0, 800, 800
         n_episodes, n_steps = 1000, 100
     else
         error("Invalid mode: $mode. Must be 'debug' or 'paper'")
@@ -157,11 +175,15 @@ function setup_experiment_configs(experiment_name, log_space, ekf_filter=true, m
         VI_max_iterations=vi_iters,
         QMDP_max_iterations=qmdp_iters,
         discount_factor=0.95,
-        discretization_step=disc_step,
         location=location,
-        heuristic_belief_threshold_mechanical=0.45,
-        heuristic_belief_threshold_chemical=0.4,
-        heuristic_belief_threshold_thermal=0.475,
+        season_regulation_limits=season_regulation_limits,
+        salmon_price_MNOK_per_tonne=salmon_price_MNOK_per_tonne,
+        regulatory_violation_cost_MNOK=regulatory_violation_cost_MNOK,
+        welfare_cost_MNOK=welfare_cost_MNOK,
+        chronic_lice_cost_MNOK=chronic_lice_cost_MNOK,
+        heuristic_belief_threshold_mechanical=0.4,
+        heuristic_belief_threshold_chemical=0.2,
+        heuristic_belief_threshold_thermal=0.6,
         full_observability_solver=false,
     )
     sim_cfg = SimulationConfig(
@@ -193,6 +215,11 @@ function define_algorithms(config)
         pomdp_filename=joinpath(config.experiment_dir, "pomdp_mdp/pomdp.pomdpx")
     )
 
+    native_sarsop_solver = NativeSARSOP.SARSOPSolver(
+        max_time=config.solver_config.sarsop_max_time,
+        verbose=false,
+    )
+
     vi_solver = ValueIterationSolver(max_iterations=config.solver_config.VI_max_iterations, belres=1e-10, verbose=false)
 
     qmdp_solver = QMDPSolver(max_iterations=config.solver_config.QMDP_max_iterations)
@@ -202,7 +229,8 @@ function define_algorithms(config)
         Algorithm(solver_name="AlwaysTreat_Policy"),
         Algorithm(solver_name="Random_Policy"),
         Algorithm(solver_name="Heuristic_Policy", solver_config=config.solver_config),
-        Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
+        # Algorithm(solver=nus_sarsop_solver, solver_name="NUS_SARSOP_Policy"),
+        Algorithm(solver=native_sarsop_solver, solver_name="Native_SARSOP_Policy"),
         Algorithm(solver=vi_solver, solver_name="VI_Policy"),
         Algorithm(solver=qmdp_solver, solver_name="QMDP_Policy"),
     ]

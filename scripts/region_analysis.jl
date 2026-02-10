@@ -9,12 +9,6 @@ policy performance across West, North, and South regions.
 Usage:
     julia --project scripts/region_analysis.jl [--output-dir DIR]
 
-Configuration:
-    - WEST_EXPERIMENT: Path to West region experiment
-    - NORTH_EXPERIMENT: Path to North region experiment
-    - SOUTH_EXPERIMENT: Path to South region experiment
-    - DEFAULT_OUTPUT_DIR: Default output directory for plots
-
 Outputs:
     - region_sealice_levels_over_time.pdf: Sea lice comparison across regions
     - region_treatment_cost_over_time.pdf/.tex: Treatment cost comparison
@@ -31,16 +25,21 @@ using Printf
 using Statistics
 using POMDPTools: state_hist, action_hist, reward_hist, observation_hist
 
-# Hardcoded experiment paths
-# const WEST_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T23:17:39.432_log_space_ukf_paper_west_[0.46, 0.12, 0.12, 0.18, 0.12]"
-# const NORTH_EXPERIMENT = "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
-# const SOUTH_EXPERIMENT = "results/experiments/2025-11-20/2025-11-20T00:17:15.348_log_space_ukf_paper_south_[0.46, 0.12, 0.12, 0.18, 0.12]"
+const MANIFEST_PATH = "/Users/oliviabeyerbruvik/Desktop/AquaOpt/results/experiment_manifest_debug.txt"
+# const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
 
-const WEST_EXPERIMENT = "results/experiments/2025-11-24/2025-11-24T17:37:27.490_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]"
-const NORTH_EXPERIMENT = "results/experiments/2025-11-24/2025-11-24T17:37:27.490_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]"
-const SOUTH_EXPERIMENT = "results/experiments/2025-11-24/2025-11-24T17:37:27.490_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]"
+function load_manifest(path::String)
+    manifest = Dict{String,String}()
+    for line in readlines(path)
+        startswith(line, '#') && continue
+        isempty(strip(line)) && continue
+        parts = split(line, '\t')
+        manifest[parts[1]] = parts[2]  # label => experiment_dir
+    end
+    return manifest
+end
 
-const DEFAULT_OUTPUT_DIR = "final_results/region_outputs"
+const DEFAULT_OUTPUT_DIR = "results/latest/region_outputs"
 const REGION_TABLE_POLICIES = [
     (label = "Always Treat", csv_name = "AlwaysTreat_Policy"),
     (label = "Never Treat", csv_name = "NeverTreat_Policy"),
@@ -111,6 +110,7 @@ function usage()
     println("Usage: julia --project scripts/region_analysis.jl [--output-dir DIR]")
     println("  --output-dir, -o  Directory where plots should be saved (default: $(DEFAULT_OUTPUT_DIR))")
     println("  --help, -h        Show this help message")
+    println("\nReads experiment paths from: $(MANIFEST_PATH)")
 end
 
 function parse_args(args)
@@ -135,29 +135,44 @@ function parse_args(args)
         end
         i += 1
     end
+
+    isfile(MANIFEST_PATH) || error("Manifest not found at $MANIFEST_PATH. Run run_experiments.jl first.")
+    @info "Using manifest: $MANIFEST_PATH"
+    manifest = load_manifest(MANIFEST_PATH)
+
+    north = get(manifest, "baseline_norway_north", nothing)
+    west = get(manifest, "dynamics_norway_west", nothing)
+    south = get(manifest, "dynamics_norway_south", nothing)
+    north === nothing && error("Manifest missing 'baseline_norway_north'")
+    west === nothing && error("Manifest missing 'dynamics_norway_west'")
+    south === nothing && error("Manifest missing 'dynamics_norway_south'")
+
     return (
-        [RegionInput("West", WEST_EXPERIMENT),
-         RegionInput("North", NORTH_EXPERIMENT),
-         RegionInput("South", SOUTH_EXPERIMENT)],
+        [RegionInput("North", north),
+         RegionInput("West", west),
+         RegionInput("South", south)],
         output_dir
     )
 end
 
-function adjust_config_paths!(config, experiment_root::String)
-    config = deepcopy(config)
-    config.experiment_dir = experiment_root
-    config.policies_dir = joinpath(experiment_root, "policies")
-    config.simulations_dir = joinpath(experiment_root, "simulation_histories")
-    config.results_dir = joinpath(experiment_root, "avg_results")
-    config.figures_dir = joinpath(experiment_root, "figures")
-    return config
+function adjust_config_paths(config, experiment_root::String)
+    return ExperimentConfig(
+        solver_config = config.solver_config,
+        simulation_config = config.simulation_config,
+        experiment_name = config.experiment_name,
+        experiment_dir = experiment_root,
+        policies_dir = joinpath(experiment_root, "policies"),
+        simulations_dir = joinpath(experiment_root, "simulation_histories"),
+        results_dir = joinpath(experiment_root, "avg_results"),
+        figures_dir = joinpath(experiment_root, "figures"),
+    )
 end
 
 function load_experiment_config(experiment_root::String)
     cfg_path = joinpath(experiment_root, "config", "experiment_config.jld2")
     isfile(cfg_path) || error("Could not find config file at $cfg_path")
     @load cfg_path config
-    return adjust_config_paths!(config, experiment_root)
+    return adjust_config_paths(config, experiment_root)
 end
 
 function ensure_dataframe(data)
@@ -221,19 +236,6 @@ function compute_sealice_stats(parallel_data, config)
         end
     end
     return stats
-end
-
-function _expected_biomass_shortfall(config::ExperimentConfig, s, sp)
-    sim_params = SeaLiceSimPOMDP(location=config.solver_config.location)
-    ideal_survival_rate = 1 - sim_params.nat_mort_rate
-    expected_fish = max(s.NumberOfFish * ideal_survival_rate, 0.0)
-    k0_base = sim_params.k_growth * (1.0 + sim_params.temp_sensitivity * (s.Temperature - 10.0))
-    ideal_k0 = max(k0_base, 0.0)
-    expected_weight = s.AvgFishWeight + ideal_k0 * (sim_params.w_max - s.AvgFishWeight)
-    expected_weight = clamp(expected_weight, sim_params.weight_bounds...)
-    expected_biomass = AquaOpt.biomass_tons(expected_weight, expected_fish)
-    next_biomass = AquaOpt.biomass_tons(sp)
-    return max(expected_biomass - next_biomass, 0.0)
 end
 
 function extract_metric_caches(data_filtered, seeds)

@@ -11,14 +11,31 @@ using PGFPlotsX: @pgf, Axis, Plot, Coordinates, GroupPlot, Options
 using POMDPs: action, states
 using Printf
 
-const EXPERIMENT_FOLDERS = [
-    "results/experiments/2025-11-18/2025-11-18T22:40:00.463_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]",
-    "results/experiments/2025-11-18/2025-11-18T21:28:47.647_log_space_ukf_paper_north_[0.4, 0.2, 0.1, 0.0, 0.1]",
-    "results/experiments/2025-11-18/2025-11-18T22:08:47.305_log_space_ukf_paper_north_[0.4, 0.1, 0.1, 0.5, 0.2]",
-]
+const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
 
-const TABLE_OUTPUT_PATH = "Quick_Access/policy_treatment_summary.tex"
-const FIGURE_OUTPUT_PATH = "Quick_Access/policy_dominant_actions.tex"
+function load_manifest(path::String)
+    manifest = Dict{String,String}()
+    for line in readlines(path)
+        startswith(line, '#') && continue
+        isempty(strip(line)) && continue
+        parts = split(line, '\t')
+        manifest[parts[1]] = parts[2]
+    end
+    return manifest
+end
+
+const EXPERIMENT_FOLDERS = if isfile(MANIFEST_PATH)
+    @info "Using manifest: $MANIFEST_PATH"
+    _manifest = load_manifest(MANIFEST_PATH)
+    [_manifest["baseline_norway_north"],
+     _manifest["lambda_cost_norway_north"],
+     _manifest["lambda_welfare_norway_north"]]
+else
+    error("Manifest not found at $MANIFEST_PATH. Run run_experiments.jl first.")
+end
+
+const TABLE_OUTPUT_PATH = "results/latest/lambda_outputs/policy_treatment_summary.tex"
+const FIGURE_OUTPUT_PATH = "results/latest/lambda_outputs/policy_dominant_actions.tex"
 
 const TREATMENT_COLUMNS = ["NoTreatment", "MechanicalTreatment", "ChemicalTreatment", "ThermalTreatment"]
 const TREATMENT_LABELS = Dict(
@@ -55,13 +72,17 @@ struct ExperimentSummary
     treatment::DataFrame
 end
 
-function adjust_config_paths!(config::ExperimentConfig, experiment_root::String)
-    config.experiment_dir = experiment_root
-    config.policies_dir = joinpath(experiment_root, "policies")
-    config.simulations_dir = joinpath(experiment_root, "simulation_histories")
-    config.results_dir = joinpath(experiment_root, "avg_results")
-    config.figures_dir = joinpath(experiment_root, "figures")
-    return config
+function adjust_config_paths(config::ExperimentConfig, experiment_root::String)
+    return ExperimentConfig(
+        solver_config = config.solver_config,
+        simulation_config = config.simulation_config,
+        experiment_name = config.experiment_name,
+        experiment_dir = experiment_root,
+        policies_dir = joinpath(experiment_root, "policies"),
+        simulations_dir = joinpath(experiment_root, "simulation_histories"),
+        results_dir = joinpath(experiment_root, "avg_results"),
+        figures_dir = joinpath(experiment_root, "figures"),
+    )
 end
 
 function extract_lambda_label(experiment_root::String)
@@ -77,7 +98,7 @@ function load_experiment_config(experiment_root::String)
     cfg_path = joinpath(experiment_root, "config", "experiment_config.jld2")
     isfile(cfg_path) || error("Could not find config file at $cfg_path")
     @load cfg_path config
-    return adjust_config_paths!(config, experiment_root)
+    return adjust_config_paths(config, experiment_root)
 end
 
 function load_treatment_data(experiment_root::String)

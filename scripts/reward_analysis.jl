@@ -34,16 +34,36 @@ using POMDPs: action, states
 using Printf
 using Statistics
 
-const EXPERIMENT_FOLDERS = Dict(
-    "Scotland" => "results/experiments/2025-11-20/2025-11-20T00:17:15.348_log_space_ukf_paper_south_[0.46, 0.12, 0.12, 0.18, 0.12]",
-    "Chile" => "results/experiments/2025-11-20/2025-11-20T10:47:44.656_log_space_ukf_paper_south_[0.55, 0.1, 0.2, 0.05, 0.1]",
-    "Southern Norway" => "results/experiments/2025-11-20/2025-11-20T11:48:15.203_log_space_ukf_paper_south_[0.15, 0.05, 0.1, 0.35, 0.35]",
-    "Northern Norway" => "results/experiments/2025-11-19/2025-11-19T22:18:33.024_log_space_ukf_paper_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
-)
+const MANIFEST_PATH = "/Users/oliviabeyerbruvik/Desktop/AquaOpt/results/experiment_manifest_debug.txt"
+# const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
 
-const TABLE_OUTPUT_PATH = "final_results/reward_outputs/policy_treatment_summary.tex"
-const FIGURE_OUTPUT_PATH = "final_results/reward_outputs/policy_dominant_actions.tex"
-const LAMBDA_TABLE_OUTPUT_PATH = "final_results/reward_outputs/lambda_parameters.tex"
+function load_manifest(path::String)
+    manifest = Dict{String,String}()
+    for line in readlines(path)
+        startswith(line, '#') && continue
+        isempty(strip(line)) && continue
+        parts = split(line, '\t')
+        manifest[parts[1]] = parts[2]
+    end
+    return manifest
+end
+
+const EXPERIMENT_FOLDERS = if isfile(MANIFEST_PATH)
+    @info "Using manifest: $MANIFEST_PATH"
+    _manifest = load_manifest(MANIFEST_PATH)
+    Dict(
+        "Scotland" => _manifest["regulation_scotland_north"],
+        "Chile" => _manifest["regulation_chile_north"],
+        "Southern Norway" => _manifest["dynamics_norway_south"],
+        "Northern Norway" => _manifest["baseline_norway_north"],
+    )
+else
+    error("Manifest not found at $MANIFEST_PATH. Run run_experiments.jl first.")
+end
+
+const TABLE_OUTPUT_PATH = "results/latest/reward_outputs/policy_treatment_summary.tex"
+const FIGURE_OUTPUT_PATH = "results/latest/reward_outputs/policy_dominant_actions.tex"
+const LAMBDA_TABLE_OUTPUT_PATH = "results/latest/reward_outputs/lambda_parameters.tex"
 
 const TREATMENT_COLUMNS = ["NoTreatment", "ChemicalTreatment", "MechanicalTreatment", "ThermalTreatment"]
 const TREATMENT_LABELS = Dict(
@@ -95,13 +115,17 @@ struct ExperimentSummary
     treatment_std::TreatmentStats
 end
 
-function adjust_config_paths!(config::ExperimentConfig, experiment_root::String)
-    config.experiment_dir = experiment_root
-    config.policies_dir = joinpath(experiment_root, "policies")
-    config.simulations_dir = joinpath(experiment_root, "simulation_histories")
-    config.results_dir = joinpath(experiment_root, "avg_results")
-    config.figures_dir = joinpath(experiment_root, "figures")
-    return config
+function adjust_config_paths(config::ExperimentConfig, experiment_root::String)
+    return ExperimentConfig(
+        solver_config = config.solver_config,
+        simulation_config = config.simulation_config,
+        experiment_name = config.experiment_name,
+        experiment_dir = experiment_root,
+        policies_dir = joinpath(experiment_root, "policies"),
+        simulations_dir = joinpath(experiment_root, "simulation_histories"),
+        results_dir = joinpath(experiment_root, "avg_results"),
+        figures_dir = joinpath(experiment_root, "figures"),
+    )
 end
 
 function extract_lambda_label(experiment_root::String)
@@ -117,7 +141,7 @@ function load_experiment_config(experiment_root::String)
     cfg_path = joinpath(experiment_root, "config", "experiment_config.jld2")
     isfile(cfg_path) || error("Could not find config file at $cfg_path")
     @load cfg_path config
-    return adjust_config_paths!(config, experiment_root)
+    return adjust_config_paths(config, experiment_root)
 end
 
 function load_treatment_data(experiment_root::String)

@@ -81,9 +81,16 @@ end
     adult_sd::Float64 = 0.05
     log_space::Bool = false
     regulation_limit::Float64 = 0.5
+    season_regulation_limits::Vector{Float64} = [0.2, 0.5, 0.5, 0.5]  # [Spring, Summer, Autumn, Winter]
     location::String = "north"
     discretization_step::Float64 = 0.1
     full_observability_solver::Bool = false
+
+    # Financial parameters — country-specific, passed to all POMDPs
+    salmon_price_MNOK_per_tonne::Float64 = 0.07  # ~70 NOK/kg Norwegian salmon spot price
+    regulatory_violation_cost_MNOK::Float64 = 10.0  # Forced emergency treatment + production disruption + license risk
+    welfare_cost_MNOK::Float64 = 1.0  # Per stress-score unit
+    chronic_lice_cost_MNOK::Float64 = 0.5  # Per burden-unit/week
 
     # Reward weights for solving
     reward_lambdas::Vector{Float64} = [0.8, 0.2, 0.0, 0.0, 0.0] # [treatment, regulatory, biomass, health, sea lice]
@@ -94,10 +101,10 @@ end
     QMDP_max_iterations::Int = 30
 
     # Heuristic parameters
-    heuristic_threshold::Float64 = 0.5
-    heuristic_belief_threshold_mechanical::Float64 = 0.3
-    heuristic_belief_threshold_chemical::Float64 = 0.35
-    heuristic_belief_threshold_thermal::Float64 = 0.4
+    heuristic_threshold::Float64 = 0.3
+    heuristic_belief_threshold_mechanical::Float64 = 0.4
+    heuristic_belief_threshold_chemical::Float64 = 0.2
+    heuristic_belief_threshold_thermal::Float64 = 0.6
     heuristic_rho::Float64 = 0.8
 end
 

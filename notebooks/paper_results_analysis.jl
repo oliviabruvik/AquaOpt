@@ -56,7 +56,7 @@ md"""
 
 # ╔═╡ 34f769c5-2a81-43cf-ae03-0380e3cc6896
 begin
-	experiment_path = "results/experiments/2026-02-08/2026-02-08T16:47:16.008_exp_debug_north_[0.46, 0.12, 0.12, 0.18, 0.12]"
+	experiment_path = "results/experiments/2026-02-09/2026-02-09T16:42:22.732_baseline_norway_north_debug_north_[0.2, 0.2, 0.2, 0.2, 0.2]"
 	config_path = joinpath(experiment_path, "config/experiment_config.jld2")
 	sim_data_path = joinpath(experiment_path, "simulation_histories/all_policies_simulation_data.jld2")
 end
@@ -139,7 +139,7 @@ begin
 	# Read in pomdps
 	@load joinpath(
 		experiment_path, "policies", "policies_pomdp_mdp.jld2") all_policies
-	policy_bundle = all_policies["NUS_SARSOP_Policy"]
+	policy_bundle = all_policies["Native_SARSOP_Policy"]
 	policy = policy_bundle.policy
 	pomdp = policy_bundle.pomdp
 	mdp = policy_bundle.mdp
@@ -154,10 +154,10 @@ end
 processed_data = extract_reward_metrics(parallel_data, config)
 
 # ╔═╡ 7c78c1d1-f5a1-405a-b678-f4ba1bd0113c
-plot_kalman_filter_trajectory_with_uncertainty(processed_data, "NUS_SARSOP_Policy", config)
+plot_kalman_filter_trajectory_with_uncertainty(processed_data, "Native_SARSOP_Policy", config)
 
 # ╔═╡ 102a2969-4626-4461-96db-0539f03b3186
-plot_kalman_filter_belief_trajectory_two_panel(processed_data, "NUS_SARSOP_Policy", config)
+plot_kalman_filter_belief_trajectory_two_panel(processed_data, "Native_SARSOP_Policy", config)
 
 # ╔═╡ e0423dbc-5d25-4c0b-8d19-4b18ef5c56c2
 plos_one_sarsop_dominant_action(processed_data, config)
