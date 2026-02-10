@@ -331,81 +331,18 @@ function display_reward_metrics(parallel_data, config, display_ci=false, print_s
     # Save results to csv
     CSV.write(joinpath(config.results_dir, "reward_metrics.csv"), result)
 
-end
-
-
-# ----------------------------
-# Print the count of each treatment for each policy
-# The treatment count is the number of times each treatment is taken for each policy
-# The treatment count is stored in the data.treatments column
-# ----------------------------
-function print_treatment_frequency(data, config)
-
-    treatment_counts = Dict{String, Dict{String, Vector{Int}}}()
-
-    # Get all unique policies
-    policies = unique(data.policy)
-
-    for policy in policies
-
-        # Initialize the inner dictionary for this policy
-        treatment_counts[policy] = Dict{String, Vector{Int}}(
-            "NoTreatment" => [],
-            "MechanicalTreatment" => [],
-            "ChemicalTreatment" => [],
-            "ThermalTreatment" => [],
+    # Save treatment data to csv (used by reward_analysis.jl and aggregate_lambda_summaries.jl)
+    if has_treatments
+        treatment_df = select(result, :policy,
+            :mean_no_treatment => :NoTreatment,
+            :mean_mechanical => :MechanicalTreatment,
+            :mean_chemical => :ChemicalTreatment,
+            :mean_thermal => :ThermalTreatment,
         )
-
-        # Get histories for this policy
-        data_policy = filter(row -> row.policy == policy, data)
-
-        # Get all unique seeds
-        seeds = unique(data_policy.seed)
-
-        for seed in seeds
-
-            # Get histories for this seed
-            data_seed = filter(row -> row.seed == seed, data_policy)
-
-            # Get the treatment count from the data.treatments column
-            treatment_count = data_seed.treatments[1]  # Get the first (and only) treatment count dictionary
-
-            # Count the number of times each treatment is taken
-            push!(treatment_counts[policy]["NoTreatment"], get(treatment_count, NoTreatment, 0))
-            push!(treatment_counts[policy]["MechanicalTreatment"], get(treatment_count, MechanicalTreatment, 0))
-            push!(treatment_counts[policy]["ChemicalTreatment"], get(treatment_count, ChemicalTreatment, 0))
-            push!(treatment_counts[policy]["ThermalTreatment"], get(treatment_count, ThermalTreatment, 0))
-
-        end
+        CSV.write(joinpath(config.results_dir, "treatment_data.csv"), treatment_df)
     end
 
-    # Print the treatment counts for each policy as a table
-    # Create a DataFrame from the treatment counts
-    # Add mean and confidence interval to the dataframe
-    treatment_data = []
-    for (policy, counts) in treatment_counts
-        push!(treatment_data, (
-            policy = policy,
-            NoTreatment = mean_and_ci(counts["NoTreatment"]).mean,
-            MechanicalTreatment = mean_and_ci(counts["MechanicalTreatment"]).mean,
-            ChemicalTreatment = mean_and_ci(counts["ChemicalTreatment"]).mean,
-            ThermalTreatment = mean_and_ci(counts["ThermalTreatment"]).mean,
-        ))
-    end
-    
-    # Convert to DataFrame and display
-    if !isempty(treatment_data)
-        treatment_df = DataFrame(treatment_data)
-        println(treatment_df)
-    else
-        println("No treatment data available.")
-    end
-
-    # Save treatment data to csv
-    mkpath(config.results_dir)
-    CSV.write(joinpath(config.results_dir, "treatment_data.csv"), treatment_df)
 end
-
 
 # ----------------------------
 # Print all histories to a text file
