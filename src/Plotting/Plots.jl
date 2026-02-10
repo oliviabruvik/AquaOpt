@@ -30,6 +30,7 @@ function plot_plos_one_plots(parallel_data, config, algorithms; policies_to_plot
         plos_one_plot_kalman_filter_belief_trajectory(parallel_data, sarsop_name, config)
         plos_one_algo_sealice_levels_over_time(parallel_data, config, sarsop_name)
         plos_one_sarsop_dominant_action(parallel_data, config, sarsop_name)
+        plos_one_policy_decision_map(parallel_data, config, sarsop_name)
     end
 
     plos_one_sealice_levels_over_time(
@@ -79,6 +80,22 @@ function plot_plos_one_plots(parallel_data, config, algorithms; policies_to_plot
         config;
         policies_to_plot=policies_to_plot,
         show_legend=_time_plot_legend_enabled(legend_selection, :episode_sealice),
+    )
+    plos_one_combined_metrics_panel(
+        parallel_data,
+        config;
+        policies_to_plot=policies_to_plot,
+        show_legend=true,
+    )
+    plos_one_treatment_action_distribution(
+        parallel_data,
+        config;
+        policies_to_plot=policies_to_plot,
+    )
+    plos_one_economic_comparison(
+        parallel_data,
+        config;
+        policies_to_plot=policies_to_plot,
     )
     @info "Saved all plos one plots to $(config.figures_dir)"
 end

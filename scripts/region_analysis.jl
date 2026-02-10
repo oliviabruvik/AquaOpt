@@ -25,8 +25,7 @@ using Printf
 using Statistics
 using POMDPTools: state_hist, action_hist, reward_hist, observation_hist
 
-const MANIFEST_PATH = "/Users/oliviabeyerbruvik/Desktop/AquaOpt/results/experiment_manifest_debug.txt"
-# const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
+const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
 
 function load_manifest(path::String)
     manifest = Dict{String,String}()
