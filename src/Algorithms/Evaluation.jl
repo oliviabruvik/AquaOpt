@@ -50,7 +50,7 @@ end
 # Extract the number of treatments, regulatory penalties, lost biomass, and fish disease for each policy from the histories and add as columns to the parallel_data dataframe
 # Returns a new DataFrame without modifying the input
 # ----------------------------
-function extract_reward_metrics(data, config, sim_pomdp=nothing)
+function extract_reward_metrics(data, config, sim_pomdp=nothing; save::Bool=true)
 
     # Create a copy of the data to avoid mutating the input
     processed_data = copy(data)
@@ -176,8 +176,10 @@ function extract_reward_metrics(data, config, sim_pomdp=nothing)
     end
 
     # Save processed data
-    mkpath(config.results_dir)
-    @save joinpath(config.results_dir, "processed_data.jld2") processed_data
+    if save
+        mkpath(config.results_dir)
+        @save joinpath(config.results_dir, "processed_data.jld2") processed_data
+    end
 
     return processed_data
 

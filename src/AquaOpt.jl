@@ -289,6 +289,12 @@ export plot_kalman_filter_belief_trajectory_two_panel
 export plos_one_algo_sealice_levels_over_time
 export plos_one_treatment_distribution_comparison
 export plos_one_episode_sealice_levels_over_time
+export plos_one_policy_decision_map
+export plos_one_combined_metrics_panel
+export plos_one_treatment_action_distribution
+export plos_one_economic_comparison
+export plos_one_combined_bar_panel
+export plos_one_lambda_decision_maps
 
 # Configuration types
 export ExperimentConfig, SolverConfig, SimulationConfig, Algorithm, LocationParams, get_location_params

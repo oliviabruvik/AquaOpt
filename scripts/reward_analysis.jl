@@ -47,22 +47,30 @@ function load_manifest(path::String)
     return manifest
 end
 
-const EXPERIMENT_FOLDERS = if isfile(MANIFEST_PATH)
+const _MANIFEST = if isfile(MANIFEST_PATH)
     @info "Using manifest: $MANIFEST_PATH"
-    _manifest = load_manifest(MANIFEST_PATH)
-    Dict(
-        "Scotland" => _manifest["regulation_scotland_north"],
-        "Chile" => _manifest["regulation_chile_north"],
-        "Southern Norway" => _manifest["dynamics_norway_south"],
-        "Northern Norway" => _manifest["baseline_norway_north"],
-    )
+    load_manifest(MANIFEST_PATH)
 else
     error("Manifest not found at $MANIFEST_PATH. Run run_experiments.jl first.")
 end
 
+const EXPERIMENT_FOLDERS = Dict(
+    "Scotland" => _MANIFEST["regulation_scotland_north"],
+    "Chile" => _MANIFEST["regulation_chile_north"],
+    "Southern Norway" => _MANIFEST["dynamics_norway_south"],
+    "Northern Norway" => _MANIFEST["baseline_norway_north"],
+)
+
+const LAMBDA_FOLDERS = Dict(
+    "Balanced" => _MANIFEST["baseline_norway_north"],
+    "Cost-Saving" => _MANIFEST["lambda_cost_norway_north"],
+    "Welfare" => _MANIFEST["lambda_welfare_norway_north"],
+)
+
 const TABLE_OUTPUT_PATH = "results/latest/reward_outputs/policy_treatment_summary.tex"
 const FIGURE_OUTPUT_PATH = "results/latest/reward_outputs/policy_dominant_actions.tex"
 const LAMBDA_TABLE_OUTPUT_PATH = "results/latest/reward_outputs/lambda_parameters.tex"
+const LAMBDA_TREATMENT_TABLE_OUTPUT_PATH = "results/latest/reward_outputs/lambda_treatment_summary.tex"
 
 const TREATMENT_COLUMNS = ["NoTreatment", "ChemicalTreatment", "MechanicalTreatment", "ThermalTreatment"]
 const TREATMENT_LABELS = Dict(
@@ -96,13 +104,14 @@ const POLICY_LABELS = Dict(
 )
 
 const LAMBDA_COMPONENTS = [
-    (label=raw"\lambda_{trt}", idx=1),
-    (label=raw"\lambda_{reg}", idx=2),
-    (label=raw"\lambda_{bio}", idx=3),
-    (label=raw"\lambda_{fd}", idx=4),
-    (label=raw"\lambda_{lice}", idx=5),
+    (label=raw"$\lambda_{\text{trt}}$", idx=1),
+    (label=raw"$\lambda_{\text{reg}}$", idx=2),
+    (label=raw"$\lambda_{\text{bio}}$", idx=3),
+    (label=raw"$\lambda_{\text{fd}}$", idx=4),
+    (label=raw"$\lambda_{\text{lice}}$", idx=5),
 ]
 const LAMBDA_REGION_ORDER = ["Northern Norway", "Southern Norway", "Scotland", "Chile"]
+const LAMBDA_SCENARIO_ORDER = ["Balanced", "Cost-Saving", "Welfare"]
 
 const TreatmentStats = Dict{String, Dict{String, Union{Missing, Float64}}}
 
@@ -284,24 +293,28 @@ function save_table(entries::Vector{ExperimentSummary}; output_path::String=TABL
     return output_path
 end
 
-function build_lambda_table(entries::Dict{String, ExperimentSummary})
+function build_lambda_table(entries::Dict{String, ExperimentSummary};
+        row_order::Vector{String}=LAMBDA_REGION_ORDER,
+        caption::String="Reward parameters for different salmon farming regions.",
+        label::String="tab:lambda_params",
+        row_header::String="Region")
     col_spec = "@{} l " * join(fill("c", length(LAMBDA_COMPONENTS)), " ") * " @{}"
     lines = String[]
     push!(lines, "\\begin{table}[htbp!]")
     push!(lines, "\\centering")
-    push!(lines, "\\caption{Reward parameters for different salmon farming regions.}")
-    push!(lines, "\\label{tab:lambda_params}")
+    push!(lines, "\\caption{$caption}")
+    push!(lines, "\\label{$label}")
     push!(lines, "\\begin{tabular}{$col_spec}")
     push!(lines, "\\toprule")
 
-    header_row = ["Region"]
+    header_row = [row_header]
     append!(header_row, [comp.label for comp in LAMBDA_COMPONENTS])
     push!(lines, join(header_row, " & ") * " \\\\")
     push!(lines, "\\midrule")
 
-    for region in LAMBDA_REGION_ORDER
-        row = [region]
-        entry = get(entries, region, nothing)
+    for key in row_order
+        row = [key]
+        entry = get(entries, key, nothing)
         if entry === nothing
             append!(row, fill("--", length(LAMBDA_COMPONENTS)))
         else
@@ -320,11 +333,81 @@ function build_lambda_table(entries::Dict{String, ExperimentSummary})
     return join(lines, "\n")
 end
 
-function save_lambda_table(entries::Dict{String, ExperimentSummary}; output_path::String=LAMBDA_TABLE_OUTPUT_PATH)
-    lambda_tex = build_lambda_table(entries)
+function save_lambda_table(entries::Dict{String, ExperimentSummary};
+        output_path::String=LAMBDA_TABLE_OUTPUT_PATH, kwargs...)
+    lambda_tex = build_lambda_table(entries; kwargs...)
     mkpath(dirname(output_path))
     open(output_path, "w") do io
         write(io, lambda_tex)
+    end
+    return output_path
+end
+
+function build_lambda_treatment_table(entries::Dict{String, ExperimentSummary};
+        scenario_order::Vector{String}=LAMBDA_SCENARIO_ORDER)
+    ordered = [entries[k] for k in scenario_order if haskey(entries, k)]
+    isempty(ordered) && error("No lambda experiments provided.")
+
+    n_scenarios = length(ordered)
+    col_spec = "l" * repeat("cccc", n_scenarios)
+    lines = String[]
+    push!(lines, "\\begin{table}[htbp]")
+    push!(lines, "\\centering")
+    push!(lines, "\\footnotesize")
+    push!(lines, "\\begin{tabular}{$col_spec}")
+    push!(lines, "\\toprule")
+
+    # Header row with scenario names spanning 4 columns each
+    first_row = ["Policy"]
+    for entry in ordered
+        push!(first_row, "\\multicolumn{4}{c}{$(entry.label)}")
+    end
+    push!(lines, join(first_row, " & ") * " \\\\")
+
+    # Cmidrules under each scenario group
+    cmidrules = String[]
+    for (i, _) in enumerate(ordered)
+        start_col = 2 + 4 * (i - 1)
+        stop_col = start_col + 3
+        push!(cmidrules, "\\cmidrule(lr){$(start_col)-$(stop_col)}")
+    end
+    push!(lines, join(cmidrules, " "))
+
+    # Sub-header with treatment types
+    header_row = [""]
+    for _ in ordered
+        append!(header_row, [TREATMENT_LABELS[col] for col in TREATMENT_COLUMNS])
+    end
+    push!(lines, join(header_row, " & ") * " \\\\")
+    push!(lines, "\\midrule")
+
+    # Data rows (one per policy)
+    for policy in POLICY_ORDER
+        row = [get(POLICY_LABELS, policy, policy)]
+        for entry in ordered
+            for col in TREATMENT_COLUMNS
+                mean_value = fetch_policy_value(entry.treatment, policy, col)
+                std_value = fetch_policy_std(entry.treatment_std, policy, col)
+                push!(row, format_value(mean_value, std_value))
+            end
+        end
+        push!(lines, join(row, " & ") * " \\\\")
+    end
+
+    push!(lines, "\\bottomrule")
+    push!(lines, "\\end{tabular}")
+    push!(lines, "\\caption{Average treatment counts per policy across lambda configurations.}")
+    push!(lines, "\\label{tab:lambda_treatment_summary}")
+    push!(lines, "\\end{table}")
+    return join(lines, "\n")
+end
+
+function save_lambda_treatment_table(entries::Dict{String, ExperimentSummary};
+        output_path::String=LAMBDA_TREATMENT_TABLE_OUTPUT_PATH, kwargs...)
+    tex = build_lambda_treatment_table(entries; kwargs...)
+    mkpath(dirname(output_path))
+    open(output_path, "w") do io
+        write(io, tex)
     end
     return output_path
 end
@@ -337,7 +420,7 @@ function build_dominant_action_axis(config::ExperimentConfig;
     policy_path = joinpath(config.policies_dir, "policies_pomdp_mdp.jld2")
     isfile(policy_path) || error("SARSOP policy not found at $policy_path")
     @load policy_path all_policies
-    policy_bundle = all_policies["NUS_SARSOP_Policy"]
+    policy_bundle = all_policies["Native_SARSOP_Policy"]
     policy = policy_bundle.policy
     pomdp = policy_bundle.pomdp
 
@@ -567,7 +650,19 @@ function main()
 
     # Generate table (using the 3 selected entries)
     table_path = save_table(three_plot_entries)
-    lambda_table_path = save_lambda_table(entries_dict)
+
+    # Build lambda scenario entries for the lambda table
+    lambda_entries = Dict{String, ExperimentSummary}()
+    for (scenario_label, folder) in LAMBDA_FOLDERS
+        lambda_entries[scenario_label] = load_experiment(folder, scenario_label)
+    end
+    lambda_table_path = save_lambda_table(lambda_entries;
+        row_order=LAMBDA_SCENARIO_ORDER,
+        caption="Reward weight configurations for lambda sensitivity analysis.",
+        label="tab:lambda_params",
+        row_header="Scenario")
+    lambda_treatment_path = save_lambda_treatment_table(lambda_entries;
+        scenario_order=LAMBDA_SCENARIO_ORDER)
 
     # Generate original 1-row plot with Southern Norway, Scotland, Chile
     figure_path = save_combined_dominant_plot(three_plot_entries)
@@ -580,7 +675,17 @@ function main()
 
     println("Wrote treatment summary table to $(abspath(table_path)).")
     println("Wrote lambda parameter table to $(abspath(lambda_table_path)).")
+    println("Wrote lambda treatment summary to $(abspath(lambda_treatment_path)).")
     println("Wrote dominant action figure (.tex) to $(abspath(figure_path)).")
+
+    # Generate lambda decision maps (week × lice heatmaps side by side)
+    lambda_order = ["Balanced", "Cost-Saving", "Welfare"]
+    lambda_configs = [load_experiment_config(LAMBDA_FOLDERS[k]) for k in lambda_order]
+    output_dir = "results/latest/reward_outputs"
+    @info "Generating lambda decision maps..."
+    plos_one_lambda_decision_maps(lambda_configs, lambda_order, "Native_SARSOP_Policy";
+        output_dir=output_dir)
+    println("Wrote lambda decision maps to $(abspath(joinpath(output_dir, "lambda_decision_maps.pdf"))).")
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
