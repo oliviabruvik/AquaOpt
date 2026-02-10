@@ -276,75 +276,6 @@ function generate_solver_runtime(config::ExperimentConfig)
     )
 end
 
-function generate_simulation_parameters(config::ExperimentConfig)
-    sim = config.simulation_config
-    df = DataFrame(
-        parameter = [
-            "Episodes per policy",
-            "Steps per episode",
-            "High-fidelity simulator",
-            "EKF belief filter",
-            "Step-through mode",
-            "Adult lice mean",
-            "Motile lice mean",
-            "Sessile lice mean",
-            "Adult measurement noise sd",
-            "Motile measurement noise sd",
-            "Sessile measurement noise sd",
-            "Temperature noise sd",
-            "Adult biological noise sd",
-            "Motile biological noise sd",
-            "Sessile biological noise sd",
-            "Samples per observation",
-            "$(m(raw"\rho_A")) detection probability",
-            "$(m(raw"\rho_M")) detection probability",
-            "$(m(raw"\rho_S")) detection probability",
-            "Under-reporting enabled",
-            "$(m(raw"\beta_0")) bias term",
-            "$(m(raw"\beta_1")) slope term",
-            "Mean fish weight (kg)",
-            "Initial biomass $(m("W_0"))",
-            "Simulation reward weights ($(m(raw"\lambda")))",
-        ],
-        value = [
-            string(sim.num_episodes),
-            string(sim.steps_per_episode),
-            string(sim.high_fidelity_sim),
-            string(sim.ekf_filter),
-            string(sim.step_through),
-            fmt(sim.adult_mean; digits=2),
-            fmt(sim.motile_mean; digits=2),
-            fmt(sim.sessile_mean; digits=2),
-            fmt(sim.adult_sd; digits=2),
-            fmt(sim.motile_sd; digits=2),
-            fmt(sim.sessile_sd; digits=2),
-            fmt(sim.temp_sd; digits=2),
-            fmt(sim.adult_obs_sd; digits=3),
-            fmt(sim.motile_obs_sd; digits=3),
-            fmt(sim.sessile_obs_sd; digits=3),
-            string(sim.n_sample),
-            fmt(sim.ρ_adult; digits=3),
-            fmt(sim.ρ_motile; digits=3),
-            fmt(sim.ρ_sessile; digits=3),
-            string(sim.use_underreport),
-            fmt(sim.beta0_Scount_f; digits=3),
-            fmt(sim.beta1_Scount; digits=3),
-            fmt(sim.mean_fish_weight_kg; digits=2),
-            fmt(sim.W0; digits=2),
-            fmt_array(sim.sim_reward_lambdas),
-        ],
-    )
-    write_table(df;
-        tex_filename="simulation_parameters.tex",
-        caption="Simulation and observation parameters used to evaluate learned policies.",
-        label="tab:simulation_parameters",
-        column_specs=[
-            ("parameter", "Parameter", "string type"),
-            ("value", "Value", "string type"),
-        ],
-    )
-end
-
 function generate_fish_population(config::ExperimentConfig)
     sim_pomdp = AquaOpt.SeaLiceSimPOMDP(location=config.solver_config.location)
     initial_weight = config.simulation_config.W0
@@ -532,18 +463,9 @@ end
 
 function generate_regional_dynamics()
     params = Dict(loc => get_location_params(loc) for loc in LOCATION_ORDER)
+    # Only include parameters that vary across regions
     fields = [
-        ("Mean temperature ($(m("T_{\\text{mean}}")))",     :T_mean,        2, "Average annual sea temperature (\\si{\\celsius})"),
-        ("Temperature amplitude ($(m("T_{\\text{amp}}")))", :T_amp,         2, "Seasonal temperature swing (\\si{\\celsius})"),
-        ("Peak temperature week",                           :peak_week,     0, "Week of maximum temperature"),
-        ("$(m("d_1")) intercept",                           :d1_intercept,  2, "Sessile to motile development intercept"),
-        ("$(m("d_1")) temperature coefficient",             :d1_temp_coef,  2, "Temperature effect on sessile to motile"),
-        ("$(m("d_2")) intercept",                           :d2_intercept,  2, "Motile to adult development intercept"),
-        ("$(m("d_2")) temperature coefficient",             :d2_temp_coef,  3, "Temperature effect on motile to adult"),
-        ("Sessile survival ($(m("s_1")))",                  :s1_sessile,    2, "Weekly sessile survival probability"),
-        ("Sessile-to-motile scaling ($(m("s_2")))",         :s2_scaling,    1, "Scaling from sessile to motile stage"),
-        ("Motile survival ($(m("s_3")))",                   :s3_motile,     2, "Weekly motile survival probability"),
-        ("Adult survival ($(m("s_4")))",                    :s4_adult,      2, "Weekly adult survival probability"),
+        ("Mean temperature ($(m("T_{\\text{mean}}")))",     :T_mean,          2, "Average annual sea temperature (\\si{\\celsius})"),
         ("External larval influx",                          :external_influx, 2, "Weekly external sessile influx"),
     ]
     df = DataFrame(
@@ -927,7 +849,6 @@ function main()
 
     generate_solver_parameters(config)
     generate_solver_runtime(config)
-    generate_simulation_parameters(config)
     generate_fish_population(config)
     generate_sea_lice_biology(config)
     generate_observation_parameters(config)
@@ -941,7 +862,7 @@ function main()
     generate_reward_components()
     generate_financial_results_summary(config)
 
-    println("\nDone! Generated 15 tables (.tex) in $OUTPUT_DIR")
+    println("\nDone! Generated 14 tables (.tex) in $OUTPUT_DIR")
     println("\nLaTeX preamble requirements:")
     println("    \\usepackage{pgfplotstable}")
     println("    \\usepackage{booktabs}")
