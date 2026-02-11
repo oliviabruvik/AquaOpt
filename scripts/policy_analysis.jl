@@ -188,7 +188,7 @@ function summarize_experiment(config, parallel_data, algorithms;
         generate_plots::Bool=true,
         policies_to_plot=nothing,
         time_plot_legends=nothing)
-    processed_data = extract_reward_metrics(parallel_data, config)
+    processed_data = extract_reward_metrics(parallel_data, config; save=false)
     println("Loaded $(nrow(processed_data)) episodes across $(length(unique(processed_data.policy))) policies.")
 
     mkpath(config.results_dir)
@@ -213,6 +213,7 @@ function summarize_experiment(config, parallel_data, algorithms;
             algorithms;
             policies_to_plot=policies_to_plot,
             time_plot_legends=time_plot_legends,
+            full=false,
         )
         println("Plots saved to $(target_dir).")
     else

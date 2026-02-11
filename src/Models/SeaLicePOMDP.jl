@@ -226,10 +226,10 @@ function POMDPs.transition(pomdp::SeaLicePOMDP, s::SeaLiceState, a::Action)
     for (next_season, season_prob) in ((next_season_same, p_stay), (next_season_advance, p_advance))
         for (li, lice_level) in enumerate(pomdp.sea_lice_range)
             lp = lice_probs[li]
-            lp < 1e-4 && continue
+            lp < 1e-2 && continue
             for (bi, biomass_level) in enumerate(pomdp.biomass_range)
                 bp = biomass_probs[bi]
-                bp < 1e-4 && continue
+                bp < 1e-2 && continue
                 push!(out_states, SeaLiceState(lice_level, next_season, biomass_level, next_cooldown))
                 push!(out_probs, season_prob * lp * bp)
             end
@@ -314,7 +314,7 @@ function POMDPs.observation(pomdp::SeaLicePOMDP, a::Action, sp::SeaLiceState)
     out_probs = Float64[]
     for (i, lice_level) in enumerate(lice_range)
         lp = lice_probs[i]
-        lp < 1e-4 && continue
+        lp < 1e-2 && continue
         push!(out_obs, SeaLiceObservation(lice_level, sp.Season, sp.BiomassLevel, sp.Cooldown))
         push!(out_probs, lp)
     end
@@ -446,7 +446,7 @@ function POMDPs.initialstate(pomdp::SeaLicePOMDP)
     out_states = SeaLiceState[]
     out_probs = Float64[]
     for (i, lice_level) in enumerate(pomdp.sea_lice_range)
-        if lice_probs[i] > 1e-4
+        if lice_probs[i] > 1e-2
             push!(out_states, SeaLiceState(lice_level, initial_season, initial_biomass, initial_cooldown))
             push!(out_probs, lice_probs[i])
         end

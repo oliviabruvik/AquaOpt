@@ -3,8 +3,8 @@
 #=
 region_analysis.jl
 
-Generates regional comparison plots for sea lice levels, treatment costs, and SARSOP
-policy performance across West, North, and South regions.
+Generates regional comparison plots for sea lice levels and treatment costs
+across West, North, and South regions, plus a policy comparison table.
 
 Usage:
     julia --project scripts/region_analysis.jl [--output-dir DIR]
@@ -12,7 +12,7 @@ Usage:
 Outputs:
     - region_sealice_levels_over_time.pdf: Sea lice comparison across regions
     - region_treatment_cost_over_time.pdf/.tex: Treatment cost comparison
-    - region_sarsop_sealice_stages.pdf: SARSOP stage breakdown
+    - region_policy_comparison.tex: LaTeX table comparing policies across regions
 =#
 
 using AquaOpt
@@ -23,10 +23,8 @@ using PGFPlotsX
 using PGFPlotsX: Axis, GroupPlot, Options, Plot, @pgf
 using Printf
 using Statistics
-using POMDPTools: state_hist, action_hist, reward_hist, observation_hist
 
-const MANIFEST_PATH = "/Users/oliviabeyerbruvik/Desktop/AquaOpt/results/experiment_manifest_debug.txt"
-# const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
+const MANIFEST_PATH = "results/latest/experiment_manifest.txt"
 
 function load_manifest(path::String)
     manifest = Dict{String,String}()
@@ -41,12 +39,10 @@ end
 
 const DEFAULT_OUTPUT_DIR = "results/latest/region_outputs"
 const REGION_TABLE_POLICIES = [
-    (label = "Always Treat", csv_name = "AlwaysTreat_Policy"),
-    (label = "Never Treat", csv_name = "NeverTreat_Policy"),
     (label = "Random", csv_name = "Random_Policy"),
     (label = "Heuristic", csv_name = "Heuristic_Policy"),
     (label = "QMDP", csv_name = "QMDP_Policy"),
-    (label = "SARSOP", csv_name = "NUS_SARSOP_Policy"),
+    (label = "SARSOP", csv_name = "Native_SARSOP_Policy"),
     (label = "VI", csv_name = "VI_Policy"),
 ]
 const REGION_TABLE_METRICS = [
@@ -68,42 +64,6 @@ struct RegionData
     name::String
     config::ExperimentConfig
     parallel_data::DataFrame
-end
-
-const REGION_ANALYSIS_CACHE_FILE = "region_analysis_cache.jld2"
-const REGION_ANALYSIS_CACHE_VERSION = 2
-
-function region_cache_path(region::RegionData)
-    return joinpath(region.config.experiment_dir, REGION_ANALYSIS_CACHE_FILE)
-end
-
-function load_region_cache(region::RegionData)
-    cache_path = region_cache_path(region)
-    isfile(cache_path) || return Dict{Symbol, Any}()
-    cache_version = nothing
-    cache_data = Dict{Symbol, Any}()
-    try
-        @load cache_path cache_version cache_data
-    catch err
-        @warn "Unable to load cached region analysis stats; recomputing" region = region.name path = cache_path exception = (err, catch_backtrace())
-        return Dict{Symbol, Any}()
-    end
-    if cache_version === nothing || cache_version != REGION_ANALYSIS_CACHE_VERSION || cache_data === nothing
-        @warn "Cached region analysis stats are from an incompatible version; recomputing" region = region.name path = cache_path cache_version = cache_version
-        return Dict{Symbol, Any}()
-    end
-    return cache_data
-end
-
-function save_region_cache(region::RegionData, cache_data::Dict{Symbol, Any})
-    cache_path = region_cache_path(region)
-    mkpath(dirname(cache_path))
-    cache_version = REGION_ANALYSIS_CACHE_VERSION
-    try
-        @save cache_path cache_version cache_data
-    catch err
-        @warn "Failed to write region analysis cache (non-fatal)" region = region.name path = cache_path exception = (err, catch_backtrace())
-    end
 end
 
 function usage()
@@ -195,191 +155,9 @@ function load_region(region::RegionInput)
     return RegionData(region.name, config, data)
 end
 
-function compute_sealice_stats(parallel_data, config)
-    stats = Dict{String, Tuple{Vector{Int}, Vector{Float64}, Vector{Float64}, Vector{Float64}}}()
-    styles = AquaOpt.PLOS_POLICY_STYLE_ORDERED
-    time_steps = 1:config.simulation_config.steps_per_episode
-    for (policy_name, _) in styles
-        data_filtered = filter(row -> row.policy == policy_name, parallel_data)
-        isempty(data_filtered) && continue
-        seeds = unique(data_filtered.seed)
-        isempty(seeds) && continue
-        mean_vals = fill(NaN, length(time_steps))
-        lower_vals = similar(mean_vals)
-        upper_vals = similar(mean_vals)
-        for (idx, t) in enumerate(time_steps)
-            samples = Float64[]
-            for seed in seeds
-                seed_df = filter(row -> row.seed == seed, data_filtered)
-                isempty(seed_df) && continue
-                states = collect(state_hist(seed_df.history[1]))
-                if t <= length(states)
-                    push!(samples, states[t].SeaLiceLevel)
-                end
-            end
-            if !isempty(samples)
-                mean_level = mean(samples)
-                std_level = length(samples) > 1 ? std(samples) : 0.0
-                se_level = std_level / sqrt(length(samples))
-                margin = 1.96 * se_level
-                mean_vals[idx] = mean_level
-                lower_vals[idx] = mean_level - margin
-                upper_vals[idx] = mean_level + margin
-            end
-        end
-        valid = .!isnan.(mean_vals) .&& .!isnan.(lower_vals) .&& .!isnan.(upper_vals)
-        if any(valid)
-            stats[policy_name] = (collect(time_steps[valid]),
-                                  mean_vals[valid],
-                                  lower_vals[valid],
-                                  upper_vals[valid])
-        end
-    end
-    return stats
-end
-
-function extract_metric_caches(data_filtered, seeds)
-    caches = NamedTuple[]
-    for seed in seeds
-        seed_df = filter(row -> row.seed == seed, data_filtered)
-        isempty(seed_df) && continue
-        history = seed_df.history[1]
-        states = collect(state_hist(history))
-        actions = collect(action_hist(history))
-        rewards = collect(reward_hist(history))
-        push!(caches, (; states, actions, rewards))
-    end
-    return caches
-end
-
-function compute_treatment_cost_stats(parallel_data, config)
-    stats = Dict{String, Tuple{Vector{Int}, Vector{Float64}, Vector{Float64}, Vector{Float64}}}()
-    styles = AquaOpt.PLOS_POLICY_STYLE_ORDERED
-    time_steps = 1:config.simulation_config.steps_per_episode
-    for (policy_name, _) in styles
-        data_filtered = filter(row -> row.policy == policy_name, parallel_data)
-        isempty(data_filtered) && continue
-        seeds = unique(data_filtered.seed)
-        isempty(seeds) && continue
-        caches = extract_metric_caches(data_filtered, seeds)
-        isempty(caches) && continue
-        means = fill(NaN, length(time_steps))
-        lowers = similar(means)
-        uppers = similar(means)
-        for (idx, t) in enumerate(time_steps)
-            values = Float64[]
-            for cache in caches
-                if t <= length(cache.actions)
-                    push!(values, get_treatment_cost(cache.actions[t]))
-                end
-            end
-            if !isempty(values)
-                mean_val = mean(values)
-                std_val = length(values) > 1 ? std(values) : 0.0
-                se = std_val / sqrt(length(values))
-                margin = 1.96 * se
-                means[idx] = mean_val
-                lowers[idx] = mean_val - margin
-                uppers[idx] = mean_val + margin
-            end
-        end
-        valid = .!isnan.(means) .&& .!isnan.(lowers) .&& .!isnan.(uppers)
-        if any(valid)
-            stats[policy_name] = (collect(time_steps[valid]),
-                                  means[valid],
-                                  lowers[valid],
-                                  uppers[valid])
-        end
-    end
-    return stats
-end
-
-function load_or_compute_region_stats(region::RegionData)
-    cache_data = load_region_cache(region)
-    dirty = false
-    sealice_stats = get(cache_data, :sealice_stats, nothing)
-    if sealice_stats === nothing
-        @info "Computing sea lice stats" region = region.name
-        sealice_stats = compute_sealice_stats(region.parallel_data, region.config)
-        cache_data[:sealice_stats] = sealice_stats
-        dirty = true
-    else
-        @info "Loaded cached sea lice stats" region = region.name
-    end
-
-    treatment_stats = get(cache_data, :treatment_stats, nothing)
-    if treatment_stats === nothing
-        @info "Computing treatment cost stats" region = region.name
-        treatment_stats = compute_treatment_cost_stats(region.parallel_data, region.config)
-        cache_data[:treatment_stats] = treatment_stats
-        dirty = true
-    else
-        @info "Loaded cached treatment cost stats" region = region.name
-    end
-    return cache_data, dirty, sealice_stats, treatment_stats
-end
-
-function load_or_compute_sarsop_stats(region::RegionData, cache_data::Dict{Symbol, Any})
-    stats = get(cache_data, :sarsop_stats, nothing)
-    if stats !== nothing
-        @info "Loaded cached SARSOP stats" region = region.name
-        return stats, false
-    end
-    @info "Computing SARSOP stats" region = region.name
-    stats = compute_sarsop_stage_stats(region)
-    cache_data[:sarsop_stats] = stats
-    return stats, true
-end
-
-function compute_sarsop_stage_stats(region::RegionData)
-    policy = "NUS_SARSOP_Policy"
-    data_policy = filter(row -> row.policy == policy, region.parallel_data)
-    histories = collect(data_policy.history)
-    steps = region.config.simulation_config.steps_per_episode
-    stages = Dict(
-        :adult => (Float64[], Float64[], Float64[]),
-        :sessile => (Float64[], Float64[], Float64[]),
-        :motile => (Float64[], Float64[], Float64[]),
-        :predicted => (Float64[], Float64[], Float64[])
-    )
-    for t in 1:steps
-        samples = Dict(
-            :adult => Float64[],
-            :sessile => Float64[],
-            :motile => Float64[],
-            :predicted => Float64[],
-        )
-        for episode in histories
-            states = collect(state_hist(episode))
-            observations = collect(observation_hist(episode))
-            if t <= length(states)
-                push!(samples[:adult], states[t].Adult)
-                push!(samples[:sessile], states[t].Sessile)
-                push!(samples[:motile], states[t].Motile)
-            end
-            if t <= length(observations)
-                push!(samples[:predicted], observations[t].SeaLiceLevel)
-            end
-        end
-        for (stage, data) in samples
-            mean_vec, lower_vec, upper_vec = stages[stage]
-            if !isempty(data)
-                mean_val = mean(data)
-                std_val = length(data) > 1 ? std(data) : 0.0
-                se = std_val / sqrt(length(data))
-                margin = 1.96 * se
-                push!(mean_vec, mean_val)
-                push!(lower_vec, mean_val - margin)
-                push!(upper_vec, mean_val + margin)
-            else
-                push!(mean_vec, NaN)
-                push!(lower_vec, NaN)
-                push!(upper_vec, NaN)
-            end
-        end
-    end
-    return stages
-end
+# ──────────────────────────────────────────────────
+# Table generation
+# ──────────────────────────────────────────────────
 
 function load_reward_metrics(region::RegionData)
     csv_path = joinpath(region.config.results_dir, "reward_metrics.csv")
@@ -457,11 +235,6 @@ end
 function generate_region_table(regions::Vector{RegionData}, out_dir::String)
     output_path = joinpath(out_dir, "region_policy_comparison.tex")
     lines = String[
-        "\\begin{table}[htbp!]",
-        "\\centering",
-        "\\begin{adjustwidth}{-2.25in}{0in}",
-        "\\caption{Comparison of Policies Across North, West, and South of Norway (common reward weights = \$(0.46,0.12,0.12,0.18,0.12)\$)}",
-        "\\label{tab:norway-methods-comparable}",
         "\\begin{threeparttable}",
         "  \\begin{adjustbox}{max width=\\linewidth}",
         "  \\begin{tabular}{@{}llcccccc@{}}",
@@ -499,11 +272,9 @@ function generate_region_table(regions::Vector{RegionData}, out_dir::String)
         "  \\end{tabular}",
         "  \\end{adjustbox}",
         "    \\begin{tablenotes}",
-        "      \\item[*]{Mean \$\\pm\$ standard error over the seeds in the corresponding run. Bold values denote the best performance (highest reward or lowest cost/penalties/lice/biomass loss/fish disease) within each region. Runs used: North, West, and South correspond to the \\texttt{log\\_space\\_ukf\\_paper\\_{north,west,south}\\_[0.46,0.12,0.12,0.18,0.12]} chemical-change experiments.}",
+        "      \\item[*]{Mean \$\\pm\$ standard error over the seeds in the corresponding run. \\\\ Bold values denote the best performance within each region.}",
         "    \\end{tablenotes}",
         "\\end{threeparttable}",
-        "\\end{adjustwidth}",
-        "\\end{table}",
     ])
     mkpath(dirname(output_path))
     open(output_path, "w") do io
@@ -513,181 +284,92 @@ function generate_region_table(regions::Vector{RegionData}, out_dir::String)
     println("Region comparison table saved to $(abspath(output_path)).")
 end
 
-function time_ticks(config)
-    return AquaOpt.plos_time_ticks(config)
-end
+# ──────────────────────────────────────────────────
+# Plot axis builders (using _add_metric_lines! from PlosOnePlots)
+# ──────────────────────────────────────────────────
 
-function region_axis(region::RegionData, stats; ylabel::String, show_xlabel::Bool, show_legend::Bool)
-    ticks, labels = time_ticks(region.config)
-    option_pairs = [
-        :width => "18cm",
-        :height => "6cm",
+function region_sealice_axis(region::RegionData; show_xlabel::Bool, show_legend::Bool)
+    ticks, labels = AquaOpt.plos_time_ticks(region.config)
+    axis_opts = Any[
         :title => region.name,
-        :ylabel => ylabel,
-        :xlabel_style => AquaOpt.PLOS_LABEL_STYLE,
-        :ylabel_style => AquaOpt.PLOS_LABEL_STYLE,
+        :title_style => AquaOpt.PLOS_TITLE_STYLE,
+        :ylabel => "Adult Female Lice\\\\per Fish",
+        :ylabel_style => "{" * AquaOpt.PLOS_LABEL_STYLE * ", align=center}",
         :tick_label_style => AquaOpt.PLOS_TICK_STYLE,
-        :xmin => 0,
+        :xmin => 1,
         :xmax => region.config.simulation_config.steps_per_episode,
         :ymin => 0,
         :ymax => 0.6,
         :xtick => ticks,
-        :xticklabels => labels,
+        :xticklabels => show_xlabel ? labels : String[],
         "axis background/.style" => Options("fill" => "white"),
         "grid" => "both",
         "major grid style" => "dashed, opacity=0.35",
+        "scaled y ticks" => "false",
+        "yticklabel style" => "{/pgf/number format/fixed, /pgf/number format/precision=2}",
     ]
     if show_xlabel
-        push!(option_pairs, :xlabel => "Time of Year")
+        push!(axis_opts, :xlabel => "Time of Year")
+        push!(axis_opts, :xlabel_style => AquaOpt.PLOS_LABEL_STYLE)
     end
     if show_legend
-        push!(option_pairs, "legend style" => AquaOpt.plos_top_legend(columns=length(AquaOpt.PLOS_POLICY_STYLE_ORDERED)))
-    else
-        push!(option_pairs, :legend => false)
+        push!(axis_opts, "legend style" => AquaOpt.plos_top_legend(columns=5))
     end
-    ax = Axis(Options(option_pairs...))
-    for (policy_name, style) in AquaOpt.PLOS_POLICY_STYLE_ORDERED
-        haskey(stats, policy_name) || continue
-        times, mean_vals, lower_vals, upper_vals = stats[policy_name]
-        mean_coords = join(["($(times[j]), $(mean_vals[j]))" for j in eachindex(times)], " ")
-        upper_coords = join(["($(times[j]), $(upper_vals[j]))" for j in eachindex(times)], " ")
-        lower_coords = join(["($(times[j]), $(lower_vals[j]))" for j in eachindex(times)], " ")
-        safe_name = replace(policy_name, r"[^A-Za-z0-9]" => "")
-        push!(ax, @pgf("\\addplot[name path=upper$(safe_name), draw=none, forget plot] coordinates {$(upper_coords)};"))
-        push!(ax, @pgf("\\addplot[name path=lower$(safe_name), draw=none, forget plot] coordinates {$(lower_coords)};"))
-        push!(ax, @pgf("\\addplot[forget plot, fill=$(style.fill), fill opacity=$(AquaOpt.PLOS_FILL_OPACITY)] fill between[of=upper$(safe_name) and lower$(safe_name)];"))
-        push!(ax, @pgf("\\addplot[color=$(style.line), mark=none, line width=1.2pt] coordinates {$(mean_coords)};"))
-        show_legend && push!(ax, @pgf("\\addlegendentry{$(style.label)}"))
-    end
-    push!(ax, @pgf("\\addplot[black!70, densely dashed, line width=1pt] coordinates {(0,0.5) ($(region.config.simulation_config.steps_per_episode),0.5)};"))
-    show_legend && push!(ax, @pgf("\\addlegendentry{Reg. limit (0.5)}"))
+    ax = @pgf Axis(Options(axis_opts...))
+
+    compute = (cache, t, cfg) -> t <= length(cache.states) ? cache.states[t].SeaLiceLevel : nothing
+    AquaOpt._add_metric_lines!(ax, region.parallel_data, region.config, compute;
+        show_legend=show_legend, ymin=0.0, ymax=0.6)
+
+    AquaOpt._add_reg_limit!(ax, region.config.simulation_config.steps_per_episode, 0.5;
+        use_legend=false)
+
     return ax
 end
 
-function treatment_cost_axis(region::RegionData, stats; show_xlabel::Bool, show_legend::Bool)
-    ticks, labels = time_ticks(region.config)
-    option_pairs = [
-        :width => "15cm",
-        :height => "4.5cm",
+function region_treatment_cost_axis(region::RegionData; show_xlabel::Bool, show_legend::Bool)
+    ticks, labels = AquaOpt.plos_time_ticks(region.config)
+    axis_opts = Any[
         :title => region.name,
-        :ylabel => "Treatment Cost per Step",
-        :xlabel_style => AquaOpt.PLOS_LABEL_STYLE,
-        :ylabel_style => AquaOpt.PLOS_LABEL_STYLE,
+        :title_style => AquaOpt.PLOS_TITLE_STYLE,
+        :ylabel => "Treatment Cost\\\\per Step",
+        :ylabel_style => "{" * AquaOpt.PLOS_LABEL_STYLE * ", align=center}",
         :tick_label_style => AquaOpt.PLOS_TICK_STYLE,
-        :xmin => 0,
+        :xmin => 1,
         :xmax => region.config.simulation_config.steps_per_episode,
         :ymin => 0,
         :xtick => ticks,
-        :xticklabels => labels,
+        :xticklabels => show_xlabel ? labels : String[],
         "axis background/.style" => Options("fill" => "white"),
         "grid" => "both",
         "major grid style" => "dashed, opacity=0.35",
+        "scaled y ticks" => "false",
+        "yticklabel style" => "{/pgf/number format/fixed, /pgf/number format/precision=2}",
     ]
     if show_xlabel
-        push!(option_pairs, :xlabel => "Time of Year")
+        push!(axis_opts, :xlabel => "Time of Year")
+        push!(axis_opts, :xlabel_style => AquaOpt.PLOS_LABEL_STYLE)
     end
     if show_legend
-        push!(option_pairs, "legend style" => AquaOpt.plos_top_legend(columns=length(AquaOpt.PLOS_POLICY_STYLE_ORDERED)))
-    else
-        push!(option_pairs, :legend => false)
+        push!(axis_opts, "legend style" => AquaOpt.plos_top_legend(columns=5))
     end
-    ax = Axis(Options(option_pairs...))
-    for (policy_name, style) in AquaOpt.PLOS_POLICY_STYLE_ORDERED
-        haskey(stats, policy_name) || continue
-        times, mean_vals, lower_vals, upper_vals = stats[policy_name]
-        mean_coords = join(["($(times[j]), $(mean_vals[j]))" for j in eachindex(times)], " ")
-        upper_coords = join(["($(times[j]), $(upper_vals[j]))" for j in eachindex(times)], " ")
-        lower_coords = join(["($(times[j]), $(lower_vals[j]))" for j in eachindex(times)], " ")
-        safe_name = replace(policy_name, r"[^A-Za-z0-9]" => "")
-        push!(ax, @pgf("\\addplot[name path=upper$(safe_name), draw=none, forget plot] coordinates {$(upper_coords)};"))
-        push!(ax, @pgf("\\addplot[name path=lower$(safe_name), draw=none, forget plot] coordinates {$(lower_coords)};"))
-        push!(ax, @pgf("\\addplot[forget plot, fill=$(style.fill), fill opacity=$(AquaOpt.PLOS_FILL_OPACITY)] fill between[of=upper$(safe_name) and lower$(safe_name)];"))
-        push!(ax, @pgf("\\addplot[color=$(style.line), mark=none, line width=1.2pt] coordinates {$(mean_coords)};"))
-        show_legend && push!(ax, @pgf("\\addlegendentry{$(style.label)}"))
-    end
+    ax = @pgf Axis(Options(axis_opts...))
+
+    AquaOpt._add_metric_lines!(ax, region.parallel_data, region.config,
+        AquaOpt.treatment_cost_step_value;
+        show_legend=show_legend, ymin=0.0)
+
     return ax
 end
 
-function sarsop_axis(region::RegionData, stats; ylabel::String, show_xlabel::Bool, show_legend::Bool)
-    ticks, labels = time_ticks(region.config)
-    option_pairs = [
-        :width => "15cm",
-        :height => "4.5cm",
-        :title => region.name,
-        :ylabel => ylabel,
-        :xlabel_style => AquaOpt.PLOS_LABEL_STYLE,
-        :ylabel_style => AquaOpt.PLOS_LABEL_STYLE,
-        :tick_label_style => AquaOpt.PLOS_TICK_STYLE,
-        :xmin => 0,
-        :xmax => region.config.simulation_config.steps_per_episode,
-        :ymin => 0,
-        :xtick => ticks,
-        :xticklabels => labels,
-        "axis background/.style" => Options("fill" => "white"),
-        "grid" => "both",
-        "major grid style" => "dashed, opacity=0.35",
-    ]
-    if show_xlabel
-        push!(option_pairs, :xlabel => "Time of Year")
-    end
-    legend_entries = [
-        (:adult, "Adult (true)"),
-        (:sessile, "Sessile"),
-        (:motile, "Motile"),
-        (:predicted, "Belief (predicted)")
-    ]
-    if show_legend
-        push!(option_pairs, "legend style" => AquaOpt.plos_top_legend(columns=length(legend_entries)))
-    else
-        push!(option_pairs, :legend => false)
-    end
-    ax = Axis(Options(option_pairs...))
-    colors = Dict(
-        :adult => "blue!80!black",
-        :sessile => "purple!70!black",
-        :motile => "teal!70!black",
-        :predicted => "black!70"
-    )
-    fill_colors = Dict(
-        :adult => "blue!25!white",
-        :sessile => "purple!20!white",
-        :motile => "teal!20!white",
-        :predicted => "black!10"
-    )
-    for (key, label) in legend_entries
-        mean_vals, lower_vals, upper_vals = stats[key]
-        times = collect(1:length(mean_vals))
-        valid = .!isnan.(mean_vals) .&& .!isnan.(lower_vals) .&& .!isnan.(upper_vals)
-        any(valid) || continue
-        t = times[valid]
-        μ = mean_vals[valid]
-        lo = lower_vals[valid]
-        hi = upper_vals[valid]
-        mean_coords = join(["($(t[i]), $(μ[i]))" for i in eachindex(t)], " ")
-        upper_coords = join(["($(t[i]), $(hi[i]))" for i in eachindex(t)], " ")
-        lower_coords = join(["($(t[i]), $(lo[i]))" for i in eachindex(t)], " ")
-        safe_name = replace(String(label), r"[^A-Za-z0-9]" => "")
-        push!(ax, @pgf("\\addplot[name path=upper$(safe_name), draw=none, forget plot] coordinates {$(upper_coords)};"))
-        push!(ax, @pgf("\\addplot[name path=lower$(safe_name), draw=none, forget plot] coordinates {$(lower_coords)};"))
-        push!(
-            ax,
-            @pgf("\\addplot[forget plot, fill=$(fill_colors[key]), fill opacity=$(AquaOpt.PLOS_FILL_OPACITY)] fill between[of=upper$(safe_name) and lower$(safe_name)];")
-        )
-        push!(ax, @pgf("\\addplot[color=$(colors[key]), mark=none, line width=1.2pt] coordinates {$(mean_coords)};"))
-        show_legend && push!(ax, @pgf("\\addlegendentry{$label}"))
-    end
-    push!(ax, @pgf("\\addplot[black!70, densely dashed, line width=1pt] coordinates {(0,0.5) ($(region.config.simulation_config.steps_per_episode),0.5)};"))
-    show_legend && push!(ax, @pgf("\\addlegendentry{Reg. limit (0.5)}"))
-    return ax
-end
-
-function build_group_plot(axes::Vector{Axis}; vertical_sep::String="12pt")
+function build_group_plot(axes::Vector{Axis}; vertical_sep::String="16pt")
     gp = GroupPlot(Options(
         "group style" => Options(
             "group size" => "1 by $(length(axes))",
-            "vertical sep" => vertical_sep
+            "vertical sep" => vertical_sep,
         ),
-        :width => "18cm"
+        :width => "18cm",
+        :height => "6cm",
     ))
     for ax in axes
         push!(gp, ax)
@@ -703,6 +385,10 @@ function save_output(gp, out_pdf::String; save_tex::Bool=false)
     end
 end
 
+# ──────────────────────────────────────────────────
+# Main
+# ──────────────────────────────────────────────────
+
 function main()
     @info "Parsing args"
     regions_input, out_dir = parse_args(ARGS)
@@ -710,55 +396,23 @@ function main()
     @info "Loading regions"
     regions = [load_region(r) for r in regions_input]
 
-    cache_data = Vector{Dict{Symbol, Any}}(undef, length(regions))
-    cache_dirty = fill(false, length(regions))
-    sealice_stats = Vector{Any}(undef, length(regions))
-    treatment_stats = Vector{Any}(undef, length(regions))
-    for (idx, region) in enumerate(regions)
-
-        @info "Loading or computing stats for $region"
-        cache, dirty, sealice, treatment = load_or_compute_region_stats(region)
-        cache_data[idx] = cache
-        cache_dirty[idx] = dirty
-        sealice_stats[idx] = sealice
-        treatment_stats[idx] = treatment
-    end
-
-    sarsop_stats = Vector{Any}(undef, length(regions))
-    for (idx, region) in enumerate(regions)
-        stats, dirty = load_or_compute_sarsop_stats(region, cache_data[idx])
-        sarsop_stats[idx] = stats
-        cache_dirty[idx] = cache_dirty[idx] || dirty
-    end
-
-    for (idx, region) in enumerate(regions)
-        cache_dirty[idx] && save_region_cache(region, cache_data[idx])
-    end
-
     axes_sealice = Axis[]
     axes_cost = Axis[]
-    axes_sarsop = Axis[]
 
     for (idx, region) in enumerate(regions)
-        push!(axes_sealice, region_axis(region, sealice_stats[idx];
-            ylabel = idx == 1 ? "Adult Female Sea Lice per Fish" : "",
+        @info "Building plots for $(region.name)"
+        push!(axes_sealice, region_sealice_axis(region;
             show_xlabel = idx == length(regions),
             show_legend = idx == 1))
 
-        push!(axes_cost, treatment_cost_axis(region, treatment_stats[idx];
-            show_xlabel = idx == length(regions),
-            show_legend = idx == 1))
-
-        push!(axes_sarsop, sarsop_axis(region, sarsop_stats[idx];
-            ylabel = idx == 1 ? "Avg. Lice per Fish" : "",
+        push!(axes_cost, region_treatment_cost_axis(region;
             show_xlabel = idx == length(regions),
             show_legend = idx == 1))
     end
 
     mkpath(out_dir)
-    save_output(build_group_plot(axes_sealice), joinpath(out_dir, "region_sealice_levels_over_time.pdf"))
+    save_output(build_group_plot(axes_sealice; vertical_sep="40pt"), joinpath(out_dir, "region_sealice_levels_over_time.pdf"))
     save_output(build_group_plot(axes_cost; vertical_sep="40pt"), joinpath(out_dir, "region_treatment_cost_over_time.pdf"), save_tex=true)
-    save_output(build_group_plot(axes_sarsop), joinpath(out_dir, "region_sarsop_sealice_stages.pdf"))
     generate_region_table(regions, out_dir)
 
     println("Region plots saved under $(abspath(out_dir)).")
