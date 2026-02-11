@@ -12,7 +12,8 @@ action_short_label(a) = get(ACTION_SHORT_LABELS, a, "")
 const POLICY_STYLES = Dict(
     "Heuristic_Policy"   => (color=:blue,   marker=:circle),
     "VI_Policy"          => (color=:red,     marker=:square),
-    "NUS_SARSOP_Policy"  => (color=:green,   marker=:diamond),
+    "NUS_SARSOP_Policy"     => (color=:green,   marker=:diamond),
+    "Native_SARSOP_Policy"  => (color=:green,   marker=:diamond),
     "QMDP_Policy"        => (color=:purple,  marker=:dtriangle),
     "Random_Policy"      => (color=:orange,  marker=:rect),
     "AlwaysTreat_Policy" => (color=:brown,   marker=:dtriangle),

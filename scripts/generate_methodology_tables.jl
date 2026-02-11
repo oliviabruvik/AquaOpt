@@ -67,12 +67,10 @@ const POLICY_ORDER_SUMMARY = [
 
 const POLICY_ORDER_FINANCIAL = [
     "Random_Policy",
-    "NeverTreat_Policy",
-    "AlwaysTreat_Policy",
     "Heuristic_Policy",
     "QMDP_Policy",
-    "VI_Policy",
     "Native_SARSOP_Policy",
+    "VI_Policy",
 ]
 
 const POLICY_DISPLAY_NAMES = Dict(
@@ -725,11 +723,11 @@ function generate_reward_components()
             "Sea lice burden",
         ],
         description = [
-            "Direct operational cost of treatment",
-            "Cost triggered by exceeding seasonal lice limits",
-            "Value of fish biomass lost to mortality and growth reduction",
-            "Welfare cost from treatment stress on fish",
-            "Chronic production loss from sustained lice burden",
+            "Operational cost of applying treatment",
+            "Penalty when lice exceed seasonal limit",
+            "Fish lost to mortality and growth reduction",
+            "Welfare cost from treatment stress",
+            "Chronic loss from sustained lice burden",
         ],
         defaultval = [
             "1.5 / 2.5 / 4.0",
@@ -739,11 +737,11 @@ function generate_reward_components()
             "0.5",
         ],
         unit = [
-            "MNOK per treatment",
-            "MNOK per violation",
-            "MNOK per tonne lost",
-            "MNOK per stress-unit",
-            "MNOK per burden-unit",
+            "MNOK/treatment",
+            "MNOK/violation",
+            "MNOK/tonne",
+            "MNOK/stress-unit",
+            "MNOK/burden-unit",
         ],
         source = [
             SOURCE_MODEL,
@@ -759,8 +757,8 @@ function generate_reward_components()
         label="tab:reward_components",
         column_specs=[
             ("component",   "Component",     "string type"),
-            ("description", "Description",   "string type, column type={p{6cm}}"),
-            ("defaultval",  "Default Value", "string type"),
+            ("description", "Description",   "string type"),
+            ("defaultval",  "Value",         "string type"),
             ("unit",        "Unit",          "string type"),
             ("source",      "Source",        "string type"),
         ],
@@ -775,69 +773,80 @@ function generate_financial_results_summary(config::ExperimentConfig)
         "Ensure high_fidelity_sim=true and run_experiments.jl completed.")
     fin = CSV.read(csv_path, DataFrame)
 
-    # (mean_col, ci_col, is_cost) — is_cost=true means lower is better
+    # (mean_col, ci_col, display_name, is_cost) — is_cost=true means lower is better
     metric_specs = [
-        (:mean_harvest_rev,  :ci_harvest_rev,  false),
-        (:mean_trt_cost,     :ci_trt_cost,     true),
-        (:mean_reg_cost,     :ci_reg_cost,     true),
-        (:mean_bio_cost,     :ci_bio_cost,     true),
-        (:mean_welfare_cost, :ci_welfare_cost, true),
-        (:mean_lice_cost,    :ci_lice_cost,    true),
-        (:mean_net_profit,   :ci_net_profit,   false),
+        (:mean_harvest_rev,  :ci_harvest_rev,  "Harvest Rev.", false),
+        (:mean_trt_cost,     :ci_trt_cost,     "Treatment",    true),
+        (:mean_reg_cost,     :ci_reg_cost,     "Regulatory",   true),
+        (:mean_bio_cost,     :ci_bio_cost,     "Biomass Loss", true),
+        (:mean_welfare_cost, :ci_welfare_cost, "Welfare",      true),
+        (:mean_lice_cost,    :ci_lice_cost,    "Lice Burden",  true),
+        (:mean_net_profit,   :ci_net_profit,   "Net Profit",   false),
     ]
 
-    # Find best policy index per metric
-    best_idx = Dict{Symbol,Int}()
-    for (mcol, _, is_cost) in metric_specs
-        vals = fin[!, mcol]
-        best_idx[mcol] = is_cost ? argmin(vals) : argmax(vals)
-    end
-
-    rows = NamedTuple[]
+    # Resolve policy indices from CSV
+    policy_indices = Int[]
+    policy_labels = String[]
     for policy in POLICY_ORDER_FINANCIAL
         idx = findfirst(==(policy), fin.policy)
         idx === nothing && continue
-
-        display_name = get(POLICY_DISPLAY_NAMES, policy, policy)
-
-        function fmt_metric(mcol, ccol)
-            s = fmt_mean_ci(fin[idx, mcol], fin[idx, ccol]; digits=2)
-            return idx == best_idx[mcol] ? bold_tex(s) : s
-        end
-
-        push!(rows, (
-            policy      = display_name,
-            harvestrev  = fmt_metric(:mean_harvest_rev, :ci_harvest_rev),
-            trtcost     = fmt_metric(:mean_trt_cost, :ci_trt_cost),
-            regcost     = fmt_metric(:mean_reg_cost, :ci_reg_cost),
-            biocost     = fmt_metric(:mean_bio_cost, :ci_bio_cost),
-            welfarecost = fmt_metric(:mean_welfare_cost, :ci_welfare_cost),
-            licecost    = fmt_metric(:mean_lice_cost, :ci_lice_cost),
-            netprofit   = fmt_metric(:mean_net_profit, :ci_net_profit),
-        ))
+        push!(policy_indices, idx)
+        push!(policy_labels, get(POLICY_DISPLAY_NAMES, policy, policy))
     end
-    isempty(rows) && @warn "No policies found in financial summary."
-    df = DataFrame(rows)
+    isempty(policy_indices) && @warn "No policies found in financial summary."
 
-    write_table(df;
-        tex_filename="financial_results_summary.tex",
-        caption="Production cycle financial summary per policy (all values in MNOK). " *
-                "Values shown as mean \$\\pm\$ 95\\% CI. Best per column in bold.",
-        label="tab:financial_results_summary",
-        column_specs=[
-            ("policy",      "Policy",        "string type"),
-            ("harvestrev",  "Harvest Rev.",   "string type"),
-            ("trtcost",     "Treatment",      "string type"),
-            ("regcost",     "Regulatory",     "string type"),
-            ("biocost",     "Biomass Loss",   "string type"),
-            ("welfarecost", "Welfare",        "string type"),
-            ("licecost",    "Lice Burden",    "string type"),
-            ("netprofit",   "Net Profit",     "string type"),
-        ],
-        note="All financial metrics in MNOK (million Norwegian kroner). " *
-             "Costs are per production cycle ($(config.simulation_config.steps_per_episode) weeks). " *
-             "Bold indicates best-performing policy per column.",
-    )
+    # Find best policy index per metric (among included policies only)
+    best_idx = Dict{Symbol,Int}()
+    for (mcol, _, _, is_cost) in metric_specs
+        vals = fin[policy_indices, mcol]
+        local_best = is_cost ? argmin(vals) : argmax(vals)
+        best_idx[mcol] = policy_indices[local_best]
+    end
+
+    n_policies = length(policy_indices)
+    col_spec = "l" * join(fill("c", n_policies), "")
+
+    lines = String[]
+    push!(lines, "% Auto-generated by generate_methodology_tables.jl")
+    push!(lines, "\\begin{threeparttable}")
+    push!(lines, "\\footnotesize")
+    push!(lines, "\\begin{tabular}{$col_spec}")
+    push!(lines, "\\toprule")
+    push!(lines, " & " * join(policy_labels, " & ") * " \\\\")
+    push!(lines, "\\midrule")
+
+    for (mcol, ccol, display_name, _) in metric_specs
+        # Add midrule before Net Profit to separate bottom line
+        if display_name == "Net Profit"
+            push!(lines, "\\midrule")
+        end
+        cells = [display_name]
+        for pidx in policy_indices
+            s = fmt_mean_ci(fin[pidx, mcol], fin[pidx, ccol]; digits=2)
+            s = pidx == best_idx[mcol] ? bold_tex(s) : s
+            push!(cells, s)
+        end
+        push!(lines, join(cells, " & ") * " \\\\")
+    end
+
+    push!(lines, "\\bottomrule")
+    push!(lines, "\\end{tabular}")
+    steps = config.simulation_config.steps_per_episode
+    push!(lines, "\\begin{tablenotes}")
+    push!(lines, "    \\small")
+    push!(lines, "    \\item All financial metrics in MNOK (million Norwegian kroner). " *
+                 "Costs are per production cycle ($steps weeks). " *
+                 "Bold indicates best-performing policy per row.")
+    push!(lines, "\\end{tablenotes}")
+    push!(lines, "\\end{threeparttable}")
+
+    tex_path = joinpath(OUTPUT_DIR, "financial_results_summary.tex")
+    mkpath(OUTPUT_DIR)
+    open(tex_path, "w") do io
+        write(io, join(lines, "\n") * "\n")
+    end
+    @info "  financial_results_summary.tex"
+    return tex_path
 end
 
 # --- Main ---------------------------------------------------------------------

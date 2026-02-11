@@ -89,7 +89,7 @@ const TREATMENT_ACTIONS = Dict(
 const POLICY_ORDER = [
     "Heuristic_Policy",
     "QMDP_Policy",
-    "NUS_SARSOP_Policy",
+    "Native_SARSOP_Policy",
     "VI_Policy",
 ]
 
@@ -100,7 +100,7 @@ const POLICY_LABELS = Dict(
     "AlwaysTreat_Policy" => "Always Treat",
     "VI_Policy" => "VI",
     "QMDP_Policy" => "QMDP",
-    "NUS_SARSOP_Policy" => "SARSOP",
+    "Native_SARSOP_Policy" => "SARSOP",
 )
 
 const LAMBDA_COMPONENTS = [
@@ -347,48 +347,32 @@ function build_lambda_treatment_table(entries::Dict{String, ExperimentSummary};
     ordered = [entries[k] for k in scenario_order if haskey(entries, k)]
     isempty(ordered) && error("No lambda experiments provided.")
 
-    n_scenarios = length(ordered)
-    col_spec = "l" * repeat("cccc", n_scenarios)
+    col_spec = "ll" * join(fill("c", length(POLICY_ORDER)), "")
     lines = String[]
     push!(lines, "\\footnotesize")
     push!(lines, "\\begin{tabular}{$col_spec}")
     push!(lines, "\\toprule")
 
-    # Header row with scenario names spanning 4 columns each
-    first_row = ["Policy"]
-    for entry in ordered
-        push!(first_row, "\\multicolumn{4}{c}{$(entry.label)}")
-    end
-    push!(lines, join(first_row, " & ") * " \\\\")
-
-    # Cmidrules under each scenario group
-    cmidrules = String[]
-    for (i, _) in enumerate(ordered)
-        start_col = 2 + 4 * (i - 1)
-        stop_col = start_col + 3
-        push!(cmidrules, "\\cmidrule(lr){$(start_col)-$(stop_col)}")
-    end
-    push!(lines, join(cmidrules, " "))
-
-    # Sub-header with treatment types
-    header_row = [""]
-    for _ in ordered
-        append!(header_row, [TREATMENT_LABELS[col] for col in TREATMENT_COLUMNS])
-    end
+    header_row = ["Configuration", "Treatment"]
+    append!(header_row, [get(POLICY_LABELS, policy, policy) for policy in POLICY_ORDER])
     push!(lines, join(header_row, " & ") * " \\\\")
     push!(lines, "\\midrule")
 
-    # Data rows (one per policy)
-    for policy in POLICY_ORDER
-        row = [get(POLICY_LABELS, policy, policy)]
-        for entry in ordered
-            for col in TREATMENT_COLUMNS
+    for (entry_idx, entry) in enumerate(ordered)
+        for (col_idx, col) in enumerate(TREATMENT_COLUMNS)
+            row = String[]
+            push!(row, col_idx == 1 ? entry.label : "")
+            push!(row, TREATMENT_LABELS[col])
+            for policy in POLICY_ORDER
                 mean_value = fetch_policy_value(entry.treatment, policy, col)
                 std_value = fetch_policy_std(entry.treatment_std, policy, col)
                 push!(row, format_value(mean_value, std_value))
             end
+            push!(lines, join(row, " & ") * " \\\\")
         end
-        push!(lines, join(row, " & ") * " \\\\")
+        if entry_idx != length(ordered)
+            push!(lines, "\\addlinespace")
+        end
     end
 
     push!(lines, "\\bottomrule")
@@ -458,6 +442,11 @@ function build_dominant_action_axis(config::ExperimentConfig;
         end
     end
 
+    # Use larger fonts so text stays readable after includegraphics scaling
+    label_style = "color=black, font=\\normalsize"
+    tick_style  = "color=black, font=\\normalsize"
+    title_style = "color=black, font=\\normalsize\\bfseries"
+
     opts = Options(
         :xmin => first(temp_range),
         :xmax => last(temp_range),
@@ -465,8 +454,8 @@ function build_dominant_action_axis(config::ExperimentConfig;
         :ymax => last(sealice_range),
         :width => axis_width,
         :height => axis_height,
-        :title_style => AquaOpt.PLOS_TITLE_STYLE,
-        :tick_label_style => AquaOpt.PLOS_TICK_STYLE,
+        :title_style => title_style,
+        :tick_label_style => tick_style,
         "axis background/.style" => Options("fill" => "white"),
         "grid" => "both",
         "major grid style" => "dashed, opacity=0.3",
@@ -475,8 +464,8 @@ function build_dominant_action_axis(config::ExperimentConfig;
     if include_axis_labels
         opts[:xlabel] = "Sea Temperature (°C)"
         opts[:ylabel] = "Avg. Adult Female Sea Lice per Fish"
-        opts[:xlabel_style] = AquaOpt.PLOS_LABEL_STYLE
-        opts[:ylabel_style] = AquaOpt.PLOS_LABEL_STYLE
+        opts[:xlabel_style] = label_style
+        opts[:ylabel_style] = label_style
     end
 
     if include_legend
@@ -528,7 +517,7 @@ function save_combined_dominant_plot(entries::Vector{ExperimentSummary};
                 "fill" => "white",
                 "draw" => "black!40",
                 "text" => "black",
-                "font" => AquaOpt.PLOS_FONT,
+                "font" => "\\normalsize",
                 "at" => "{(0.5,1.25)}",
                 "anchor" => "south",
                 "row sep" => "1pt",
@@ -540,12 +529,13 @@ function save_combined_dominant_plot(entries::Vector{ExperimentSummary};
         push!(axes, ax)
     end
 
+    label_style = "color=black, font=\\normalsize"
     group_opts = Options(
         "group style" => "{group size=$(length(axes)) by 1, horizontal sep=1.1cm, x descriptions at=edge bottom, y descriptions at=edge left}",
         :xlabel => "Sea Temperature (°C)",
         :ylabel => "Avg. Adult Female Sea Lice per Fish",
-        :xlabel_style => AquaOpt.PLOS_LABEL_STYLE,
-        :ylabel_style => AquaOpt.PLOS_LABEL_STYLE,
+        :xlabel_style => label_style,
+        :ylabel_style => label_style,
     )
     plot_obj = @pgf GroupPlot(group_opts, axes...)
     mkpath(dirname(output_path))
@@ -584,7 +574,7 @@ function save_quad_dominant_plot(entries_dict::Dict{String, ExperimentSummary};
                 "fill" => "white",
                 "draw" => "black!40",
                 "text" => "black",
-                "font" => AquaOpt.PLOS_FONT,
+                "font" => "\\normalsize",
                 "at" => "{(1.0,1.25)}",  # Position above first subplot
                 "anchor" => "south",
                 "row sep" => "1pt",
@@ -593,16 +583,18 @@ function save_quad_dominant_plot(entries_dict::Dict{String, ExperimentSummary};
             )
         end
 
+        label_style = "color=black, font=\\normalsize"
+
         # Add x-label only to bottom row plots (idx 3, 4)
         if idx >= 3
             ax.options["xlabel"] = "Sea Temperature (°C)"
-            ax.options["xlabel style"] = AquaOpt.PLOS_LABEL_STYLE
+            ax.options["xlabel style"] = label_style
         end
 
         # Add y-label only to left column plots (idx 1, 3)
         if idx == 1 || idx == 3
             ax.options["ylabel"] = "Avg. AF Sea Lice per Fish"
-            ax.options["ylabel style"] = AquaOpt.PLOS_LABEL_STYLE
+            ax.options["ylabel style"] = label_style
         end
 
         push!(axes, ax)

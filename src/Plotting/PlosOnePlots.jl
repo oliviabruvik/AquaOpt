@@ -2300,7 +2300,7 @@ function plos_one_combined_bar_panel(parallel_data, config;
         :tick_label_style => PLOS_TICK_STYLE,
         :xtick => "data",
         :xticklabels => xticklabel_str,
-        "x tick label style" => "{rotate=30, anchor=east, font=\\small}",
+        "x tick label style" => "{rotate=0, anchor=north, font=\\small}",
         "axis background/.style" => Options("fill" => "white"),
         "legend style" => Options(
             "fill" => "white", "draw" => "black!40", "text" => "black",

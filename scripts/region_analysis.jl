@@ -39,12 +39,10 @@ end
 
 const DEFAULT_OUTPUT_DIR = "results/latest/region_outputs"
 const REGION_TABLE_POLICIES = [
-    (label = "Always Treat", csv_name = "AlwaysTreat_Policy"),
-    (label = "Never Treat", csv_name = "NeverTreat_Policy"),
     (label = "Random", csv_name = "Random_Policy"),
     (label = "Heuristic", csv_name = "Heuristic_Policy"),
     (label = "QMDP", csv_name = "QMDP_Policy"),
-    (label = "SARSOP", csv_name = "NUS_SARSOP_Policy"),
+    (label = "SARSOP", csv_name = "Native_SARSOP_Policy"),
     (label = "VI", csv_name = "VI_Policy"),
 ]
 const REGION_TABLE_METRICS = [
@@ -274,7 +272,7 @@ function generate_region_table(regions::Vector{RegionData}, out_dir::String)
         "  \\end{tabular}",
         "  \\end{adjustbox}",
         "    \\begin{tablenotes}",
-        "      \\item[*]{Mean \$\\pm\$ standard error over the seeds in the corresponding run. Bold values denote the best performance (highest reward or lowest cost/penalties/lice/biomass loss/fish disease) within each region. Runs used: North, West, and South correspond to the \\texttt{log\\_space\\_ukf\\_paper\\_{north,west,south}\\_[0.46,0.12,0.12,0.18,0.12]} chemical-change experiments.}",
+        "      \\item[*]{Mean \$\\pm\$ standard error over the seeds in the corresponding run. \\\\ Bold values denote the best performance within each region.}",
         "    \\end{tablenotes}",
         "\\end{threeparttable}",
     ])
